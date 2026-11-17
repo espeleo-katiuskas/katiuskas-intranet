@@ -1226,6 +1226,7 @@ Rules outside the database: one that has places is not deleted (409 `geology_in_
 | `technical_sheet` | text | yes |  |
 | `osm_type` | text | yes |  |
 | `osm_id` | bigint | yes |  |
+| `osm_seen` | jsonb | yes |  |
 | `created_by` | bigint | no |  |
 | `created_at` | timestamptz | no | now() |
 | `updated_by` | bigint | no |  |
@@ -1250,6 +1251,11 @@ Notes on the columns:
 - `depth_m`, `horizontal_length_m`: Of a cave, in metres.
 - `geology_id`: What a cave is formed in.
 - `osm_type`, `osm_id`: The OpenStreetMap element the place is, when it is one (see `osm_elements`).
+- `osm_seen`: What OpenStreetMap said of that element when the place was linked to it or somebody
+  last looked at what had changed (`POST /places/{id}/links/osm/review`): `{tags, lat, lon}`, a
+  snapshot. The API compares it with the element as it is now to tell what changed (`osm_changes`);
+  a load of the mirror never touches it. Empty if the place is not an element (migration
+  `00070_place_osm_seen.sql`, which gave the places already linked the element as it was then).
 - `updated_by`, `updated_at`: The last change of the place or of any of its points; the same as the
   creation until there is one. They are set by the Go service.
 
@@ -1263,6 +1269,7 @@ Constraints:
   the mirror
 - `places_osm_both_or_none`: `osm_type` and `osm_id` are both there or both empty
 - unique `places_osm_element_key` on `(osm_type, osm_id)`: an element is at most one place
+- `places_osm_seen_needs_element`: there is a snapshot only if there is an element
 - `created_by` → `users(id)`, `updated_by` → `users(id)`
 - `name` is not blank
 - `state` is `open`, `permit_required`, `tourist` or `closed`, or empty
@@ -2125,3 +2132,4 @@ at the end; that database has to be recreated when a new migration appears.
 - `00068_bag_model_optional.sql`: the model of a bag is optional (the constraints
   `rope_requires_brand_model` and `bag_requires_brand` replace `rope_and_bag_require_brand_model`)
 - `00069_osm_mirror.sql`: `osm_elements`, `osm_sync_runs` and `places.osm_type`/`osm_id`
+- `00070_place_osm_seen.sql`: `places.osm_seen`, what the place has seen of its OSM element

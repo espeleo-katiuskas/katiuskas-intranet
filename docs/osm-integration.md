@@ -399,13 +399,15 @@ Islands were not searched) there are 268 of them, plus one loose way; nothing el
    zone proposed from them (`/areas/locate`, so the zones of the elements are not needed for this),
    and `POST /places` keeps `osm_type` and `osm_id`: promotion on demand, the option chosen in 7. An
    element that is a place is no longer a candidate.
-4. **Link** (partly done): linking and unlinking a place that already exists (`PUT`/`DELETE
-   /places/{id}/links/osm`, the candidates near it by distance and name with `GET /osm/nearby`, and
-   the dialog and the section "OpenStreetMap" of the page of a place) and the display of what
-   OpenStreetMap says of the element next to the place, marking what does not agree (name,
-   coordinates, altitude), without merging anything. **Still to do**: copying a value of
-   OpenStreetMap into the place by a button, the flag when a load changes an element a place points
-   at, and a list to review the places that already exist in one go.
+4. **Link** (done, but for one thing): linking and unlinking a place that already exists
+   (`PUT`/`DELETE /places/{id}/links/osm`, the candidates near it by distance and name with `GET
+   /osm/nearby`, and the dialog and the section "OpenStreetMap" of the page of a place), the display
+   of what OpenStreetMap says of the element next to the place, marking what does not agree (name,
+   coordinates, altitude), buttons to copy a value into the place, and the notice of what changed in
+   the element since the place was linked or last reviewed (`places.osm_seen`, `osm_changes`, `POST
+   /places/{id}/links/osm/review`, the badge in the list). Nothing is merged or changed by itself.
+   **Still to do**: a list to review in one go the places that already exist, which depends on how
+   many places the club has that are not linked.
 5. **Zones** for the elements (6), the other countries, the other filters (12).
 6. **Contribute** (9), if wanted.
 

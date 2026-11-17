@@ -866,6 +866,12 @@ known, in metres above sea level.
   place that has none is no error.
   - returns: 200 `Place`
   - errors: 400 `invalid_id`; 404 `not_found`
+- **POST** `/places/{id}/links/osm/review` — *Any baseline role*. Says that somebody has looked at
+  what changed in the element of the place: what the element is now becomes what the place has seen
+  of it, so `osm_changes` is empty until it changes again. Nothing else changes, not even
+  `updated_at`.
+  - returns: 200 `Place`
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `place_not_linked`
 - **POST** `/places/{id}/points` — *Any baseline role*. Adds one of the other points of a place.
   Adding, changing or removing one counts as a change of the place (`updated_by`, `updated_at`).
   - body: `kind*` (`parking`, `approach`, `waypoint`, `access` or `other`), `lat*`, `lon*`,
@@ -2075,6 +2081,7 @@ by `GET /areas/{id}`, not by the list of the zones below one.
 | `horizontal_length_m` | integer |
 | `geology_id` | integer |
 | `geology` | text |
+| `osm_changed` | true if the OpenStreetMap element the place is has changed since it was linked or last reviewed; left out otherwise |
 
 ### `Place`
 
@@ -2087,6 +2094,7 @@ Everything of a `PlaceListItem`, and:
 | `technical_sheet` | text |
 | `osm_type` | node/way/relation, left out if the place is not an element of OpenStreetMap |
 | `osm_id` | integer, with `osm_type` |
+| `osm_changes` | `[OsmChange]`: what is different in the element now from when the place was linked or last reviewed; left out if nothing |
 | `area_path` | `[AreaRef]` |
 | `created_by` | text (login) |
 | `created_at` | datetime |
@@ -2180,6 +2188,14 @@ What a map needs to draw an element of the mirror.
 | `lon` | number |
 | `category` | cave/canyon/hut/via_ferrata |
 | `name` | text, left out if the element has none |
+
+### `OsmChange`
+
+| Field | Type |
+|---|---|
+| `key` | text: the OpenStreetMap tag (`name`, `name:es`, `alt_name`, `ele`, `description`, `website`, `access`, `fee`, `capacity`, `beds`, `operator`, `max:abseil`, `rating`, `depth`, `length`, or what says what the element is), or `position` (the point moved more than 10 m), or `removed` (the element is no longer in OpenStreetMap) |
+| `before` | text, left out if the tag was not there |
+| `after` | text, left out if the tag is not there any more |
 
 ### `OsmCandidate`
 

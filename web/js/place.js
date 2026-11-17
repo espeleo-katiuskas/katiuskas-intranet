@@ -16,7 +16,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { bindFiles, fileRowsHtml } from './place-files.js';
-import { openOsmLinkDialog, osmDataHtml } from './osm-link.js';
+import { copyFromOsm, openOsmLinkDialog, osmChangesHtml, osmDataHtml } from './osm-link.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import {
   coordinatesHtml,
@@ -182,6 +182,7 @@ function renderOsm() {
     ? 'Vincular con otro elemento'
     : 'Vincular con OpenStreetMap';
   document.getElementById('osm-unlink').hidden = !linked;
+  document.getElementById('osm-changes').innerHTML = osmChangesHtml(place);
   loadOsmData(linked ? `${place.osm_type}/${place.osm_id}` : null);
 }
 
@@ -359,6 +360,39 @@ document.getElementById('osm-link').addEventListener('click', () => {
       await load();
     },
   });
+});
+
+// The buttons of what OpenStreetMap says and of what changed: copy a value into the place, or say that the
+// changes have been looked at.
+document.getElementById('osm-data').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-osm-copy]');
+  if (!button || !osmElement) return;
+  button.disabled = true;
+  try {
+    await apiFetch(`/places/${placeId}`, {
+      method: 'PUT',
+      body: JSON.stringify(copyFromOsm(place, osmElement, button.dataset.osmCopy)),
+    });
+    showFeedback('Lugar actualizado con el dato de OpenStreetMap.');
+    await load();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
+});
+
+document.getElementById('osm-changes').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-osm-review]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await apiFetch(`/places/${placeId}/links/osm/review`, { method: 'POST' });
+    showFeedback('Cambios de OpenStreetMap revisados.');
+    await load();
+  } catch (err) {
+    button.disabled = false;
+    showError(err.message);
+  }
 });
 
 document.getElementById('osm-unlink').addEventListener('click', async () => {

@@ -66,6 +66,8 @@ function renderPlace(place) {
   return `
     <tr>
       <td><a href="/lugar?id=${place.id}"><strong>${escapeHtml(place.name)}</strong></a>${
+        place.osm_changed ? ' <span class="badge osm-diff">OSM ha cambiado</span>' : ''
+      }${
         place.alt_names.length
           ? `<br><span class="subtitle">${escapeHtml(place.alt_names.join(' · '))}</span>`
           : ''

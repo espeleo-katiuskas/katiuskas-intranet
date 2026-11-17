@@ -139,36 +139,57 @@ function metresBetween(lat1, lon1, lat2, lon2) {
 function osmDataHtml(place, element) {
   const tags = element.tags ?? {};
   const rows = [];
-  const add = (label, html, differs = false) => {
-    if (html) {
-      const mark = differs ? ' <span class="badge osm-diff">no coincide con el lugar</span>' : '';
-      rows.push(
-        `<div class="detail-row"><span class="subtitle">${escapeHtml(label)}</span><span>${html}${mark}</span></div>`,
-      );
-    }
+  // A row: what OpenStreetMap says, a mark if it does not agree with the place, and the button that copies it
+  // to the place (`copy` is the name of the field, see copyFromOsm).
+  const add = (label, html, { differs = false, copy = null, copyText = '' } = {}) => {
+    if (!html) return;
+    const mark = differs ? ' <span class="badge osm-diff">no coincide con el lugar</span>' : '';
+    const button = copy
+      ? ` <button type="button" class="btn btn-secondary btn-small" data-osm-copy="${copy}">${escapeHtml(copyText)}</button>`
+      : '';
+    rows.push(
+      `<div class="detail-row"><span class="subtitle">${escapeHtml(label)}</span><span>${html}${mark}${button}</span></div>`,
+    );
   };
   const name = (tags.name || tags['name:es'] || '').trim();
   const known = [place.name, ...place.alt_names].map(normalizeForSearch);
-  add('Nombre', name && escapeHtml(name), name !== '' && !known.includes(normalizeForSearch(name)));
-  const others = (tags.alt_name ?? '')
-    .split(';')
-    .map((n) => n.trim())
-    .filter(Boolean);
-  add('Otros nombres', others.length ? escapeHtml(others.join(' · ')) : '');
+  const nameDiffers = name !== '' && !known.includes(normalizeForSearch(name));
+  add('Nombre', name && escapeHtml(name), {
+    differs: nameDiffers,
+    copy: nameDiffers ? 'name' : null,
+    copyText: 'Usar como nombre',
+  });
+  const others = osmAltNames(tags);
+  const newOthers = others.filter((n) => !known.includes(normalizeForSearch(n)));
+  add('Otros nombres', others.length ? escapeHtml(others.join(' · ')) : '', {
+    copy: newOthers.length ? 'alt_names' : null,
+    copyText: 'Añadir a los otros nombres',
+  });
   const away = Math.round(metresBetween(place.lat, place.lon, element.lat, element.lon));
   add(
     'Coordenadas',
     `${escapeHtml(formatDecimal(element.lat, element.lon))}${away > 0 ? ` <span class="subtitle">(a ${away} m del punto del lugar)</span>` : ''}`,
-    away > FAR_M,
+    {
+      differs: away > FAR_M,
+      copy: away > FAR_M ? 'position' : null,
+      copyText: 'Usar estas coordenadas',
+    },
   );
   const ele = Number.parseFloat(tags.ele);
-  add(
-    'Altitud',
-    Number.isFinite(ele) ? `${Math.round(ele)} m` : '',
-    Number.isFinite(ele) && place.altitude_m != null && Math.abs(ele - place.altitude_m) > HIGHER_M,
-  );
+  const hasEle = Number.isFinite(ele);
+  add('Altitud', hasEle ? `${Math.round(ele)} m` : '', {
+    differs: hasEle && place.altitude_m != null && Math.abs(ele - place.altitude_m) > HIGHER_M,
+    copy: hasEle && place.altitude_m !== Math.round(ele) ? 'ele' : null,
+    copyText: 'Usar esta altitud',
+  });
   for (const [label, value] of facts(tags)) {
-    if (label !== 'Altitud') add(label, escapeHtml(value));
+    if (label === 'Altitud') continue;
+    // The description is copied only into a place that has none: it never replaces what the club wrote.
+    const copy = label === 'Descripción' && !place.description?.trim();
+    add(label, escapeHtml(value), {
+      copy: copy ? 'description' : null,
+      copyText: 'Copiar a la descripción',
+    });
   }
   if (/^https?:\/\//.test(tags.website ?? '')) {
     add(
@@ -183,4 +204,96 @@ function osmDataHtml(place, element) {
   return `${gone}<div class="detail-list">${rows.join('')}</div>`;
 }
 
-export { openOsmLinkDialog, osmDataHtml };
+function osmAltNames(tags) {
+  return (tags.alt_name ?? '')
+    .split(';')
+    .map((n) => n.trim())
+    .filter(Boolean);
+}
+
+// The body of the edit of a place that copies one value of its OpenStreetMap element into it, leaving the rest
+// as it is: "name" (the old name stays among the other names, so that it is not lost), "alt_names" (the new
+// ones are added), "position", "ele" (the altitude) and "description" (only into a place that has none).
+function copyFromOsm(place, element, field) {
+  const tags = element.tags ?? {};
+  const body = {
+    type_id: place.type_id,
+    name: place.name,
+    alt_names: [...place.alt_names],
+    state: place.state ?? '',
+    subtype_id: place.subtype_id ?? null,
+    system_id: place.system_id ?? null,
+    area_id: place.area_id,
+    lat: place.lat,
+    lon: place.lon,
+    altitude_m: place.altitude_m ?? null,
+    access: place.access ?? null,
+    description: place.description ?? null,
+    depth_m: place.depth_m ?? null,
+    horizontal_length_m: place.horizontal_length_m ?? null,
+    geology_id: place.geology_id ?? null,
+    technical_sheet: place.technical_sheet ?? null,
+  };
+  const has = (list, name) => list.some((n) => normalizeForSearch(n) === normalizeForSearch(name));
+  if (field === 'name') {
+    body.name = (tags.name || tags['name:es']).trim();
+    if (!has(body.alt_names, place.name)) body.alt_names.push(place.name);
+    body.alt_names = body.alt_names.filter(
+      (n) => normalizeForSearch(n) !== normalizeForSearch(body.name),
+    );
+  } else if (field === 'alt_names') {
+    for (const n of osmAltNames(tags)) {
+      if (!has([body.name, ...body.alt_names], n)) body.alt_names.push(n);
+    }
+  } else if (field === 'position') {
+    body.lat = element.lat;
+    body.lon = element.lon;
+  } else if (field === 'ele') {
+    body.altitude_m = Math.round(Number.parseFloat(tags.ele));
+  } else if (field === 'description') {
+    body.description = (tags.description ?? '').trim();
+  }
+  return body;
+}
+
+// What OpenStreetMap's keys are called for the person who reads what changed.
+const CHANGE_LABELS = {
+  name: 'Nombre',
+  'name:es': 'Nombre en español',
+  alt_name: 'Otros nombres',
+  ele: 'Altitud (m)',
+  description: 'Descripción',
+  website: 'Web',
+  access: 'Acceso',
+  fee: 'Tarifa',
+  capacity: 'Capacidad',
+  beds: 'Camas',
+  operator: 'Gestiona',
+  'max:abseil': 'Rápel máximo (m)',
+  rating: 'Dificultad',
+  depth: 'Profundidad (m)',
+  length: 'Desarrollo (m)',
+  position: 'Posición',
+};
+
+// The notice of what changed in the element since the place was linked or the changes were last looked at.
+function osmChangesHtml(place) {
+  const changes = place.osm_changes ?? [];
+  if (changes.length === 0) return '';
+  const show = (value) => (value == null ? '<em>nada</em>' : `«${escapeHtml(value)}»`);
+  const lines = changes
+    .map((c) => {
+      if (c.key === 'removed') return '<li>El elemento ya no está en OpenStreetMap.</li>';
+      const label = CHANGE_LABELS[c.key] ?? `Etiqueta ${c.key}`;
+      return `<li><strong>${escapeHtml(label)}:</strong> antes ${show(c.before)}, ahora ${show(c.after)}</li>`;
+    })
+    .join('');
+  return `<div class="osm-changes">
+    <p><strong>OpenStreetMap ha cambiado este elemento</strong> desde que se vinculó o se revisó por última vez:</p>
+    <ul>${lines}</ul>
+    <p class="hint">Mira lo que dice abajo y copia al lugar lo que quieras; no se cambia nada solo.</p>
+    <button type="button" class="btn btn-secondary btn-small" data-osm-review>Marcar como revisado</button>
+  </div>`;
+}
+
+export { copyFromOsm, openOsmLinkDialog, osmChangesHtml, osmDataHtml };

@@ -142,6 +142,7 @@ const texts = {
   place_has_activities:
     'Este lugar tiene actividades y no se puede borrar: se conserva lo que se ha hecho en él.',
   invalid_radius: 'El radio de búsqueda no es válido: de 1 a 2000 metros.',
+  place_not_linked: 'Este lugar no está vinculado con ningún elemento de OpenStreetMap.',
   unknown_osm_element: 'Ese elemento de OpenStreetMap no está en la copia del club.',
   osm_element_in_use: 'Ya hay un lugar que es ese elemento de OpenStreetMap.',
   invalid_bbox: 'El área del mapa no es válida.',

@@ -1320,6 +1320,24 @@ generic one ("cueva", "sima", "barranco", "refugio"…, which every one of them 
 linked by itself: the person chooses, and a name that does not look like it is still offered if it
 is near.
 
+**What changed in the element of a place.** A load of the mirror changes `osm_elements`, never a
+place, so each place that is an element keeps what it has seen of it: `places.osm_seen`, the tags
+and the point of the element when the place was linked (`POST /places` with the pair, or `PUT
+.../links/osm`, which take it from the mirror in the same statement) or when somebody last said they
+had looked (`POST /places/{id}/links/osm/review`, which does not touch `updated_by` or
+`updated_at`). `GET /places/{id}` compares it with the element as it is now (`osmChanges`, in
+`places/osm.go`) and gives `osm_changes`: for each of the tags that matter (`osmWatched`: the names,
+the altitude, the description, the website, the facts of a hut or a canyon, and what says what the
+element is) the value before and after, `position` when the point moved more than 10 metres, and
+`removed` when the mirror has the element marked as gone; the rest (who surveyed it, when, the
+source…) changes all the time and says nothing to the club. `GET /places` gives only `osm_changed`
+for each place, from one query for all the places that are an element. Nothing is changed in the
+place by any of this: the person reads the changes, copies what they want (the page edits the place
+as with any edit) and reviews. The test that found a real bug: with one element in the mirror a
+subquery that picked "the element of the place" returned the right row whatever it compared, and
+with thousands it failed, so the test has two (an unqualified `osm_type` in a subquery over
+`osm_elements` means the element's own column, which is why the SQL says `places.osm_type`).
+
 ## Telegram
 
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API

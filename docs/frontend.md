@@ -405,6 +405,18 @@ m from the place's, and an altitude more than 20 m from the place's, and a note 
 element is no longer in OpenStreetMap (marked as gone by a load), suggesting to link another or to
 unlink.
 
+When the element has changed (`osm_changes` of the place) a notice above that block says what: each
+change as "antes «…», ahora «…»" under the name that a person knows it by (`CHANGE_LABELS`), with a
+button **Marcar como revisado** (`POST /places/{id}/links/osm/review`). The list of places marks
+such a place with a badge "OSM ha cambiado" (`osm_changed`). The rows of the block that do not agree
+with the place have a button that copies the value into it, with the edit of the place (`PUT
+/places/{id}`, built by `copyFromOsm` from the place as the page has it, so nothing else changes):
+"Usar como nombre" (the old name stays among the other names, so it is not lost), "Añadir a los
+otros nombres" (only the new ones), "Usar estas coordenadas", "Usar esta altitud" and "Copiar a la
+descripción", which is only offered when the place has no description, since what the club wrote is
+never replaced. Copying does not review: whoever has looked at everything says so with the other
+button.
+
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
 `/admin`, of the library, of `/material` and of the places) is drawn instead, under 640px, as a card

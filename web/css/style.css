@@ -2422,6 +2422,24 @@ html.map-is-expanded {
   white-space: nowrap;
 }
 
+/* The notice of what changed in the element of a place since somebody last looked. */
+.osm-changes {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border: 1px solid #e3c878;
+  border-radius: 6px;
+  background: #fbf3dc;
+}
+
+.osm-changes p {
+  margin: 0 0 6px;
+}
+
+.osm-changes ul {
+  margin: 0 0 6px;
+  padding-left: 20px;
+}
+
 /* The elements of OpenStreetMap that a place may be linked to: one row each, with its button. */
 .osm-candidates {
   list-style: none;
