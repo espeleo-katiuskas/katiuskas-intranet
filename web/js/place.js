@@ -16,7 +16,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { bindFiles, fileRowsHtml } from './place-files.js';
-import { openOsmLinkDialog } from './osm-link.js';
+import { openOsmLinkDialog, osmDataHtml } from './osm-link.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import {
   coordinatesHtml,
@@ -182,6 +182,36 @@ function renderOsm() {
     ? 'Vincular con otro elemento'
     : 'Vincular con OpenStreetMap';
   document.getElementById('osm-unlink').hidden = !linked;
+  loadOsmData(linked ? `${place.osm_type}/${place.osm_id}` : null);
+}
+
+let osmShown = null; // The element whose data is on the page, as "type/id"...
+let osmElement = null; // ...and what the mirror says of it.
+
+// What OpenStreetMap says of the element, next to the place: asked of the mirror once for each element, and
+// drawn again whenever the place is (an edit of the place changes what does not agree with it).
+async function loadOsmData(key) {
+  const box = document.getElementById('osm-data');
+  if (key === null) {
+    osmShown = osmElement = null;
+    box.innerHTML = '';
+    return;
+  }
+  if (key === osmShown && osmElement) {
+    box.innerHTML = osmDataHtml(place, osmElement);
+    return;
+  }
+  osmShown = key;
+  osmElement = null;
+  box.innerHTML = '';
+  try {
+    const element = await apiFetch(`/osm/elements/${key}`);
+    if (osmShown !== key) return;
+    osmElement = element;
+    box.innerHTML = osmDataHtml(place, element);
+  } catch (err) {
+    if (osmShown === key) box.textContent = err.message;
+  }
 }
 
 function render() {

@@ -46,6 +46,16 @@ function saveCategories(categories) {
   }
 }
 
+// What the values of `access` mean, for who reads them (OpenStreetMap's own words are in English).
+const ACCESS_LABELS = {
+  yes: 'Libre',
+  permissive: 'Libre (tolerado)',
+  permit: 'Con permiso',
+  private: 'Privado',
+  customers: 'Solo clientes',
+  no: 'Prohibido',
+};
+
 // The facts of an element that are worth a line in its popup, from its OpenStreetMap tags.
 function facts(tags) {
   const lines = [];
@@ -60,7 +70,7 @@ function facts(tags) {
   add('Camas', tags.beds);
   if (tags.fee === 'no') add('Tarifa', 'Gratuito');
   else if (tags.fee === 'yes') add('Tarifa', 'De pago');
-  add('Acceso', tags.access);
+  add('Acceso', ACCESS_LABELS[tags.access] ?? tags.access);
   add('Gestiona', tags.operator);
   add('Descripción', tags.description && cut(tags.description));
   return lines;
@@ -248,4 +258,4 @@ function createOsmLayer(L, map, { note, layersControl, onUse }) {
   return { refresh };
 }
 
-export { CATEGORY_LABELS, MIN_ZOOM, createOsmLayer };
+export { CATEGORY_LABELS, MIN_ZOOM, createOsmLayer, facts };

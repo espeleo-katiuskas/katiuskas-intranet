@@ -2415,6 +2415,13 @@ html.map-is-expanded {
   margin-top: 8px;
 }
 
+/* The mark where what OpenStreetMap says of an element is not what the place says. */
+.badge.osm-diff {
+  background: #f6e3b4;
+  color: #6b4a00;
+  white-space: nowrap;
+}
+
 /* The elements of OpenStreetMap that a place may be linked to: one row each, with its button. */
 .osm-candidates {
   list-style: none;

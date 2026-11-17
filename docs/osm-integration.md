@@ -401,9 +401,11 @@ Islands were not searched) there are 268 of them, plus one loose way; nothing el
    element that is a place is no longer a candidate.
 4. **Link** (partly done): linking and unlinking a place that already exists (`PUT`/`DELETE
    /places/{id}/links/osm`, the candidates near it by distance and name with `GET /osm/nearby`, and
-   the dialog and the section "OpenStreetMap" of the page of a place). **Still to do**: the
-   field-by-field display of 8 ("Según OpenStreetMap" next to the club's data), the flag when OSM
-   changes, and a list to review the places that already exist in one go.
+   the dialog and the section "OpenStreetMap" of the page of a place) and the display of what
+   OpenStreetMap says of the element next to the place, marking what does not agree (name,
+   coordinates, altitude), without merging anything. **Still to do**: copying a value of
+   OpenStreetMap into the place by a button, the flag when a load changes an element a place points
+   at, and a list to review the places that already exist in one go.
 5. **Zones** for the elements (6), the other countries, the other filters (12).
 6. **Contribute** (9), if wanted.
 

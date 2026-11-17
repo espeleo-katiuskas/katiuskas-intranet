@@ -1,6 +1,7 @@
-import { apiFetch, escapeHtml, showError } from './api.js';
+import { apiFetch, escapeHtml, formatDate, normalizeForSearch, showError } from './api.js';
+import { formatDecimal } from './coordinates.js';
 import { openModal } from './modal.js';
-import { CATEGORY_LABELS } from './osm-layer.js';
+import { CATEGORY_LABELS, facts } from './osm-layer.js';
 import { buildDialog } from './place-dialog.js';
 
 // The dialog to say which element of OpenStreetMap a place of the catalogue is: the elements near it that
@@ -117,4 +118,69 @@ function openOsmLinkDialog({ place, onLinked }) {
   search();
 }
 
-export { openOsmLinkDialog };
+// ----- what OpenStreetMap says of the element a place is -----
+
+// Further apart than this (metres), the point of OpenStreetMap is not the place's.
+const FAR_M = 25;
+// A difference of altitude above this (metres) is told.
+const HIGHER_M = 20;
+
+function metresBetween(lat1, lon1, lat2, lon2) {
+  const rad = Math.PI / 180;
+  const a =
+    Math.sin(((lat2 - lat1) * rad) / 2) ** 2 +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
+  return 2 * 6371008.8 * Math.asin(Math.sqrt(a));
+}
+
+// The data of an element of OpenStreetMap next to a place, as rows of the page of the place: what OpenStreetMap
+// says, as it says it, and a mark where it does not agree with the place. Nothing is changed: the place's
+// own values are what the rest of the page shows.
+function osmDataHtml(place, element) {
+  const tags = element.tags ?? {};
+  const rows = [];
+  const add = (label, html, differs = false) => {
+    if (html) {
+      const mark = differs ? ' <span class="badge osm-diff">no coincide con el lugar</span>' : '';
+      rows.push(
+        `<div class="detail-row"><span class="subtitle">${escapeHtml(label)}</span><span>${html}${mark}</span></div>`,
+      );
+    }
+  };
+  const name = (tags.name || tags['name:es'] || '').trim();
+  const known = [place.name, ...place.alt_names].map(normalizeForSearch);
+  add('Nombre', name && escapeHtml(name), name !== '' && !known.includes(normalizeForSearch(name)));
+  const others = (tags.alt_name ?? '')
+    .split(';')
+    .map((n) => n.trim())
+    .filter(Boolean);
+  add('Otros nombres', others.length ? escapeHtml(others.join(' · ')) : '');
+  const away = Math.round(metresBetween(place.lat, place.lon, element.lat, element.lon));
+  add(
+    'Coordenadas',
+    `${escapeHtml(formatDecimal(element.lat, element.lon))}${away > 0 ? ` <span class="subtitle">(a ${away} m del punto del lugar)</span>` : ''}`,
+    away > FAR_M,
+  );
+  const ele = Number.parseFloat(tags.ele);
+  add(
+    'Altitud',
+    Number.isFinite(ele) ? `${Math.round(ele)} m` : '',
+    Number.isFinite(ele) && place.altitude_m != null && Math.abs(ele - place.altitude_m) > HIGHER_M,
+  );
+  for (const [label, value] of facts(tags)) {
+    if (label !== 'Altitud') add(label, escapeHtml(value));
+  }
+  if (/^https?:\/\//.test(tags.website ?? '')) {
+    add(
+      'Web',
+      `<a href="${escapeHtml(tags.website)}" target="_blank" rel="noopener">${escapeHtml(tags.website)}</a>`,
+    );
+  }
+  add('Editado en OpenStreetMap', escapeHtml(formatDate(element.timestamp)));
+  const gone = element.deleted_at
+    ? `<p class="hint">Este elemento ya no está en OpenStreetMap desde el ${escapeHtml(formatDate(element.deleted_at))}: lo han borrado o ya no tiene las etiquetas que buscamos. Conviene vincular el lugar con otro elemento o desvincularlo.</p>`
+    : '';
+  return `${gone}<div class="detail-list">${rows.join('')}</div>`;
+}
+
+export { openOsmLinkDialog, osmDataHtml };

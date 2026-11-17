@@ -394,6 +394,17 @@ or 2 km, and a newer search drops the answer of an older one. Choosing one calls
 has "Desvincular", which asks first and calls `DELETE`. The element that a place is no longer
 appears on the map of `/lugares` as a candidate, and does again when the link is taken away.
 
+A linked place also shows **what OpenStreetMap says of its element** under that line (`osmDataHtml`
+in `osm-link.js`, from `GET /osm/elements/{type}/{id}`, asked once for each element and drawn again
+whenever the place is): the name, the other names, the coordinates (with how far they are from the
+place's), the altitude, the facts of the popup (rappel, difficulty, capacity, fee, access, operator,
+description), the website and the date it was last edited there. It is shown as it is, never merged
+into the club's data, which is what the rest of the page shows; a badge "no coincide con el lugar"
+marks the name that is neither the place's name nor one of its other names, coordinates more than 25
+m from the place's, and an altitude more than 20 m from the place's, and a note says when the
+element is no longer in OpenStreetMap (marked as gone by a load), suggesting to link another or to
+unlink.
+
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
 `/admin`, of the library, of `/material` and of the places) is drawn instead, under 640px, as a card
