@@ -5740,9 +5740,39 @@ components:
           type: array
           description: >
             What is wrong right now, in Spanish and in words: the database not answering, a
-            storage directory that does not exist, a disk at or above DISK_ALERT_PERCENT. Empty
-            when all is well. The same list the monitor warns about through Telegram.
+            storage directory that does not exist, a disk at or above DISK_ALERT_PERCENT, a load of
+            the OpenStreetMap mirror that failed, data of the mirror older than
+            OSM_MIRROR_MAX_AGE_DAYS. Empty when all is well. The same list the monitor warns about
+            through Telegram.
           items: { type: string }
+        osm:
+          type: object
+          description: >
+            The mirror of OpenStreetMap and its loads (cmd/osmsync). Absent if it cannot be read;
+            `sources` is empty if it was never loaded, which is no problem.
+          properties:
+            elements: { type: integer, description: "Held by the mirror and still in OpenStreetMap as far as the last load knows." }
+            max_age_days: { type: integer, description: "How old the data may be before it is a problem; 0 if it is not checked." }
+            sources:
+              type: array
+              items:
+                type: object
+                properties:
+                  source: { type: string, description: "The extract: spain, canary-islands." }
+                  elements: { type: integer }
+                  gone: { type: integer, description: "Held, but no longer in OpenStreetMap." }
+                  last_run_at: { type: string, format: date-time, description: "When the latest load started, whatever came of it." }
+                  last_run_status: { type: string, enum: [running, ok, failed] }
+                  last_error: { type: string }
+                  last_ok_at: { type: string, format: date-time, description: "When the latest load that went well ended." }
+                  data_timestamp: { type: string, format: date-time, description: "The date of the data of that load." }
+                  data_age_days: { type: integer }
+                  added: { type: integer }
+                  changed: { type: integer }
+                  deleted: { type: integer }
+                  unchanged: { type: integer }
+                  stale: { type: boolean, description: "The data is older than max_age_days." }
+                  failing: { type: boolean, description: "The latest load failed." }
 
     ActivityPeriods:
       type: object

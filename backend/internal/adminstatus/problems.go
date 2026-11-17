@@ -111,7 +111,7 @@ func problemsOf(s statusResponse, diskAlertPercent int) []Problem {
 			}
 		}
 	}
-	return problems
+	return append(problems, osmProblems(s.OSM)...)
 }
 
 func humanBytes(n uint64) string {

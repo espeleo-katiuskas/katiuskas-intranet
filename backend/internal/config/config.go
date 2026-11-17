@@ -115,6 +115,10 @@ type Config struct {
 	// monitor (adminstatus.Monitor) warns that it is almost full; 0 turns
 	// that warning off. Set with DISK_ALERT_PERCENT, 90 by default.
 	DiskAlertPercent int
+	// OSMMirrorMaxAgeDays is how old, in days, the data of the OpenStreetMap mirror (loaded by cmd/osmsync) may
+	// be before the monitor warns that the weekly load has stopped; 0 turns that warning off. Set with
+	// OSM_MIRROR_MAX_AGE_DAYS, 14 by default. A mirror that was never loaded is no problem.
+	OSMMirrorMaxAgeDays int
 }
 
 // archiveRoot is ARCHIVE_ROOT. The variable used to be called LIBRARY_ROOT (the archive of documents
@@ -177,6 +181,11 @@ func Load() (Config, error) {
 		return cfg, fmt.Errorf("DISK_ALERT_PERCENT must be a number from 0 to 100")
 	}
 	cfg.DiskAlertPercent = percent
+	days, err := strconv.Atoi(getEnv("OSM_MIRROR_MAX_AGE_DAYS", "14"))
+	if err != nil || days < 0 {
+		return cfg, fmt.Errorf("OSM_MIRROR_MAX_AGE_DAYS must be a number of days, 0 or more")
+	}
+	cfg.OSMMirrorMaxAgeDays = days
 	return cfg, nil
 }
 

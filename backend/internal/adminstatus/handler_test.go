@@ -383,3 +383,112 @@ func TestActivityCalendarListsWhoUsedTheAPIEachDay(t *testing.T) {
 		}
 	}
 }
+
+// The status tells how the mirror of OpenStreetMap is: its elements and its last loads for each extract, and it
+// counts as a problem a load that failed and data that is older than the limit; a mirror never loaded is none.
+func TestStatusReportsTheOSMMirror(t *testing.T) {
+	existing := t.TempDir()
+	info := adminstatus.Info{
+		ArchiveRoot: existing, UserFilesRoot: existing, ActivityResourcesRoot: existing, TransactionFilesRoot: existing,
+		LibraryFilesRoot: existing, PlaceFilesRoot: existing,
+		OSMMaxAge: 14 * 24 * time.Hour,
+	}
+	type source struct {
+		Source        string `json:"source"`
+		Elements      int    `json:"elements"`
+		Gone          int    `json:"gone"`
+		LastRunStatus string `json:"last_run_status"`
+		LastError     string `json:"last_error"`
+		DataAgeDays   int    `json:"data_age_days"`
+		Added         int    `json:"added"`
+		Changed       int    `json:"changed"`
+		Stale         bool   `json:"stale"`
+		Failing       bool   `json:"failing"`
+	}
+	type answer struct {
+		Problems []string `json:"problems"`
+		OSM      *struct {
+			Elements   int      `json:"elements"`
+			MaxAgeDays int      `json:"max_age_days"`
+			Sources    []source `json:"sources"`
+		} `json:"osm"`
+	}
+	read := func(t *testing.T, info adminstatus.Info, prepare func(tx pgx.Tx)) answer {
+		t.Helper()
+		mux, resolver, tx := newServer(t, info)
+		if prepare != nil {
+			prepare(tx)
+		}
+		rec := get(mux, testutil.TokenFor(resolver, 1, "admin"))
+		var got answer
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil {
+			t.Fatalf("expected 200 and JSON, got %d: %s", rec.Code, rec.Body.String())
+		}
+		return got
+	}
+	exec := func(t *testing.T, tx pgx.Tx, sql string, args ...any) {
+		t.Helper()
+		if _, err := tx.Exec(context.Background(), sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Never loaded: no sources, no problem.
+	got := read(t, info, nil)
+	if got.OSM == nil || len(got.OSM.Sources) != 0 || got.OSM.Elements != 0 || got.OSM.MaxAgeDays != 14 || len(got.Problems) != 0 {
+		t.Errorf("a mirror never loaded: %+v %q", got.OSM, got.Problems)
+	}
+
+	// One extract that went well three days ago, another whose data is 20 days old and whose last load failed.
+	got = read(t, info, func(tx pgx.Tx) {
+		element := func(id int64, source string, gone bool) {
+			exec(t, tx, `
+				INSERT INTO osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, deleted_at)
+				VALUES ('node', $1, 1, now(), 'cave', 40, -3, '{}', 'h', $2, CASE WHEN $3 THEN now() END)
+			`, id, source, gone)
+		}
+		element(1, "spain", false)
+		element(2, "spain", false)
+		element(3, "spain", true)
+		element(4, "canary-islands", false)
+		run := func(source, status string, dataAgo, startedAgo time.Duration, added, changed int, failure string) {
+			exec(t, tx, `
+				INSERT INTO osm_sync_runs (source, source_timestamp, started_at, finished_at, status, added, changed, error)
+				VALUES ($1, now() - $2::interval, now() - $3::interval, now() - $3::interval, $4, $5, $6, NULLIF($7, ''))
+			`, source, dataAgo.String(), startedAgo.String(), status, added, changed, failure)
+		}
+		day := 24 * time.Hour
+		run("spain", "ok", 3*day, 3*day, 2, 1, "")
+		run("canary-islands", "ok", 20*day, 20*day, 4, 0, "")
+		run("canary-islands", "failed", 1*day, 1*day, 0, 0, "download: status 503")
+	})
+	if got.OSM == nil || got.OSM.Elements != 3 || len(got.OSM.Sources) != 2 {
+		t.Fatalf("two sources and three elements expected: %+v", got.OSM)
+	}
+	canary, spain := got.OSM.Sources[0], got.OSM.Sources[1]
+	if canary.Source != "canary-islands" || spain.Source != "spain" {
+		t.Fatalf("sorted by name: %+v", got.OSM.Sources)
+	}
+	if spain.Elements != 2 || spain.Gone != 1 || spain.LastRunStatus != "ok" || spain.Added != 2 || spain.Changed != 1 ||
+		spain.DataAgeDays != 3 || spain.Stale || spain.Failing {
+		t.Errorf("spain went well: %+v", spain)
+	}
+	if canary.Elements != 1 || canary.LastRunStatus != "failed" || canary.LastError != "download: status 503" ||
+		canary.DataAgeDays != 20 || canary.Added != 4 || !canary.Stale || !canary.Failing {
+		t.Errorf("canary-islands is old and failed: %+v", canary)
+	}
+	if len(got.Problems) != 2 || !strings.Contains(got.Problems[0]+got.Problems[1], "falló: download: status 503") ||
+		!strings.Contains(got.Problems[0]+got.Problems[1], "tienen 20 días (el límite es 14)") {
+		t.Errorf("the failure and the old data are problems: %q", got.Problems)
+	}
+
+	// With the check off, old data is no problem (a failed load still is).
+	info.OSMMaxAge = 0
+	got = read(t, info, func(tx pgx.Tx) {
+		exec(t, tx, `INSERT INTO osm_sync_runs (source, source_timestamp, started_at, finished_at, status)
+			VALUES ('spain', now() - interval '90 days', now() - interval '90 days', now() - interval '90 days', 'ok')`)
+	})
+	if len(got.Problems) != 0 || got.OSM.Sources[0].Stale {
+		t.Errorf("no check, no problem: %q %+v", got.Problems, got.OSM.Sources)
+	}
+}

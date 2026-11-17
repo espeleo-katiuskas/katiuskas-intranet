@@ -355,6 +355,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		LibraryFilesRoot:      cfg.LibraryFilesRoot,
 		PlaceFilesRoot:        cfg.PlaceFilesRoot,
 		DiskAlertPercent:      cfg.DiskAlertPercent,
+		OSMMaxAge:             time.Duration(cfg.OSMMirrorMaxAgeDays) * 24 * time.Hour,
 	})
 
 	router = httpapi.NewRouter(httpapi.Routes{

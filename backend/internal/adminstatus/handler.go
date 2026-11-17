@@ -49,6 +49,10 @@ type Info struct {
 	// DiskAlertPercent is how full a filesystem holding one of the
 	// directories may be before it counts as a problem (see Problems).
 	DiskAlertPercent int
+
+	// OSMMaxAge is how old the data of the OpenStreetMap mirror may be before it counts as a problem
+	// (the weekly load has stopped); 0 turns that check off. A mirror that was never loaded is no problem.
+	OSMMaxAge time.Duration
 }
 
 type Handler struct {
@@ -130,6 +134,8 @@ type statusResponse struct {
 	// Problems says, in words, what is wrong right now (the same list the
 	// monitor warns about); empty when everything is fine.
 	Problems []string `json:"problems"`
+	// OSM is the state of the mirror of OpenStreetMap and of its loads; absent if it could not be read.
+	OSM *osmStatus `json:"osm,omitempty"`
 	// Activity is how much the API is used (people and requests in the last hour, day and month);
 	// absent if it could not be read. Only the status page asks for it, not the monitor.
 	Activity *activityStatus `json:"activity,omitempty"`
@@ -186,6 +192,7 @@ func (h *Handler) collect(ctx context.Context) statusResponse {
 		},
 		Storage: storage,
 		Disks:   disksOf(storage),
+		OSM:     h.osmStatus(ctx),
 	}
 }
 

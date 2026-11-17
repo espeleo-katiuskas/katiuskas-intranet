@@ -178,3 +178,27 @@ func TestLoadNominatimURL(t *testing.T) {
 		t.Errorf("expected off, got %q, %v", cfg.NominatimURL, err)
 	}
 }
+
+// OSM_MIRROR_MAX_AGE_DAYS is 14 unless it is set, 0 turns the check off, and anything that is not a number of
+// days is refused.
+func TestLoadOSMMirrorMaxAgeDays(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("OSM_MIRROR_MAX_AGE_DAYS", "")
+	if cfg, err := Load(); err != nil || cfg.OSMMirrorMaxAgeDays != 14 {
+		t.Errorf("expected a default of 14, got %d (%v)", cfg.OSMMirrorMaxAgeDays, err)
+	}
+	t.Setenv("OSM_MIRROR_MAX_AGE_DAYS", "0")
+	if cfg, err := Load(); err != nil || cfg.OSMMirrorMaxAgeDays != 0 {
+		t.Errorf("expected 0 (off) to be accepted, got %d (%v)", cfg.OSMMirrorMaxAgeDays, err)
+	}
+	t.Setenv("OSM_MIRROR_MAX_AGE_DAYS", "30")
+	if cfg, err := Load(); err != nil || cfg.OSMMirrorMaxAgeDays != 30 {
+		t.Errorf("expected 30, got %d (%v)", cfg.OSMMirrorMaxAgeDays, err)
+	}
+	for _, bad := range []string{"-1", "x", "1.5"} {
+		t.Setenv("OSM_MIRROR_MAX_AGE_DAYS", bad)
+		if _, err := Load(); err == nil {
+			t.Errorf("expected %q to be refused", bad)
+		}
+	}
+}
