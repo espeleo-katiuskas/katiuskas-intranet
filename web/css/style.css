@@ -2227,14 +2227,17 @@ button.heat-cell[aria-pressed='true'] {
   max-width: 28rem;
 }
 
-/* The data of a place: each datum next to its name, not at the other end of the page. */
-#place-details .detail-row {
+/* The data of a place, and what OpenStreetMap says of it: each datum next to its name, not at the other
+   end of the page. */
+#place-details .detail-row,
+#osm-data .detail-row {
   justify-content: flex-start;
   align-items: flex-start;
   gap: 16px;
 }
 
-#place-details .detail-row > :first-child {
+#place-details .detail-row > :first-child,
+#osm-data .detail-row > :first-child {
   flex: 0 0 11rem;
 }
 
