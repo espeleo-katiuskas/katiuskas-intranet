@@ -183,3 +183,88 @@ func TestLinkUnknownOsmElement(t *testing.T) {
 	p := e.newPlace(e.cavidad, "Una", nil)
 	errorCode(t, e.json("PUT", placePath(p, "/links/osm"), e.member.token, map[string]any{"osm_type": "node", "osm_id": 99}), 400, "unknown_osm_element")
 }
+
+// What changes in the element of a place, when a load of the mirror changes it, is told by the place until a
+// person says it has looked: for the tags that matter, a move, and the element going; and the list says which
+// places have changes.
+func TestOsmChangesOfAPlace(t *testing.T) {
+	e := newEnv(t)
+	// Two elements: the SQL that takes the element of a place must pick only its own (with one it would pass
+	// whatever it picked).
+	repo := mirror(t, e, 1, 2)
+	ctx := context.Background()
+	p := e.newPlace(e.cavidad, "Cueva", map[string]any{"osm_type": "node", "osm_id": 1})
+	e.notifier.wait(t)
+	plain := e.newPlace(e.cavidad, "Sin OSM", nil)
+	e.notifier.wait(t)
+	_ = plain
+
+	get := func() places.Place {
+		return decode[places.Place](t, e.json("GET", placePath(p, ""), e.member.token, nil))
+	}
+	if got := get(); got.OsmChanged || len(got.OsmChanges) != 0 {
+		t.Fatalf("nothing changed yet: %+v", got.OsmChanges)
+	}
+
+	// A load changes the name, adds an altitude and moves the point 20 m; a tag nobody cares about changes too.
+	changed := osmmirror.Element{
+		Type: "node", ID: 1, Version: 2, Timestamp: time.Unix(1800000000, 0).UTC(), Category: "cave",
+		Lat: 40.5002, Lon: -3.7,
+		Tags: map[string]string{"natural": "cave_entrance", "name": "Cueva Nueva", "ele": "1300", "survey:date": "2026-11-17"},
+	}
+	if _, err := repo.Apply(ctx, "spain", []osmmirror.Element{changed}); err != nil {
+		t.Fatal(err)
+	}
+	got := get()
+	keys := map[string]places.OsmChange{}
+	for _, c := range got.OsmChanges {
+		keys[c.Key] = c
+	}
+	if !got.OsmChanged || len(keys) != 3 || keys["name"].After == nil || *keys["name"].After != "Cueva Nueva" ||
+		*keys["name"].Before != "Cueva" || keys["ele"].Before != nil || *keys["ele"].After != "1300" || keys["position"].Key == "" {
+		t.Errorf("unexpected changes: %+v", got.OsmChanges)
+	}
+	if got.Name != "Cueva" {
+		t.Errorf("a load never changes the place: %q", got.Name)
+	}
+	flagged := func() map[int64]bool {
+		var list []places.ListItem
+		rec := e.json("GET", "/api/v1/places", e.member.token, nil)
+		status(t, rec, http.StatusOK)
+		list = decode[[]places.ListItem](t, rec)
+		out := map[int64]bool{}
+		for _, it := range list {
+			out[it.ID] = it.OsmChanged
+		}
+		return out
+	}
+	if f := flagged(); !f[p.ID] || f[plain.ID] {
+		t.Errorf("the list flags the place with changes only: %+v", f)
+	}
+
+	// Looking at it clears the changes, without touching who changed the place last.
+	before := get().UpdatedAt
+	rec := e.json("POST", placePath(p, "/links/osm/review"), e.member.token, nil)
+	status(t, rec, http.StatusOK)
+	reviewed := decode[places.Place](t, rec)
+	if reviewed.OsmChanged || len(reviewed.OsmChanges) != 0 || !reviewed.UpdatedAt.Equal(before) {
+		t.Errorf("reviewed: %+v, updated %v -> %v", reviewed.OsmChanges, before, reviewed.UpdatedAt)
+	}
+	if f := flagged(); f[p.ID] {
+		t.Error("the list no longer flags it")
+	}
+
+	// The element going is a change too, and linking again starts from the element as it is.
+	if _, err := repo.Apply(ctx, "spain", nil); err != nil {
+		t.Fatal(err)
+	}
+	if c := get().OsmChanges; len(c) != 1 || c[0].Key != "removed" {
+		t.Errorf("the element is gone: %+v", c)
+	}
+
+	errorCode(t, e.json("POST", placePath(plain, "/links/osm/review"), e.member.token, nil), 409, "place_not_linked")
+	errorCode(t, e.json("POST", "/api/v1/places/999999/links/osm/review", e.member.token, nil), 404, "not_found")
+	if rec := e.json("POST", placePath(p, "/links/osm/review"), "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a session is needed, got %d", rec.Code)
+	}
+}

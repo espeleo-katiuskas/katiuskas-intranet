@@ -58,6 +58,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /api/v1/places/{id}", a.Protect(h.delete, "admin", "board"))
 	mux.Handle("PUT /api/v1/places/{id}/links/osm", a.Protect(h.linkOsm))
 	mux.Handle("DELETE /api/v1/places/{id}/links/osm", a.Protect(h.unlinkOsm))
+	mux.Handle("POST /api/v1/places/{id}/links/osm/review", a.Protect(h.reviewOsm))
 
 	mux.Handle("POST /api/v1/places/{id}/points", a.Protect(h.addPoint))
 	mux.Handle("PUT /api/v1/places/{id}/points/{pointId}", a.Protect(h.updatePoint))
@@ -111,6 +112,7 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrUnknownType, http.StatusBadRequest, "unknown_place_type"},
 		{ErrUnknownOsmElement, http.StatusBadRequest, "unknown_osm_element"},
 		{ErrOsmElementInUse, http.StatusConflict, "osm_element_in_use"},
+		{ErrNotLinked, http.StatusConflict, "place_not_linked"},
 		{ErrTypeRequired, http.StatusBadRequest, "place_type_required"},
 		{ErrAreaRequired, http.StatusBadRequest, "place_area_required"},
 		{ErrUnknownArea, http.StatusBadRequest, "unknown_area"},
@@ -486,6 +488,21 @@ func (h *Handler) linkOsm(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔗 %s ha vinculado el lugar «%s» con un elemento de OpenStreetMap (%s %d).",
 		h.actorLogin(r.Context()), p.Name, body.OsmType, body.OsmID))
+	httpapi.WriteJSON(w, http.StatusOK, p)
+}
+
+// reviewOsm says that what changed in the OpenStreetMap element of a place has been looked at: what it is now
+// is what the place has seen of it. It answers with the place.
+func (h *Handler) reviewOsm(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	p, err := h.service.ReviewOsm(r.Context(), id)
+	if err != nil {
+		writeError(w, err, "could not mark the changes of the OpenStreetMap element as seen")
+		return
+	}
 	httpapi.WriteJSON(w, http.StatusOK, p)
 }
 

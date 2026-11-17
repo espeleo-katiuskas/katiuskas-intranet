@@ -207,6 +207,12 @@ func (s *Service) LinkOsm(ctx context.Context, id, userID int64, osmType string,
 	return s.repo.SetOsm(ctx, id, userID, &osmType, &osmID)
 }
 
+// ReviewOsm says that a person has looked at what changed in the element of the place: from now on only what
+// changes after this is told.
+func (s *Service) ReviewOsm(ctx context.Context, id int64) (Place, error) {
+	return s.repo.ReviewOsm(ctx, id)
+}
+
 // UnlinkOsm says the place is not an element of OpenStreetMap any more (the element stays in the mirror,
 // and is a candidate again).
 func (s *Service) UnlinkOsm(ctx context.Context, id, userID int64) (Place, error) {

@@ -2,6 +2,7 @@ package places
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
@@ -91,7 +92,18 @@ func (r *Repository) ListPlaces(ctx context.Context) ([]ListItem, error) {
 		}
 		list = append(list, it)
 	}
-	return list, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	changed, err := r.osmChanges(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i].OsmChanged = len(changed[list[i].ID]) > 0
+	}
+	return list, nil
 }
 
 // GetPlace is a place with its points.
@@ -120,6 +132,10 @@ func (r *Repository) GetPlace(ctx context.Context, id int64) (Place, error) {
 	if p.Points, err = r.ListPoints(ctx, id); err != nil {
 		return Place{}, err
 	}
+	if p.OsmChanges, err = r.osmChangesOf(ctx, id); err != nil {
+		return Place{}, err
+	}
+	p.OsmChanged = len(p.OsmChanges) > 0
 	err = r.pool.QueryRow(ctx, `SELECT count(*) FROM place_files WHERE place_id = $1`, id).Scan(&p.FileCount)
 	return p, err
 }
@@ -155,14 +171,21 @@ func (r *Repository) AreaExists(ctx context.Context, id int64) (bool, error) {
 	return exists, err
 }
 
+// seenOf is the SQL that takes what an OpenStreetMap element is now, to keep as what the place has seen of it:
+// its tags and its point, or nothing if the element is not named or not there.
+func seenOf(osmType, osmID string) string {
+	return `(SELECT jsonb_build_object('tags', e.tags, 'lat', e.lat, 'lon', e.lon) FROM osm_elements e
+		WHERE e.osm_type = ` + osmType + ` AND e.osm_id = ` + osmID + `)`
+}
+
 func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in Input) (Place, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO places (type_id, kind, has_state, name, alt_names, state, subtype_id, system_id, area_id,
 			lat, lon, altitude_m, access, description, depth_m, horizontal_length_m, geology_id,
-			technical_sheet, osm_type, osm_id, created_by, updated_by)
+			technical_sheet, osm_type, osm_id, osm_seen, created_by, updated_by)
 		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-			$19, $20, $21, $21)
+			$19, $20, `+seenOf("$19", "$20")+`, $21, $21)
 		RETURNING id
 	`, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.SystemID, in.AreaID,
 		*in.Lat, *in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM, in.HorizontalLengthM,
@@ -630,7 +653,9 @@ func (r *Repository) DeleteSubtype(ctx context.Context, id int64) error {
 // changed it, and when); an empty pair takes the link away.
 func (r *Repository) SetOsm(ctx context.Context, id, userID int64, osmType *string, osmID *int64) (Place, error) {
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE places SET osm_type = $2, osm_id = $3, updated_by = $4, updated_at = now() WHERE id = $1
+		UPDATE places SET osm_type = $2, osm_id = $3, osm_seen = `+seenOf("$2", "$3")+`, updated_by = $4,
+			updated_at = now()
+		WHERE id = $1
 	`, id, osmType, osmID, userID)
 	if violates(err, "places_osm_element_fkey") {
 		return Place{}, ErrUnknownOsmElement
@@ -645,4 +670,61 @@ func (r *Repository) SetOsm(ctx context.Context, id, userID int64, osmType *stri
 		return Place{}, ErrNotFound
 	}
 	return r.GetPlace(ctx, id)
+}
+
+// ReviewOsm takes what the element is now as what the place has seen of it, so that what changed in it no longer
+// counts as a change to look at (and says nothing else of the place: who changed it last stays as it was).
+func (r *Repository) ReviewOsm(ctx context.Context, id int64) (Place, error) {
+	var linked bool
+	err := r.pool.QueryRow(ctx, `SELECT osm_type IS NOT NULL FROM places WHERE id = $1`, id).Scan(&linked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Place{}, ErrNotFound
+	}
+	if err != nil {
+		return Place{}, err
+	}
+	if !linked {
+		return Place{}, ErrNotLinked
+	}
+	if _, err := r.pool.Exec(ctx, `UPDATE places SET osm_seen = `+seenOf("places.osm_type", "places.osm_id")+` WHERE id = $1`, id); err != nil {
+		return Place{}, err
+	}
+	return r.GetPlace(ctx, id)
+}
+
+// osmChangesOf is what is different in the element of a place now from what it was when it was last seen.
+func (r *Repository) osmChangesOf(ctx context.Context, id int64) ([]OsmChange, error) {
+	list, err := r.osmChanges(ctx, &id)
+	return list[id], err
+}
+
+// osmChanges is the changes of the places that are an element of OpenStreetMap (one place if id is given, all
+// of them if not), by place.
+func (r *Repository) osmChanges(ctx context.Context, id *int64) (map[int64][]OsmChange, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT p.id, p.osm_seen, e.tags, e.lat, e.lon, e.deleted_at IS NOT NULL
+		FROM places p JOIN osm_elements e ON e.osm_type = p.osm_type AND e.osm_id = p.osm_id
+		WHERE p.osm_seen IS NOT NULL AND ($1::bigint IS NULL OR p.id = $1)
+	`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64][]OsmChange{}
+	for rows.Next() {
+		var placeID int64
+		var seen, tags []byte
+		var now osmSnapshot
+		var gone bool
+		if err := rows.Scan(&placeID, &seen, &tags, &now.Lat, &now.Lon, &gone); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(tags, &now.Tags); err != nil {
+			return nil, err
+		}
+		if changes := osmChanges(seen, now, gone); len(changes) > 0 {
+			out[placeID] = changes
+		}
+	}
+	return out, rows.Err()
 }

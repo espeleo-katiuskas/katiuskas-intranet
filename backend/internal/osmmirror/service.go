@@ -114,8 +114,8 @@ func matchName(a, b string) string {
 	return ""
 }
 
-// distanceM is the distance between two points on the Earth in metres (haversine).
-func distanceM(lat1, lon1, lat2, lon2 float64) float64 {
+// DistanceM is the distance between two points on the Earth in metres (haversine).
+func DistanceM(lat1, lon1, lat2, lon2 float64) float64 {
 	const earth = 6371008.8
 	rad := math.Pi / 180
 	dLat, dLon := (lat2-lat1)*rad, (lon2-lon1)*rad
@@ -151,7 +151,7 @@ func (s *Service) Nearby(ctx context.Context, lat, lon float64, radius int, name
 	}
 	var out []Candidate
 	for _, p := range points {
-		d := distanceM(lat, lon, p.Lat, p.Lon)
+		d := DistanceM(lat, lon, p.Lat, p.Lon)
 		if d <= float64(radius) {
 			out = append(out, Candidate{Point: p, DistanceM: int(math.Round(d)), NameMatch: matchName(name, p.Name)})
 		}

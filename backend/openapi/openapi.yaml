@@ -2652,6 +2652,25 @@ paths:
         "400": { description: "invalid_id." }
         "404": { description: "not_found." }
 
+  /places/{id}/links/osm/review:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    post:
+      summary: Say that what changed in the OpenStreetMap element of a place has been looked at
+      description: >
+        Any baseline role. What the element is now becomes what the place has seen of it, so osm_changes is
+        empty until it changes again. Nothing else of the place changes, not even updated_at.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The place
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Place" }
+        "400": { description: "invalid_id." }
+        "404": { description: "not_found." }
+        "409": { description: "place_not_linked — the place is not an OpenStreetMap element." }
+
   /places/{id}/points:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }
@@ -6966,6 +6985,7 @@ components:
         horizontal_length_m: { type: integer }
         geology_id: { type: integer }
         geology: { type: string, description: "The name of the geology of a cave." }
+        osm_changed: { type: boolean, description: "True if the OpenStreetMap element the place is has changed since it was linked or last reviewed (Place.osm_changes says what). Left out otherwise." }
 
     Place:
       description: A place with everything about it.
@@ -6978,6 +6998,15 @@ components:
             technical_sheet: { type: string }
             osm_type: { type: string, enum: [node, way, relation], description: "Left out if the place is not an element of OpenStreetMap." }
             osm_id: { type: integer, format: int64 }
+            osm_changes:
+              type: array
+              description: What is different in the OpenStreetMap element now from when the place was linked or last reviewed (a tag, `position` or `removed`). Left out if nothing.
+              items:
+                type: object
+                properties:
+                  key: { type: string }
+                  before: { type: string }
+                  after: { type: string }
             area_path: { type: array, description: "The zone and the ones it is in, the country first.", items: { $ref: "#/components/schemas/AreaRef" } }
             created_by: { type: string, description: "Login of who added it." }
             created_at: { type: string, format: date-time }

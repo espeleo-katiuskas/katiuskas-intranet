@@ -70,6 +70,8 @@ var (
 	ErrUnknownOsmElement = errors.New("there is no such OpenStreetMap element in the mirror: osm_type (node, way or relation) and osm_id go together")
 	// ErrOsmElementInUse means another place already is that OpenStreetMap element.
 	ErrOsmElementInUse = errors.New("another place already is that OpenStreetMap element")
+	// ErrNotLinked means a place that is not an OpenStreetMap element was asked about its element.
+	ErrNotLinked = errors.New("the place is not an element of OpenStreetMap")
 	// ErrUnknownType is a place given a type that does not exist.
 	ErrUnknownType     = errors.New("there is no such type of place")
 	ErrTypeRequired    = errors.New("the type of the place is required")
@@ -172,6 +174,9 @@ type ListItem struct {
 	// GeologyID and Geology (its name) say what a cave is formed in, if it is known.
 	GeologyID *int64  `json:"geology_id,omitempty"`
 	Geology   *string `json:"geology,omitempty"`
+	// OsmChanged says that the OpenStreetMap element the place is has changed since it was linked or last
+	// looked at (Place.OsmChanges says what); absent when it has not, or the place is not one.
+	OsmChanged bool `json:"osm_changed,omitempty"`
 }
 
 // AreaRef is a zone of the path of a place.
@@ -190,6 +195,9 @@ type Place struct {
 	// OsmType and OsmID are the OpenStreetMap element the place is, when it is one (the mirror has it).
 	OsmType *string `json:"osm_type,omitempty"`
 	OsmID   *int64  `json:"osm_id,omitempty"`
+	// OsmChanges is what is different in the element now from what it was when the place was linked or last
+	// looked at, which a person reviews (POST /places/{id}/links/osm/review says it has been).
+	OsmChanges []OsmChange `json:"osm_changes,omitempty"`
 	// AreaPath is the zone and the ones it is in, the country first, each with its kind.
 	AreaPath []AreaRef `json:"area_path"`
 	// CreatedBy and UpdatedBy are logins (the last person who changed the place or its points).
