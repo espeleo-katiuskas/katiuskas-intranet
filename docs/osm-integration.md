@@ -278,7 +278,7 @@ without code:
 | Filter | Suggests | Notes |
 |---|---|---|
 | `natural=cave_entrance` | Cavidad | the first and main one |
-| `man_made=adit`, `man_made=mineshaft`, `historic=mine` | Cavidad, subtype Mina | built; see "Mines" |
+| `man_made=adit`, `man_made=mineshaft`, `historic=mine`, without `resource=water` | Cavidad, subtype Mina | built; see "Mines" |
 | `natural=sinkhole` | none | left out: mostly hollows in the ground, 1,350 in Spain and only 394 with a name |
 | `highway=via_ferrata` | Vía ferrata | always ways: a point in the middle, and the line kept (see 5) |
 | `route=canyoning` (relations), `sport=canyoning` | Cañón | built; a line, no points; see "Canyons" |
@@ -391,14 +391,21 @@ Islands were not searched) there are 268 of them, plus one loose way; nothing el
 
 
 **Mines.** Built as the category `mine`: a `man_made=adit` (a horizontal gallery), a
-`man_made=mineshaft` or a `historic=mine`. The club explores mines like any cavity, so the place
-made from one starts as a cavity of the type Cavidad and the subtype Mina, and a cavity is looked
-for among the caves and the mines when it is linked. In the extract of 16 November 2026 there are
-2,335 of them in Spain and the Canary Islands (1,493 and 842), most nodes. **A caveat on the Canary
-Islands:** most of their 842 are "galerías", the tunnels that bring water out of the mountain,
-tagged `man_made=adit`: they are man-made tunnels like any adit, but a different thing from the
-mines of the mainland, and the club may not want them. If it does not, the way to leave them out is
-by name ("Galería …") or by area, not by tag.
+`man_made=mineshaft` or a `historic=mine`, **unless what it takes out is water** (`resource` has
+`water`, alone or in a list like `coal;water`). The club explores mines like any cavity, so the
+place made from one starts as a cavity of the type Cavidad and the subtype Mina, and a cavity is
+looked for among the caves and the mines when it is linked.
+
+In the extract of 16 November 2026 there are 2,335 elements with those tags in Spain and the Canary
+Islands (1,493 and 842), but 757 of them take water out: 735 in the Canary Islands, where most of
+the 842 are the "galerías", tunnels dug to bring the water of the mountain out (tagged
+`man_made=adit` and `resource=water`), and 22 in the rest of Spain. They are man-made tunnels like
+any adit, but not what the club explores, so they are left out, **everywhere** and not only in the
+islands: `resource=water` says what they are, which a name ("Galería …") would not (27 adits of the
+mainland are called that and are mines). That leaves **1,578 mines** (1,471 and 107). A few
+galleries of the Canary Islands (6) have no `resource` and are still taken, since nothing says what
+they are. An element that was loaded before the rule is marked as gone by the next load, not
+deleted, as with any other.
 
 ## 13. Phases
 

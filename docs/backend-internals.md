@@ -1285,11 +1285,13 @@ exits with an error if any source failed, which the unit turns into a Telegram n
 **Which elements.** `osmmirror.Filters`, each with its category, in the order of what the club does:
 a cave is `natural=cave_entrance`; a canyon is a `route=canyoning` relation, or a way or node with
 `sport=canyoning` (the other way they are mapped); a mine is a `man_made=adit` (a gallery), a
-`man_made=mineshaft` or a `historic=mine`, explored like any cavity (the place made from one starts
-as a cavity of the subtype Mina); a hut is `tourism=wilderness_hut` or `alpine_hut`, an
-`amenity=shelter` with `shelter_type=basic_hut`, or one with no type whose name has "refugio"; and a
-via ferrata, which the club only uses now and then and so comes last, is `highway=via_ferrata`. Not
-there: sinkholes (`natural=sinkhole`), which are mostly hollows in the ground and not cavities.
+`man_made=mineshaft` or a `historic=mine` that does not take water out (`resource` has `water`: the
+"galerías" of the Canary Islands, tunnels that bring the water of the mountain out), explored like
+any cavity (the place made from one starts as a cavity of the subtype Mina); a hut is
+`tourism=wilderness_hut` or `alpine_hut`, an `amenity=shelter` with `shelter_type=basic_hut`, or one
+with no type whose name has "refugio"; and a via ferrata, which the club only uses now and then and
+so comes last, is `highway=via_ferrata`. Not there: sinkholes (`natural=sinkhole`), which are mostly
+hollows in the ground and not cavities.
 
 **Canyons are read apart.** `osmium export` builds shapes for what is an area or a line, not for a
 route, which is a list of ways. So the filters of a route (`Routes`) are cut with their member ways

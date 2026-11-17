@@ -66,13 +66,15 @@ var Filters = []Filter{
 	{Category: CategoryCanyon, Expression: "r/route=canyoning", Routes: true, Match: func(t map[string]string) bool {
 		return t["route"] == "canyoning"
 	}},
-	// A mine: an adit (a horizontal gallery), a shaft or a mine that is no longer worked. Not the sinkholes
-	// (natural=sinkhole), which are mostly hollows in the ground and not cavities.
+	// A mine: an adit (a horizontal gallery), a shaft or a mine that is no longer worked, but not one that
+	// takes water out (resource=water: the "galerías" of the Canary Islands, tunnels dug to bring the water of
+	// the mountain out, which are not what the club explores). Not the sinkholes (natural=sinkhole) either,
+	// which are mostly hollows in the ground and not cavities.
 	{Category: CategoryMine, Expression: "nwr/man_made=adit,mineshaft", Match: func(t map[string]string) bool {
-		return t["man_made"] == "adit" || t["man_made"] == "mineshaft"
+		return (t["man_made"] == "adit" || t["man_made"] == "mineshaft") && !digsWater(t)
 	}},
 	{Category: CategoryMine, Expression: "nwr/historic=mine", Match: func(t map[string]string) bool {
-		return t["historic"] == "mine"
+		return t["historic"] == "mine" && !digsWater(t)
 	}},
 	// A hut: the two tags that mean it, or a basic hut under an amenity=shelter (which on its own is mostly
 	// a bus stop or a picnic shelter), or an amenity=shelter with no type at all whose name says "refugio".
@@ -94,6 +96,17 @@ var Filters = []Filter{
 	{Category: CategoryViaFerrata, Expression: "nwr/highway=via_ferrata", Match: func(t map[string]string) bool {
 		return t["highway"] == "via_ferrata"
 	}},
+}
+
+// digsWater says that what a mine takes out is water, among other things or only: `resource` is a list
+// separated by semicolons ("coal;water").
+func digsWater(t map[string]string) bool {
+	for _, r := range strings.Split(t["resource"], ";") {
+		if strings.EqualFold(strings.TrimSpace(r), "water") {
+			return true
+		}
+	}
+	return false
 }
 
 // Expressions are the arguments of `osmium tags-filter` for the filters whose elements `osmium export` can

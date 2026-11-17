@@ -48,6 +48,11 @@ func TestReadFilters(t *testing.T) {
 		feature(point, `{"@type":"node","@id":21,"@version":1,"@timestamp":1,"man_made":"mineshaft"}`),
 		feature(point, `{"@type":"node","@id":22,"@version":1,"@timestamp":1,"historic":"mine","name":"Mina vieja"}`),
 		feature(point, `{"@type":"node","@id":23,"@version":1,"@timestamp":1,"natural":"sinkhole","name":"Dolina"}`),
+		// A mine of iron is a mine; a gallery that takes water out is not, alone or with something else.
+		feature(point, `{"@type":"node","@id":24,"@version":1,"@timestamp":1,"man_made":"adit","resource":"iron_ore","name":"Mina de hierro"}`),
+		feature(point, `{"@type":"node","@id":25,"@version":1,"@timestamp":1,"man_made":"adit","resource":"water","name":"Galería de agua"}`),
+		feature(point, `{"@type":"node","@id":26,"@version":1,"@timestamp":1,"man_made":"adit","resource":"coal; Water","name":"Galería mixta"}`),
+		feature(point, `{"@type":"node","@id":27,"@version":1,"@timestamp":1,"historic":"mine","resource":"water"}`),
 		// What is there only because it is referenced.
 		feature(point, `{"@type":"node","@id":9,"@version":1,"@timestamp":1,"natural":"tree"}`),
 	)
@@ -59,10 +64,15 @@ func TestReadFilters(t *testing.T) {
 	for _, e := range got {
 		byID[e.ID] = e
 	}
-	if len(got) != 9 {
-		t.Fatalf("expected 9 elements, got %d: %+v", len(got), got)
+	if len(got) != 10 {
+		t.Fatalf("expected 10 elements, got %d: %+v", len(got), got)
 	}
-	for _, id := range []int64{20, 21, 22} {
+	for _, id := range []int64{25, 26, 27} {
+		if _, ok := byID[id]; ok {
+			t.Errorf("a gallery that takes water out (%d) is not a mine", id)
+		}
+	}
+	for _, id := range []int64{20, 21, 22, 24} {
 		if byID[id].Category != "mine" {
 			t.Errorf("element %d should be a mine: %+v", id, byID[id])
 		}
