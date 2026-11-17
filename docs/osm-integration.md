@@ -86,7 +86,8 @@ members):
 |---|---|
 | `osm_type`, `osm_id` | `node`, `way` or `relation` and its id: the primary key |
 | `version`, `osm_timestamp` | of the element as downloaded |
-| `lat`, `lon` | the point (the centre of a way or relation) |
+| `lat`, `lon` | the point: the node itself, or a point inside the shape of a way or relation |
+| `geometry` | `jsonb` GeoJSON of a way or relation (its outline), null for a node |
 | `tags` | `jsonb`, all the tags as they are |
 | `deleted` | true once it is gone from OSM (the row is kept: a place may point at it) |
 | `fetched_at` | when this row was last confirmed by a download |
@@ -95,8 +96,34 @@ and a log of the loads (`osm_sync_runs`: when, from which file, its date, how ma
 and deleted, how long, the error if any), which `adminstatus` could show.
 
 In `places`: `osm_type` and `osm_id`, both null or both set, **unique** (an element is at most one
-place), with a foreign key to the mirror. Ways and relations are rare (692 of 73,500), so the
-first version could take only nodes and add the rest later using their centre.
+place), with a foreign key to the mirror.
+
+**Nodes, ways and relations.** A place is a point, but OSM draws many things as shapes. The
+Refugio de la Zapatilla is a node, and another `tourism=wilderness_hut` is a *way*: a closed line
+of nodes that goes around the building, which OSM reads as a polygon. For caves this hardly
+matters (684 ways and 8 relations of 73,500), but for huts it does: of the 17,100 elements with
+`tourism=wilderness_hut`, only 8,900 are nodes, so about half are ways or relations, and the
+same goes for `alpine_hut`. So **ways and relations are in from the first version**:
+
+- The extract is cut with `osmium tags-filter` (which keeps the nodes a way refers to unless told
+  not to) and exported with `osmium export`, which builds the polygon of a closed way and the
+  multipolygon of a relation, so no geometry is worked out by hand.
+- The place gets a **point inside the shape**, not the average of its corners: the centre of a
+  concave outline (an L-shaped building, a ring) can fall outside it. Shapely's
+  `representative_point()` (or PostGIS's `ST_PointOnSurface`, if it is ever added) gives one that
+  is always inside. For an open way (a line, a via ferrata) it is the middle of the line, and the
+  whole line is kept for drawing it.
+- The outline is stored (`geometry`) so that a map can draw the building, or the track of a via
+  ferrata, instead of only a dot; the dot is what the lists and the clusters use.
+- The key of an element is **type and id**, and an id is not shared between types: node 123 and
+  way 123 are different things. Everything that refers to one (the foreign key of a place, the
+  link to osm.org, the editor) carries both (`osm.org/way/123`).
+- A mapper can **replace a node by a way** (draw the building around the point that stood for it)
+  and the id changes: the old node is deleted and the way is new. A place that pointed at the node
+  would be flagged as having lost its element (8) when it has really moved to a new one a few
+  metres away. The matching by distance and similar name that offers links (8) also covers this:
+  a deleted element with a new one at the same spot and the same name is offered as its
+  replacement, to be accepted with one click.
 
 **To settle**: whether the mirror keeps every tag (simple, bigger) or only the ones that are read
 (smaller, but a new need means a reload).
@@ -247,12 +274,47 @@ without code:
 |---|---|---|
 | `natural=cave_entrance` | Cavidad | the first and main one |
 | `natural=sinkhole`, `man_made=mineshaft`, `man_made=adit`, `historic=mine` | Cavidad (sima, mina) | check how many and how reliable before adding |
-| `highway=via_ferrata` | Vía ferrata | ways: need a centre point or the whole line |
-| `tourism=alpine_hut`, `amenity=shelter` | Refugio | |
+| `highway=via_ferrata` | Vía ferrata | always ways: a point in the middle, and the line kept (see 5) |
+| `tourism=wilderness_hut`, `tourism=alpine_hut`, `amenity=shelter` + `shelter_type=basic_hut` | Refugio | see below |
 | `natural=spring`, `natural=peak` | none | probably out: the Nominatim search of the maps is enough |
 
 **To settle**: only caves to begin with (recommended), and which of the rest has a use for the
 club.
+
+**Huts.** OSM has no single tag for what the club calls a *refugio*:
+
+- `tourism=wilderness_hut` is the unstaffed, free hut (the Refugio de la Zapatilla: `access=yes`,
+  `fee=no`, `building=yes`, `fireplace=yes`, `bench=yes`, `website=…`).
+  The Refugio de la Torreta (`way/426692100`, four corners, closed, a few metres across) is the
+  same kind drawn as a building, with `capacity=12`, `beds=6`, `mattress=no`, `reservation=no`,
+  `drinking_water=no`, `toilets=no` and `shower=no`: the extra tags of a hut that has been mapped
+  with care, which a place would show as text.
+- `tourism=alpine_hut` is the mountain hut, usually staffed, with `reservation`, `beds` and
+  `operator`.
+- `amenity=shelter` is only a hut with `shelter_type=basic_hut`: without that tag it is mostly a
+  bus shelter or a covered picnic area, so a bare `amenity=shelter` must not be taken.
+- `building=hut` or `building=cabin` alone is too vague (sheds, shepherds' huts): a hint at most.
+
+What a hut offers is read as text, not as a state (a refugio has no state, `has_state`): `access`,
+`fee`, `capacity`, `beds`, `fireplace`, `drinking_water`, `ele` (the altitude), `website`.
+
+How many there are, from taginfo (the whole world, November 2026; the count for Spain alone is still
+to be had, see below): `tourism=wilderness_hut` 17,100 (8,900 nodes), `tourism=alpine_hut` 14,100
+(7,000 nodes) and `amenity=shelter` with `shelter_type=basic_hut` 8,300. That is the reason for
+requiring the `shelter_type`: `amenity=shelter` has 700,000 elements, of which `public_transport`
+(258,000), `picnic_shelter` (112,000), `gazebo` (59,000), `weather_shelter` (26,000) and `lean_to`
+(23,000) are the biggest, and none of them is a refugio. The `shelter_type` also has typos and
+variants in other languages (`hut`, `basic`, `refugio_forestal/montaña`, `chozo`…), each with a
+handful of elements, which are not worth chasing.
+
+The attempt to count them for Spain with Overpass failed twice on the public instances (an empty
+answer, and "at capacity, all query workers are busy"), which is one more reason for downloading
+the data instead of asking for it (4): the count will come for free from the first extract of
+Spain, and the filters of this section should be tried against it before being fixed.
+
+Some will be mapped with only a name that says "Refugio": those are found by linking by hand an
+existing place (see 8), not by guessing.
+
 
 ## 13. Phases
 
@@ -275,7 +337,8 @@ club.
 4. Spain only, or other countries too; how often is it refreshed (4)?
 5. May the host have `osmium-tool`, and is a gigabyte of download a few times a week fine (4)?
 6. Which tags become which fields, and which side wins when they differ (8)?
-7. Ways and relations: later with their centre, or from the start (5)?
+7. Ways and relations come in from the start (5), with the point inside the shape and the outline
+   kept: confirm that is what is wanted, and whether the outline is drawn on the maps.
 8. Contributing back: not at all, a link to the OSM editor, or an integration (9)? And, in any
    case, what to do about places whose location is private?
 9. Does the club ever want to open the catalogue to the public (3, 10)?
