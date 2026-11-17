@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -268,6 +269,8 @@ type Point struct {
 	Lon      float64 `json:"lon"`
 	Category string  `json:"category"`
 	Name     string  `json:"name,omitempty"`
+	// names are all the names an element has (set by a search, to rank it): not in the JSON.
+	names []string
 }
 
 // Detail is an element with everything the mirror knows of it.
@@ -341,4 +344,49 @@ func (r *Repository) Get(ctx context.Context, typ string, id int64) (Detail, err
 		return Detail{}, err
 	}
 	return d, nil
+}
+
+// accentFrom and accentTo are what a name is simplified with in SQL, the letters with accent of the languages of
+// Spain (and a few more) as plain ones: translate() takes each character of the first to the one of the second.
+const (
+	accentFrom = "áàâäãåéèêëíìîïóòôöõúùûüýÿñçÁÀÂÄÃÅÉÈÊËÍÌÎÏÓÒÔÖÕÚÙÛÜÝÑÇ"
+	accentTo   = "aaaaaaeeeeiiiiooooouuuuyyncaaaaaaeeeeiiiiooooouuuuync"
+)
+
+// SearchByWords is the elements, not marked as gone and not yet a place, of the given categories, whose names (the
+// name, the other names and the Spanish one) hold every one of the words, whatever the case or the accents. It
+// does not rank them: what it gives is a handful more than a person looks at, for Service.Search to put in order.
+// The words are letters and digits only (areas.Normalize), so they are safe as part of a LIKE.
+func (r *Repository) SearchByWords(ctx context.Context, words, categories []string, limit int) ([]Point, error) {
+	haystack := `translate(lower(coalesce(e.tags->>'name', '') || ' ' || coalesce(e.tags->>'alt_name', '') || ' ' ||
+		coalesce(e.tags->>'name:es', '')), '` + accentFrom + `', '` + accentTo + `')`
+	// translate() also takes the capital letters of accentFrom to lower case ones, whatever lower() did.
+	args := []any{categories, limit}
+	where := ""
+	for i, w := range words {
+		where += fmt.Sprintf(" AND %s LIKE '%%' || $%d || '%%'", haystack, i+3)
+		args = append(args, w)
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT e.osm_type, e.osm_id, e.lat, e.lon, e.category, coalesce(e.tags->>'name', ''),
+			coalesce(e.tags->>'alt_name', ''), coalesce(e.tags->>'name:es', '')
+		FROM osm_elements e
+		WHERE e.deleted_at IS NULL AND e.category = ANY($1) AND (e.tags ? 'name' OR e.tags ? 'alt_name')
+			AND NOT EXISTS (SELECT 1 FROM places p WHERE p.osm_type = e.osm_type AND p.osm_id = e.osm_id)`+where+`
+		LIMIT $2`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Point
+	for rows.Next() {
+		var p Point
+		var alt, es string
+		if err := rows.Scan(&p.Type, &p.ID, &p.Lat, &p.Lon, &p.Category, &p.Name, &alt, &es); err != nil {
+			return nil, err
+		}
+		p.names = append([]string{p.Name, es}, strings.Split(alt, ";")...)
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }

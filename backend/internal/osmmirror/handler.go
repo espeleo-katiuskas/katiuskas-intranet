@@ -25,12 +25,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/osm/elements", a.Protect(h.list))
 	mux.Handle("GET /api/v1/osm/elements/{type}/{id}", a.Protect(h.get))
 	mux.Handle("GET /api/v1/osm/nearby", a.Protect(h.nearby))
+	mux.Handle("GET /api/v1/osm/search", a.Protect(h.search))
 }
 
 func writeError(w http.ResponseWriter, err error, fallback string) {
 	switch {
 	case errors.Is(err, ErrInvalidBounds):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_bbox", err.Error())
+	case errors.Is(err, ErrInvalidQuery):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_osm_query", err.Error())
 	case errors.Is(err, ErrInvalidRadius):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_radius", err.Error())
 	case errors.Is(err, ErrInvalidCategory):
@@ -134,6 +137,24 @@ func (h *Handler) nearby(w http.ResponseWriter, r *http.Request) {
 	}
 	if found == nil {
 		found = []Candidate{}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"elements": found})
+}
+
+// search gives the elements whose name holds the words of a text (?q=), optionally of some categories
+// (?category= as in list): {"elements": [Point]}, the best first. They are the ones that are not yet a place.
+func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	var categories []string
+	for _, c := range strings.Split(query.Get("category"), ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			categories = append(categories, c)
+		}
+	}
+	found, err := h.service.Search(r.Context(), query.Get("q"), categories)
+	if err != nil {
+		writeError(w, err, "could not search the OpenStreetMap elements")
+		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"elements": found})
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"math"
+	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/areas"
 )
@@ -167,4 +169,102 @@ func (s *Service) Nearby(ctx context.Context, lat, lon float64, radius int, name
 		out = out[:MaxNearby]
 	}
 	return out, nil
+}
+
+// MaxSearchResults is the most elements a search by name gives.
+const MaxSearchResults = 20
+
+// searchPool is how many elements the database gives a search to rank: more than are shown, so that the best
+// are among them even when a very common word ("cueva") matches thousands.
+const searchPool = 400
+
+// ErrInvalidQuery means a text to search that is too long.
+var ErrInvalidQuery = errors.New("the text to search is too long")
+
+// MaxQueryLength is the longest text a search takes, in characters.
+const MaxQueryLength = 200
+
+// rankName says how well a name answers the words searched, from 0 (the same) to 3: 1 if it starts with them,
+// 2 if every word is a whole word of it, 3 if they are only inside it.
+func rankName(name string, query string, words []string) int {
+	n := areas.Normalize(name)
+	switch {
+	case n == "":
+		return 4
+	case n == query:
+		return 0
+	case strings.HasPrefix(n, query):
+		return 1
+	}
+	have := map[string]bool{}
+	for _, w := range strings.Fields(n) {
+		have[w] = true
+	}
+	for _, w := range words {
+		if !have[w] {
+			return 3
+		}
+	}
+	return 2
+}
+
+// Search is the elements, not yet a place, whose name holds the words of the text (case, accents and punctuation
+// do not count), of the categories asked for (all if none): the same name first, then those that start with the
+// text, then those that have all its words, then the rest, and in each the club's own activity first (caves,
+// canyons, mines, huts, via ferratas) and the shorter name, at most MaxSearchResults. It is how a person finds
+// the cave they know the name of, to make a place of it.
+func (s *Service) Search(ctx context.Context, text string, categories []string) ([]Point, error) {
+	if utf8.RuneCountInString(text) > MaxQueryLength {
+		return nil, ErrInvalidQuery
+	}
+	query := areas.Normalize(text)
+	var words []string
+	for _, w := range strings.Fields(query) {
+		if utf8.RuneCountInString(w) >= 2 {
+			words = append(words, w)
+		}
+	}
+	if len(words) == 0 {
+		return []Point{}, nil
+	}
+	if len(categories) == 0 {
+		categories = Categories
+	}
+	for _, c := range categories {
+		if !slices.Contains(Categories, c) {
+			return nil, ErrInvalidCategory
+		}
+	}
+	found, err := s.repo.SearchByWords(ctx, words, categories, searchPool)
+	if err != nil {
+		return nil, err
+	}
+	rank := func(p Point) int {
+		best := 4
+		for _, name := range p.names {
+			best = min(best, rankName(name, query, words))
+		}
+		return best
+	}
+	order := func(c string) int { return slices.Index(Categories, c) }
+	sort.SliceStable(found, func(i, j int) bool {
+		a, b := found[i], found[j]
+		if ra, rb := rank(a), rank(b); ra != rb {
+			return ra < rb
+		}
+		if oa, ob := order(a.Category), order(b.Category); oa != ob {
+			return oa < ob
+		}
+		if la, lb := utf8.RuneCountInString(a.Name), utf8.RuneCountInString(b.Name); la != lb {
+			return la < lb
+		}
+		return a.ID < b.ID
+	})
+	if len(found) > MaxSearchResults {
+		found = found[:MaxSearchResults]
+	}
+	if found == nil {
+		found = []Point{}
+	}
+	return found, nil
 }

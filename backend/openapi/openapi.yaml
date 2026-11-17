@@ -3088,6 +3088,39 @@ paths:
                   truncated: { type: boolean }
         "400": { description: "invalid_bbox or invalid_osm_category." }
 
+  /osm/search:
+    get:
+      summary: Search the elements of the OpenStreetMap mirror by name
+      description: >
+        Any baseline role. The elements, not yet a place and not gone from OpenStreetMap, whose name
+        (or other name) holds the words of `q`, whatever the case, the accents and the punctuation: the same
+        name first, then those that start with it, then those with all its words, then the rest, and in each
+        the club's activity first and the shorter name; at most 20.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, maxLength: 200 } }
+        - { name: category, in: query, description: "comma-separated: cave, canyon, mine, hut, via_ferrata (all if left out)", schema: { type: string } }
+      responses:
+        "200":
+          description: The elements, the best first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  elements:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string, enum: [node, way, relation] }
+                        id: { type: integer, format: int64 }
+                        lat: { type: number }
+                        lon: { type: number }
+                        category: { type: string, enum: [cave, canyon, mine, hut, via_ferrata] }
+                        name: { type: string }
+        "400": { description: "invalid_osm_query (too long) or invalid_osm_category." }
+
   /osm/nearby:
     get:
       summary: Elements of the OpenStreetMap mirror near a point, to link a place

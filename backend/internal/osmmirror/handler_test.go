@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/osmmirror"
@@ -261,5 +262,131 @@ func TestNearby(t *testing.T) {
 	errorCode(t, get("/api/v1/osm/nearby?lat=40&lon=-3&category=pizza", token), 400, "invalid_osm_category")
 	if rec := get("/api/v1/osm/nearby?lat=40&lon=-3", ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("a session is needed, got %d", rec.Code)
+	}
+}
+
+// A search by name finds the elements whose name (or other name) holds the words, whatever the case, the accents
+// and the punctuation: the same name first, then the ones that start with it, then the ones with all its words,
+// then the rest, and in each the club's activity first; what is gone is not found.
+func TestSearch(t *testing.T) {
+	get, token, repo := serve(t)
+	named := func(id int64, category, name string, extra map[string]string) osmmirror.Element {
+		tags := map[string]string{"name": name}
+		for k, v := range extra {
+			tags[k] = v
+		}
+		return osmmirror.Element{Type: "node", ID: id, Version: 1, Category: category, Lat: 40, Lon: -3, Tags: tags}
+	}
+	ctx := context.Background()
+	elements := []osmmirror.Element{
+		named(1, "cave", "Cueva del Águila", nil),
+		named(2, "cave", "Águila", nil),
+		named(3, "cave", "Águila Negra", nil),
+		named(4, "cave", "Cueva Aguilar", nil),
+		named(5, "hut", "Refugio del Águila", nil),
+		named(6, "cave", "Cova d'Arta", nil),
+		named(7, "cave", "Sima Grande", map[string]string{"alt_name": "La Sima del Tío Pepe;Pozo Grande"}),
+		named(8, "cave", "Águila vieja", nil),
+		{Type: "node", ID: 9, Version: 1, Category: "cave", Lat: 40, Lon: -3, Tags: map[string]string{"natural": "cave_entrance"}},
+	}
+	if _, err := repo.Apply(ctx, "spain", elements); err != nil {
+		t.Fatal(err)
+	}
+	// 8 disappears in a later load.
+	if _, err := repo.Apply(ctx, "spain", append(append([]osmmirror.Element{}, elements[:7]...), elements[8])); err != nil {
+		t.Fatal(err)
+	}
+	search := func(q string) []int64 {
+		rec := get("/api/v1/osm/search?q="+url.QueryEscape(q), token)
+		if rec.Code != 200 {
+			t.Fatalf("%q: %d %s", q, rec.Code, rec.Body.String())
+		}
+		var a listAnswer
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+			t.Fatal(err)
+		}
+		ids := []int64{}
+		for _, p := range a.Elements {
+			ids = append(ids, p.ID)
+		}
+		return ids
+	}
+	same := func(got []int64, want ...int64) bool {
+		if len(got) != len(want) {
+			return false
+		}
+		for i := range got {
+			if got[i] != want[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// "aguila", with or without the accent or the capital: the name is "Águila" (2), then "Águila Negra" (3) that
+	// starts with it, then the two with it as a whole word, the cave before the hut (1, 5), then the one that only
+	// holds it inside another word (4). 8 is gone.
+	for _, q := range []string{"aguila", "Águila", "  AGUILA "} {
+		if got := search(q); !same(got, 2, 3, 1, 5, 4) {
+			t.Errorf("%q: %v", q, got)
+		}
+	}
+	// Words in any order, and the punctuation of the name does not matter: "Cova d'Arta" is "cova d arta".
+	if got := search("arta cova"); !same(got, 6) {
+		t.Errorf("words in any order: %v", got)
+	}
+	if got := search("cova d'arta"); !same(got, 6) {
+		t.Errorf("with the apostrophe: %v", got)
+	}
+	// An other name finds it too, and so does a part of one.
+	if got := search("tio pepe"); !same(got, 7) {
+		t.Errorf("by the other name: %v", got)
+	}
+	if got := search("pozo"); !same(got, 7) {
+		t.Errorf("by a part of the other name: %v", got)
+	}
+	// Nothing to search, one letter, and the characters of a LIKE are not wildcards.
+	for _, q := range []string{"", "   ", "x", "%", "_"} {
+		if got := search(q); len(got) != 0 {
+			t.Errorf("%q should find nothing: %v", q, got)
+		}
+	}
+	if got := search("100%"); len(got) != 0 {
+		t.Errorf("a percent sign is not a wildcard: %v", got)
+	}
+	// The categories.
+	rec := get("/api/v1/osm/search?q=aguila&category=hut", token)
+	var a listAnswer
+	if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil || len(a.Elements) != 1 || a.Elements[0].ID != 5 {
+		t.Errorf("only the huts: %+v %v", a.Elements, err)
+	}
+	// An empty result is an empty list, not null.
+	if body := get("/api/v1/osm/search?q=zzzz", token).Body.String(); !strings.Contains(body, `"elements":[]`) {
+		t.Errorf("an empty list expected: %s", body)
+	}
+	errorCode(t, get("/api/v1/osm/search?q=aguila&category=pizza", token), 400, "invalid_osm_category")
+	errorCode(t, get("/api/v1/osm/search?q="+strings.Repeat("a", osmmirror.MaxQueryLength+1), token), 400, "invalid_osm_query")
+	if rec := get("/api/v1/osm/search?q=aguila", ""); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a session is needed, got %d", rec.Code)
+	}
+}
+
+// At most MaxSearchResults, and the best of a very common word are among them.
+func TestSearchIsCapped(t *testing.T) {
+	get, token, repo := serve(t)
+	var many []osmmirror.Element
+	for i := 1; i <= osmmirror.MaxSearchResults+15; i++ {
+		many = append(many, osmmirror.Element{Type: "node", ID: int64(i), Version: 1, Category: "cave", Lat: 40, Lon: -3,
+			Tags: map[string]string{"name": "Cueva del Agua " + strings.Repeat("x", i)}})
+	}
+	many = append(many, osmmirror.Element{Type: "node", ID: 999, Version: 1, Category: "cave", Lat: 40, Lon: -3,
+		Tags: map[string]string{"name": "Cueva"}})
+	if _, err := repo.Apply(context.Background(), "spain", many); err != nil {
+		t.Fatal(err)
+	}
+	rec := get("/api/v1/osm/search?q=cueva", token)
+	var a listAnswer
+	if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil || len(a.Elements) != osmmirror.MaxSearchResults || a.Elements[0].ID != 999 {
+		t.Errorf("%d elements, the name that is exactly the text first: %+v %v", len(a.Elements), a.Elements[:1], err)
 	}
 }

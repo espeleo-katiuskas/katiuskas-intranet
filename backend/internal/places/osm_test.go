@@ -268,3 +268,31 @@ func TestOsmChangesOfAPlace(t *testing.T) {
 		t.Errorf("a session is needed, got %d", rec.Code)
 	}
 }
+
+// An element that is a place is not found by a search by name either, and is again when it is unlinked.
+func TestSearchLeavesOutWhatIsAPlace(t *testing.T) {
+	e := newEnv(t)
+	repo := mirror(t, e, 1, 2)
+	service := osmmirror.NewService(repo)
+	ctx := context.Background()
+	count := func() int {
+		found, err := service.Search(ctx, "cueva", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(found)
+	}
+	if n := count(); n != 2 {
+		t.Fatalf("both are found: %d", n)
+	}
+	p := e.newPlace(e.cavidad, "Cueva", map[string]any{"osm_type": "node", "osm_id": 1})
+	e.notifier.wait(t)
+	if n := count(); n != 1 {
+		t.Errorf("the one that is a place is not found: %d", n)
+	}
+	status(t, e.json("DELETE", placePath(p, "/links/osm"), e.member.token, nil), http.StatusOK)
+	e.notifier.wait(t)
+	if n := count(); n != 2 {
+		t.Errorf("both again after unlinking: %d", n)
+	}
+}
