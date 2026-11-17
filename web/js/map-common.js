@@ -217,6 +217,15 @@ function addExpandButton(L, map, element) {
   new Expand().addTo(map);
 }
 
+// What the categories of the elements of the OpenStreetMap mirror are called (osm-layer.js, osm-link.js).
+const OSM_CATEGORY_LABELS = {
+  cave: 'Cueva',
+  canyon: 'Barranco',
+  mine: 'Mina',
+  hut: 'Refugio',
+  via_ferrata: 'Vía ferrata',
+};
+
 const SEARCH_ICON =
   '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l6 6" stroke="currentColor" stroke-width="2"/></svg>';
 
@@ -227,7 +236,8 @@ const SEARCH_ICON =
 function addSearchControl(L, map) {
   let ring = null;
 
-  function show(place) {
+  // Where a search takes the map: a ring at the place, and the view on it (on its box if it has one).
+  function show(place, zoom = 14) {
     ring?.remove();
     ring = L.circleMarker([place.lat, place.lon], {
       radius: 14,
@@ -245,7 +255,7 @@ function addSearchControl(L, map) {
         ],
         { maxZoom: 16 },
       );
-    else map.setView([place.lat, place.lon], 14);
+    else map.setView([place.lat, place.lon], zoom);
   }
 
   const Search = L.Control.extend({
@@ -265,7 +275,7 @@ function addSearchControl(L, map) {
       const input = L.DomUtil.create('input', '', form);
       input.type = 'search';
       input.maxLength = 200;
-      input.placeholder = 'Pueblo, valle, pico…';
+      input.placeholder = 'Cueva, pueblo, valle, pico…';
       input.setAttribute('aria-label', 'Buscar un sitio');
       const go = L.DomUtil.create('button', 'btn btn-secondary btn-small', form);
       go.type = 'submit';
@@ -309,30 +319,66 @@ function addSearchControl(L, map) {
         if (!text) return;
         go.disabled = true;
         say('Buscando…');
-        try {
-          const found = await apiFetch(`/areas/geocode?q=${encodeURIComponent(text)}`);
-          if (found.length === 0) {
-            say('No se ha encontrado nada.');
-            return;
+        // The elements of the OpenStreetMap mirror that have that name (a cave to make a place of) and the places
+        // the geocoder knows; either may fail or find nothing without the other being lost.
+        const [elements, sites] = await Promise.allSettled([
+          apiFetch(`/osm/search?q=${encodeURIComponent(text)}`),
+          apiFetch(`/areas/geocode?q=${encodeURIComponent(text)}`),
+        ]);
+        const fromOsm = elements.status === 'fulfilled' ? elements.value.elements : [];
+        const places = sites.status === 'fulfilled' ? sites.value : [];
+        results.replaceChildren();
+        const heading = (label) => {
+          const li = document.createElement('li');
+          li.className = 'map-search-heading subtitle';
+          li.textContent = label;
+          results.append(li);
+        };
+        const item = (label, detail, choose) => {
+          const li = document.createElement('li');
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = label;
+          if (detail) {
+            const small = document.createElement('span');
+            small.className = 'subtitle';
+            small.textContent = detail;
+            button.append(small);
           }
-          results.replaceChildren();
-          for (const place of found) {
-            const li = document.createElement('li');
-            const choose = document.createElement('button');
-            choose.type = 'button';
-            choose.textContent = place.name;
-            choose.addEventListener('click', () => {
-              show(place);
-              setOpen(false);
-            });
-            li.append(choose);
-            results.append(li);
+          button.addEventListener('click', () => {
+            choose();
+            setOpen(false);
+          });
+          li.append(button);
+          results.append(li);
+        };
+        if (fromOsm.length) {
+          heading('En OpenStreetMap, sin añadir todavía al catálogo');
+          for (const element of fromOsm) {
+            item(
+              element.name,
+              `${OSM_CATEGORY_LABELS[element.category] ?? element.category} · ${formatDecimal(element.lat, element.lon)}`,
+              () => {
+                show(element, 17);
+                // The layer of its category is put on the map and its popup opened (osm-layer.js).
+                map.fire('osmfocus', {
+                  elementType: element.type,
+                  elementId: element.id,
+                  category: element.category,
+                });
+              },
+            );
           }
-        } catch (error) {
-          say(error.message);
-        } finally {
-          go.disabled = false;
         }
+        if (places.length) {
+          if (fromOsm.length) heading('Otros sitios');
+          for (const place of places) item(place.name, '', () => show(place));
+        }
+        if (!fromOsm.length && !places.length) {
+          const failed = [elements, sites].find((r) => r.status === 'rejected');
+          say(failed ? failed.reason.message : 'No se ha encontrado nada.');
+        }
+        go.disabled = false;
       });
       return container;
     },
@@ -459,6 +505,7 @@ function mapLegend() {
 }
 
 export {
+  OSM_CATEGORY_LABELS,
   canHover,
   createMap,
   loadLeaflet,

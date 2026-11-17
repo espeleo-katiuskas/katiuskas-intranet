@@ -340,18 +340,24 @@ corner); the same button, or Escape, gives the map back its place. The click on 
 stopped (`L.DomEvent.stop`), as `disableClickPropagation` alone does not keep a `click` from
 reaching the map, which would take it for a click on the place under the pointer and offer to create
 one. On the map of `/lugares` alone, below it, is a magnifier (`addSearchControl`) that opens a box
-to look for a place by name (a town, a valley, a peak) with `GET /areas/geocode`: it searches when
-the text is sent, not as it is typed, since the geocoder is outside and slow, lists what it finds,
-and choosing one moves the map there (to its box, or to zoom 14 if it has none) and rings it until
-the next search. The button of the whole window is deliberately not the Fullscreen API: the monitor
-is not taken over, only the window, so the address bar and the tabs stay. The list of base layers
-(the button with the stack of squares) closes when one is chosen, since on a touch screen nothing
-else would close it but a click on the map, and a click that closes it (or a popup, or the search
-box) only closes it: the map is told at `preclick`, before they close, so that it does not also
-offer to create something there. The search box closes with the magnifier, with a click on the map
-and with Escape (heard in the capture phase and stopped, so a map over the whole window is not also
-given back). If the tiles or Leaflet cannot be loaded the page says so and the rest keeps working.
-Nothing here is drawn from the server's side, and an offline map is not there.
+to look for a place by name: it asks `GET /osm/search` (the elements of the OpenStreetMap mirror, to
+find the cave a person knows the name of) and `GET /areas/geocode` (towns, valleys, peaks, from
+Nominatim) at once, when the text is sent, not as it is typed, since the geocoder is outside and
+slow; either may fail or find nothing without the other being lost. It lists first "En
+OpenStreetMap, sin añadir todavía al catálogo" (the name, what it is and its coordinates) and then
+"Otros sitios". Choosing a place moves the map there (to its box, or to zoom 14 if it has none) and
+rings it until the next search; choosing an element goes to zoom 17, puts the layer of its category
+on the map if it was not (the control fires `osmfocus` on the map, which `osm-layer.js` listens to)
+and, when the points of the view are there, opens its popup, with "Añadir al catálogo". The button
+of the whole window is deliberately not the Fullscreen API: the monitor is not taken over, only the
+window, so the address bar and the tabs stay. The list of base layers (the button with the stack of
+squares) closes when one is chosen, since on a touch screen nothing else would close it but a click
+on the map, and a click that closes it (or a popup, or the search box) only closes it: the map is
+told at `preclick`, before they close, so that it does not also offer to create something there. The
+search box closes with the magnifier, with a click on the map and with Escape (heard in the capture
+phase and stopped, so a map over the whole window is not also given back). If the tiles or Leaflet
+cannot be loaded the page says so and the rest keeps working. Nothing here is drawn from the
+server's side, and an offline map is not there.
 
 On the map of `/lugares` alone, the selector of layers has under the base layers a box for each
 category of the **points of OpenStreetMap** ("Cuevas (OpenStreetMap)", "Barrancos…", "Refugios…" and

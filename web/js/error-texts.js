@@ -146,6 +146,7 @@ const texts = {
   unknown_osm_element: 'Ese elemento de OpenStreetMap no está en la copia del club.',
   osm_element_in_use: 'Ya hay un lugar que es ese elemento de OpenStreetMap.',
   invalid_bbox: 'El área del mapa no es válida.',
+  invalid_osm_query: 'El texto que buscas es demasiado largo (200 caracteres como máximo).',
   invalid_osm_category: 'La categoría de OpenStreetMap no es válida.',
   invalid_osm_element: 'El tipo de elemento de OpenStreetMap no es válido.',
   search_unavailable: 'Ahora no se puede buscar sitios: prueba de nuevo en un rato.',

@@ -1324,6 +1324,21 @@ keeps its element for good. An element that is a place is no longer a candidate:
 it out, as the map shows it as that place. The data that the new place starts with is the frontend's
 doing (the dialog copies what the tags say), not the API's, and the person confirms every field.
 
+**Searching by name.** `GET /osm/search?q=` (`Service.Search`, `Repository.SearchByWords`) is how a
+person finds the cave they know the name of, to make a place of it. The text is normalized with
+`areas.Normalize` (case, accents and punctuation do not count) and cut into words of two letters or
+more; the database gives the elements whose names (the name, `alt_name` and `name:es`, simplified in
+SQL with `translate()` for the accents of the languages of Spain) hold every word, not yet a place
+and not gone, up to 400; and Go ranks them, because a rank that depends on the whole name is easier
+to say there: the same name (0), a name that starts with the text (1), every word as a whole word
+(2), the words only inside others (3), taking the best of the names of each element, and then the
+club's category order and the shorter name; it gives 20. The words are letters and digits only, so
+they are safe inside a `LIKE`, and a test checks it with a `%`. It reads all the names on each
+request, which with 13,000 elements takes about 25 ms; if the mirror grew to the whole world, an
+index (`pg_trgm`) would be the next step. Nothing says where an element is but its point, so a name
+that many have ("Cueva del Agua" has twenty) shows only its coordinates: the zone of each element
+would tell them apart (docs/osm-integration.md, section 6).
+
 **Linking a place that already exists.** `PUT /places/{id}/links/osm` (`Service.LinkOsm`,
 `Repository.SetOsm`) says which element a place is, instead of the one it was, and `DELETE` takes
 the link away (the element stays in the mirror and is a candidate again). Nothing of the place

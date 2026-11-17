@@ -418,7 +418,9 @@ deleted, as with any other.
    place with the name, other names, altitude, description, type and coordinates filled in and the
    zone proposed from them (`/areas/locate`, so the zones of the elements are not needed for this),
    and `POST /places` keeps `osm_type` and `osm_id`: promotion on demand, the option chosen in 7. An
-   element that is a place is no longer a candidate.
+   element that is a place is no longer a candidate. The magnifier of the map also searches the
+   mirror by name (`GET /osm/search`), which is how a cave is found to make a place of it, since the
+   catalogue is built from OpenStreetMap and not by hand (production has three or four places).
 4. **Link** (done, but for one thing): linking and unlinking a place that already exists
    (`PUT`/`DELETE /places/{id}/links/osm`, the candidates near it by distance and name with `GET
    /osm/nearby`, and the dialog and the section "OpenStreetMap" of the page of a place), the display

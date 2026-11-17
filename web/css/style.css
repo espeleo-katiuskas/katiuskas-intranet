@@ -2391,6 +2391,7 @@ html.map-is-expanded {
   margin: 6px 0 0;
   padding: 0;
   max-height: 40vh;
+  overflow-x: hidden;
   overflow-y: auto;
   font-size: 0.875rem;
 }
@@ -2406,6 +2407,21 @@ html.map-is-expanded {
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
+  overflow-wrap: anywhere; /* A long name wraps instead of making the list scroll sideways. */
+}
+
+/* In the results of the search of the map: what each one is, under its name, and the titles of the groups. */
+
+.map-search-results button .subtitle {
+  display: block;
+  font-size: 0.8rem;
+}
+
+.map-search-results li.map-search-heading {
+  margin-top: 6px;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .map-search-results button:hover,

@@ -978,6 +978,18 @@ OpenStreetMap.
     (as in `/osm/elements`, all if left out)
   - returns: 200 `{elements: [OsmCandidate]}`
   - errors: 400 `invalid_bbox` (the point is not valid), `invalid_radius`, `invalid_osm_category`
+- **GET** `/osm/search` — *Any baseline role*. The elements whose name holds the words of a text, to
+  find the one a person knows the name of and make a place of it. Case, accents and punctuation do
+  not count ("Cova d'Arta" is "cova d arta"), the words may come in any order, and the other names
+  of an element (`alt_name`, `name:es`) count too. The best come first: the same name, then those
+  that start with the text, then those that have all its words, then those that only hold them
+  inside another word, and in each the club's own activity first (caves, canyons, mines, huts, via
+  ferratas) and the shorter name; at most 20. The elements that are already a place are left out,
+  and so are those gone from OpenStreetMap.
+  - query: `q*` (at most 200 characters; one letter, or nothing, finds nothing), `category` (as in
+    `/osm/elements`, all if left out)
+  - returns: 200 `{elements: [OsmPoint]}`
+  - errors: 400 `invalid_osm_query` (too long), `invalid_osm_category`
 
 ## Zones
 

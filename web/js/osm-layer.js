@@ -1,5 +1,5 @@
 import { apiFetch, escapeHtml } from './api.js';
-import { canHover } from './map-common.js';
+import { OSM_CATEGORY_LABELS as CATEGORY_LABELS, canHover } from './map-common.js';
 
 // The points of OpenStreetMap on the map of the places: the elements of the local mirror (caves, canyons,
 // huts, via ferratas) that are inside the view, as grey rings apart from the club's own places. They are
@@ -9,13 +9,6 @@ import { canHover } from './map-common.js';
 
 const MIN_ZOOM = 11;
 const STORAGE_KEY = 'katiuskas:places-osm';
-const CATEGORY_LABELS = {
-  cave: 'Cueva',
-  canyon: 'Barranco',
-  mine: 'Mina',
-  hut: 'Refugio',
-  via_ferrata: 'Vía ferrata',
-};
 // The credit the ODbL asks for, on the map while its data is on it.
 const ATTRIBUTION =
   'Puntos © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a>';
@@ -106,6 +99,8 @@ function createOsmLayer(L, map, { note, layersControl, onUse }) {
   let sequence = 0;
   let timer = null;
   let outline = null;
+  const rings = new Map(); // The rings that are on the map, by "type/id".
+  let focusKey = null; // The element a search chose, whose popup opens once it is on the map.
 
   const say = (text) => {
     note.textContent = text;
@@ -114,6 +109,7 @@ function createOsmLayer(L, map, { note, layersControl, onUse }) {
 
   function clear() {
     for (const group of Object.values(groups)) group.clearLayers();
+    rings.clear();
     loaded = null;
   }
 
@@ -223,12 +219,21 @@ function createOsmLayer(L, map, { note, layersControl, onUse }) {
     }
     if (mine !== sequence) return; // The view moved on, and a later request is the one that counts.
     for (const group of Object.values(groups)) group.clearLayers();
-    for (const point of answer.elements) groups[point.category]?.addLayer(marker(point));
+    rings.clear();
+    for (const point of answer.elements) {
+      const ring = marker(point);
+      rings.set(`${point.type}/${point.id}`, ring);
+      groups[point.category]?.addLayer(ring);
+    }
     loaded = { bounds: box, key, truncated: answer.truncated };
+    if (focusKey) {
+      rings.get(focusKey)?.openPopup();
+      focusKey = null;
+    }
     say(
       answer.truncated
         ? 'Hay más puntos de OpenStreetMap de los que se muestran: acerca el mapa.'
-        : `${answer.elements.length} puntos de OpenStreetMap a la vista.`,
+        : `${answer.elements.length} ${answer.elements.length === 1 ? 'punto' : 'puntos'} de OpenStreetMap a la vista.`,
     );
   }
 
@@ -256,6 +261,18 @@ function createOsmLayer(L, map, { note, layersControl, onUse }) {
   };
   map.on('overlayadd', onToggle);
   map.on('overlayremove', onToggle);
+
+  // A search chose an element of the mirror (map-common.js): its category is put on the map if it was not, and
+  // when the points of the view are there its popup opens.
+  map.on('osmfocus', (event) => {
+    focusKey = `${event.elementType}/${event.elementId}`;
+    if (groups[event.category] && !map.hasLayer(groups[event.category])) {
+      groups[event.category].addTo(map); // That is an overlayadd: the layer asks again.
+    } else {
+      loaded = null;
+      schedule();
+    }
+  });
 
   return { refresh };
 }
