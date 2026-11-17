@@ -24,12 +24,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	a := h.authenticator
 	mux.Handle("GET /api/v1/osm/elements", a.Protect(h.list))
 	mux.Handle("GET /api/v1/osm/elements/{type}/{id}", a.Protect(h.get))
+	mux.Handle("GET /api/v1/osm/nearby", a.Protect(h.nearby))
 }
 
 func writeError(w http.ResponseWriter, err error, fallback string) {
 	switch {
 	case errors.Is(err, ErrInvalidBounds):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_bbox", err.Error())
+	case errors.Is(err, ErrInvalidRadius):
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_radius", err.Error())
 	case errors.Is(err, ErrInvalidCategory):
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_osm_category", err.Error())
 	case errors.Is(err, ErrInvalidElement):
@@ -96,4 +99,41 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "private, max-age=300")
 	httpapi.WriteJSON(w, http.StatusOK, d)
+}
+
+// nearby gives the elements near a point that are not yet a place, for linking a place of the catalogue to
+// one (?lat=&lon=, ?radius= in metres, ?name= to rank those that look like it, ?category= as in list):
+// {"elements": [Candidate]}.
+func (h *Handler) nearby(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	lat, latErr := strconv.ParseFloat(query.Get("lat"), 64)
+	lon, lonErr := strconv.ParseFloat(query.Get("lon"), 64)
+	if latErr != nil || lonErr != nil {
+		writeError(w, ErrInvalidBounds, "")
+		return
+	}
+	radius := 0
+	if text := query.Get("radius"); text != "" {
+		n, err := strconv.Atoi(text)
+		if err != nil {
+			writeError(w, ErrInvalidRadius, "")
+			return
+		}
+		radius = n
+	}
+	var categories []string
+	for _, c := range strings.Split(query.Get("category"), ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			categories = append(categories, c)
+		}
+	}
+	found, err := h.service.Nearby(r.Context(), lat, lon, radius, query.Get("name"), categories)
+	if err != nil {
+		writeError(w, err, "could not look for the elements near the point")
+		return
+	}
+	if found == nil {
+		found = []Candidate{}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, map[string]any{"elements": found})
 }

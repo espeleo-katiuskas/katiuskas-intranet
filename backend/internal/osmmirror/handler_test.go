@@ -159,3 +159,101 @@ func TestGetElement(t *testing.T) {
 		t.Errorf("a session is needed, got %d", rec.Code)
 	}
 }
+
+// The elements near a point that are not yet a place: those whose name looks like the one asked first (the
+// same name, then a similar one), then the nearest, only inside the circle and of the categories asked for.
+func TestNearby(t *testing.T) {
+	get, token, repo := serve(t)
+	// 0.001 degrees of latitude are about 111 metres.
+	if _, err := repo.Apply(context.Background(), "spain", []osmmirror.Element{
+		at(cave(1, "Cueva del Agua"), 40.0010, -3.0),   // ~111 m
+		at(cave(2, "Sima Grande"), 40.0020, -3.0),      // ~222 m
+		at(cave(3, "Cueva Del Águila"), 40.0030, -3.0), // ~334 m: another cave
+		at(cave(4, "Cueva del agua"), 40.0040, -3.0),   // ~445 m: the same name as 1, ignoring case
+		at(cave(5, "Lejana"), 40.0100, -3.0),           // ~1.1 km
+		at(hut(6), 40.0005, -3.0),                      // a hut, ~55 m
+	}); err != nil {
+		t.Fatal(err)
+	}
+	type answer struct {
+		Elements []osmmirror.Candidate `json:"elements"`
+	}
+	nearby := func(q string) answer {
+		rec := get("/api/v1/osm/nearby?lat=40&lon=-3&"+q, token)
+		if rec.Code != 200 {
+			t.Fatalf("%s: %d %s", q, rec.Code, rec.Body.String())
+		}
+		var a answer
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+
+	// Without a name: the nearest first, inside the 500 m by default (the cave at 1.1 km is out).
+	a := nearby("")
+	ids := func(a answer) []int64 {
+		var out []int64
+		for _, c := range a.Elements {
+			out = append(out, c.ID)
+		}
+		return out
+	}
+	if got := ids(a); len(got) != 5 || got[0] != 6 || got[1] != 1 || got[2] != 2 || got[3] != 3 || got[4] != 4 {
+		t.Errorf("the nearest first: %v", got)
+	}
+	if a.Elements[1].DistanceM < 105 || a.Elements[1].DistanceM > 117 {
+		t.Errorf("about 111 metres expected: %d", a.Elements[1].DistanceM)
+	}
+
+	// With a name: the exact matches first (1 and 4, the nearest of them first), then the rest by distance
+	// (3 is "Águila", another word, so it does not look like the name).
+	a = nearby("name=" + url.QueryEscape("Cueva del Agua"))
+	if got := ids(a); got[0] != 1 || got[1] != 4 {
+		t.Errorf("the same name first: %v", got)
+	}
+	if a.Elements[0].NameMatch != "exact" || a.Elements[1].NameMatch != "exact" {
+		t.Errorf("exact matches expected: %+v", a.Elements[:2])
+	}
+	for _, c := range a.Elements[2:] {
+		if c.NameMatch != "" {
+			t.Errorf("only the first two look like the name: %+v", c)
+		}
+	}
+	// A name that holds the other, or shares a word that is not generic, is similar.
+	a = nearby("name=" + url.QueryEscape("Sima Grande de la Peña"))
+	if a.Elements[0].ID != 2 || a.Elements[0].NameMatch != "similar" {
+		t.Errorf("a similar name first: %+v", a.Elements[0])
+	}
+	a = nearby("name=" + url.QueryEscape("Torca Grande"))
+	if a.Elements[0].ID != 2 || a.Elements[0].NameMatch != "similar" {
+		t.Errorf("a shared word that is not generic: %+v", a.Elements[0])
+	}
+	a = nearby("name=" + url.QueryEscape("Cueva Perdida"))
+	for _, c := range a.Elements {
+		if c.NameMatch != "" {
+			t.Errorf("a generic word is not a match: %+v", c)
+		}
+	}
+
+	// The radius and the categories.
+	if got := ids(nearby("radius=150")); len(got) != 2 || got[0] != 6 || got[1] != 1 {
+		t.Errorf("radius of 150 m: %v", got)
+	}
+	if got := ids(nearby("radius=2000")); len(got) != 6 {
+		t.Errorf("radius of 2 km: %v", got)
+	}
+	if got := ids(nearby("category=hut")); len(got) != 1 || got[0] != 6 {
+		t.Errorf("only huts: %v", got)
+	}
+
+	errorCode(t, get("/api/v1/osm/nearby?lat=40&lon=-3&radius=0x", token), 400, "invalid_radius")
+	errorCode(t, get("/api/v1/osm/nearby?lat=40&lon=-3&radius=5000", token), 400, "invalid_radius")
+	errorCode(t, get("/api/v1/osm/nearby?lat=40&lon=-3&radius=-5", token), 400, "invalid_radius")
+	errorCode(t, get("/api/v1/osm/nearby?lat=x&lon=-3", token), 400, "invalid_bbox")
+	errorCode(t, get("/api/v1/osm/nearby?lat=95&lon=-3", token), 400, "invalid_bbox")
+	errorCode(t, get("/api/v1/osm/nearby?lat=40&lon=-3&category=pizza", token), 400, "invalid_osm_category")
+	if rec := get("/api/v1/osm/nearby?lat=40&lon=-3", ""); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a session is needed, got %d", rec.Code)
+	}
+}

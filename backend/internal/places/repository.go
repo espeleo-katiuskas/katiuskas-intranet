@@ -625,3 +625,24 @@ func (r *Repository) DeleteSubtype(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+// SetOsm makes a place the element of the OpenStreetMap mirror it names, replacing the one it had (and who
+// changed it, and when); an empty pair takes the link away.
+func (r *Repository) SetOsm(ctx context.Context, id, userID int64, osmType *string, osmID *int64) (Place, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE places SET osm_type = $2, osm_id = $3, updated_by = $4, updated_at = now() WHERE id = $1
+	`, id, osmType, osmID, userID)
+	if violates(err, "places_osm_element_fkey") {
+		return Place{}, ErrUnknownOsmElement
+	}
+	if violates(err, "places_osm_element_key") {
+		return Place{}, ErrOsmElementInUse
+	}
+	if err != nil {
+		return Place{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return Place{}, ErrNotFound
+	}
+	return r.GetPlace(ctx, id)
+}

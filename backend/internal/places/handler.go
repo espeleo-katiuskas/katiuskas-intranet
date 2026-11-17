@@ -56,6 +56,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/places/{id}", a.Protect(h.get))
 	mux.Handle("PUT /api/v1/places/{id}", a.Protect(h.update))
 	mux.Handle("DELETE /api/v1/places/{id}", a.Protect(h.delete, "admin", "board"))
+	mux.Handle("PUT /api/v1/places/{id}/links/osm", a.Protect(h.linkOsm))
+	mux.Handle("DELETE /api/v1/places/{id}/links/osm", a.Protect(h.unlinkOsm))
 
 	mux.Handle("POST /api/v1/places/{id}/points", a.Protect(h.addPoint))
 	mux.Handle("PUT /api/v1/places/{id}/points/{pointId}", a.Protect(h.updatePoint))
@@ -459,6 +461,46 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 				h.actorLogin(r.Context()), before.Name, strings.Join(diff, "\n")))
 		}
 	}
+	httpapi.WriteJSON(w, http.StatusOK, p)
+}
+
+// linkOsm (PUT /places/{id}/links/osm: not /places/{id}/osm, which the routes of the types would clash with) says which element of the OpenStreetMap mirror a place is ({osm_type, osm_id}), instead of the one
+// it was; it answers with the place.
+func (h *Handler) linkOsm(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var body struct {
+		OsmType string `json:"osm_type"`
+		OsmID   int64  `json:"osm_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	p, err := h.service.LinkOsm(r.Context(), id, actorID(r.Context()), body.OsmType, body.OsmID)
+	if err != nil {
+		writeError(w, err, "could not link the place to the OpenStreetMap element")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔗 %s ha vinculado el lugar «%s» con un elemento de OpenStreetMap (%s %d).",
+		h.actorLogin(r.Context()), p.Name, body.OsmType, body.OsmID))
+	httpapi.WriteJSON(w, http.StatusOK, p)
+}
+
+// unlinkOsm takes away the link of a place to an element of the OpenStreetMap mirror.
+func (h *Handler) unlinkOsm(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	p, err := h.service.UnlinkOsm(r.Context(), id, actorID(r.Context()))
+	if err != nil {
+		writeError(w, err, "could not unlink the place from OpenStreetMap")
+		return
+	}
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔗 %s ha desvinculado el lugar «%s» de OpenStreetMap.", h.actorLogin(r.Context()), p.Name))
 	httpapi.WriteJSON(w, http.StatusOK, p)
 }
 

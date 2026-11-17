@@ -197,6 +197,22 @@ func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (
 	return s.repo.UpdatePlace(ctx, id, userID, t, in)
 }
 
+// LinkOsm makes a place the OpenStreetMap element of the mirror that osmType and osmID name, instead of
+// the one it was, if any. Only the pair and the place are read: nothing of the place is changed with it.
+func (s *Service) LinkOsm(ctx context.Context, id, userID int64, osmType string, osmID int64) (Place, error) {
+	osmType = strings.TrimSpace(osmType)
+	if osmType != "node" && osmType != "way" && osmType != "relation" || osmID <= 0 {
+		return Place{}, ErrUnknownOsmElement
+	}
+	return s.repo.SetOsm(ctx, id, userID, &osmType, &osmID)
+}
+
+// UnlinkOsm says the place is not an element of OpenStreetMap any more (the element stays in the mirror,
+// and is a candidate again).
+func (s *Service) UnlinkOsm(ctx context.Context, id, userID int64) (Place, error) {
+	return s.repo.SetOsm(ctx, id, userID, nil, nil)
+}
+
 // DeletePlace removes a place with its points and its files.
 func (s *Service) DeletePlace(ctx context.Context, id int64) error {
 	files, err := s.repo.DeletePlace(ctx, id)
