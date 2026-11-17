@@ -248,3 +248,94 @@ func (r *Repository) LastOK(ctx context.Context, source string) (*Run, error) {
 	}
 	return &run, nil
 }
+
+// ----- reading, for the maps -----
+
+// ErrNotFound means there is no such element in the mirror.
+var ErrNotFound = errors.New("no such OpenStreetMap element")
+
+// Bounds is a box of latitudes and longitudes. When West is greater than East the box goes across the
+// antimeridian.
+type Bounds struct {
+	South, West, North, East float64
+}
+
+// Point is what a map needs to draw an element: where it is, what it is and its name.
+type Point struct {
+	Type     string  `json:"type"`
+	ID       int64   `json:"id"`
+	Lat      float64 `json:"lat"`
+	Lon      float64 `json:"lon"`
+	Category string  `json:"category"`
+	Name     string  `json:"name,omitempty"`
+}
+
+// Detail is an element with everything the mirror knows of it.
+type Detail struct {
+	Type      string            `json:"type"`
+	ID        int64             `json:"id"`
+	Version   int               `json:"version"`
+	Timestamp time.Time         `json:"timestamp"`
+	Category  string            `json:"category"`
+	Lat       float64           `json:"lat"`
+	Lon       float64           `json:"lon"`
+	Tags      map[string]string `json:"tags"`
+	Geometry  json.RawMessage   `json:"geometry"`
+	DeletedAt *time.Time        `json:"deleted_at"`
+}
+
+// InBounds is the elements that are not marked as gone inside a box and of the given categories, the ones
+// of the club's own activity first (caves, then canyons, huts and via ferratas), at most limit of them;
+// `more` says there were others.
+func (r *Repository) InBounds(ctx context.Context, b Bounds, categories []string, limit int) (points []Point, more bool, err error) {
+	lonTest := `lon BETWEEN $3 AND $4`
+	if b.West > b.East {
+		lonTest = `(lon >= $3 OR lon <= $4)`
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT osm_type, osm_id, lat, lon, category, coalesce(tags->>'name', '')
+		FROM osm_elements
+		WHERE deleted_at IS NULL AND lat BETWEEN $1 AND $2 AND `+lonTest+` AND category = ANY($5)
+		ORDER BY CASE category WHEN 'cave' THEN 0 WHEN 'canyon' THEN 1 WHEN 'hut' THEN 2 ELSE 3 END, osm_type, osm_id
+		LIMIT $6
+	`, b.South, b.North, b.West, b.East, categories, limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	points = []Point{}
+	for rows.Next() {
+		var p Point
+		if err := rows.Scan(&p.Type, &p.ID, &p.Lat, &p.Lon, &p.Category, &p.Name); err != nil {
+			return nil, false, err
+		}
+		points = append(points, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if len(points) > limit {
+		return points[:limit], true, nil
+	}
+	return points, false, nil
+}
+
+// Get is one element with all its data, marked as gone or not.
+func (r *Repository) Get(ctx context.Context, typ string, id int64) (Detail, error) {
+	var d Detail
+	var tags []byte
+	err := r.pool.QueryRow(ctx, `
+		SELECT osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, geometry, deleted_at
+		FROM osm_elements WHERE osm_type = $1 AND osm_id = $2
+	`, typ, id).Scan(&d.Type, &d.ID, &d.Version, &d.Timestamp, &d.Category, &d.Lat, &d.Lon, &tags, &d.Geometry, &d.DeletedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Detail{}, ErrNotFound
+	}
+	if err != nil {
+		return Detail{}, err
+	}
+	if err := json.Unmarshal(tags, &d.Tags); err != nil {
+		return Detail{}, err
+	}
+	return d, nil
+}

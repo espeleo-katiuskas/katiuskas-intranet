@@ -32,6 +32,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/mail"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/material"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/osmmirror"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/places"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/logging"
@@ -379,6 +380,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Library:           library.NewHandler(libraryService, authenticator, usersService, telegramSender),
 		Places:            places.NewHandler(placesService, authenticator, usersService, telegramSender),
 		Areas:             areas.NewHandler(areasService, authenticator, usersService, telegramSender),
+		OSM:               osmmirror.NewHandler(osmmirror.NewService(osmmirror.NewRepository(repoPool)), authenticator),
 	})
 
 	return router, authHandler, usersService, adminStatus, nil
