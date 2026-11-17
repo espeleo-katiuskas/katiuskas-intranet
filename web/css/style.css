@@ -2410,6 +2410,11 @@ html.map-is-expanded {
   background: var(--surface-muted);
 }
 
+/* The button of the popup of a point of OpenStreetMap: on its own line, a little apart from the text. */
+.osm-popup-actions {
+  margin-top: 8px;
+}
+
 /* The ring that marks the points of OpenStreetMap, in the selector of layers. */
 .osm-ring {
   display: inline-block;

@@ -151,7 +151,11 @@ function createOsmLayer(L, map, { note, layersControl, onUse }) {
             ring.closePopup();
             onUse(detail);
           });
-          content.append(use);
+          // In a block of its own, so that it is on its own line whatever the text before it ends with.
+          const actions = document.createElement('div');
+          actions.className = 'osm-popup-actions';
+          actions.append(use);
+          content.append(actions);
         }
         ring.setPopupContent(content);
         dropOutline();
