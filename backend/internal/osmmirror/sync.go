@@ -28,6 +28,7 @@ type Extractor interface {
 	Timestamp(ctx context.Context, file string) (time.Time, error)
 	Export(ctx context.Context, file string) (path string, cleanup func(), err error)
 	ExportRoutes(ctx context.Context, file string) (path string, cleanup func(), err error)
+	ExportBoundaries(ctx context.Context, file string) (path string, cleanup func(), err error)
 }
 
 // Syncer loads extracts into the mirror.
@@ -96,6 +97,24 @@ func (s *Syncer) readRoutes(ctx context.Context, file string) ([]Element, error)
 	return ReadRoutes(f)
 }
 
+func (s *Syncer) assignZones(ctx context.Context, file string, elements []Element) (int, error) {
+	path, cleanup, err := s.Extractor.ExportBoundaries(ctx, file)
+	if err != nil {
+		return 0, err
+	}
+	defer cleanup()
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	ids, err := s.Repo.MunicipalityIDs(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return AssignZones(f, elements, MunicipalityResolver(ids))
+}
+
 func (s *Syncer) load(ctx context.Context, name, file string, force bool) (Result, error) {
 	path, cleanup, err := s.Extractor.Export(ctx, file)
 	if err != nil {
@@ -116,6 +135,11 @@ func (s *Syncer) load(ctx context.Context, name, file string, force bool) (Resul
 		return Result{}, fmt.Errorf("read the routes of %s: %w", name, err)
 	}
 	elements = append(elements, routes...)
+	zones, err := s.assignZones(ctx, file, elements)
+	if err != nil {
+		return Result{}, fmt.Errorf("work out the zones of %s: %w", name, err)
+	}
+	slog.Info("zones", "source", name, "elements", len(elements), "with_zone", zones)
 	if !force {
 		before, err := s.Repo.Active(ctx, name)
 		if err != nil {

@@ -77,6 +77,27 @@ func (o Osmium) ExportRoutes(ctx context.Context, file string) (path string, cle
 	return path, cleanup, nil
 }
 
+// ExportBoundaries writes the boundaries of the municipalities of the extract (the relations with admin_level=8,
+// as polygons) as GeoJSON lines into a file of its own that the caller removes, for AssignZones.
+func (o Osmium) ExportBoundaries(ctx context.Context, file string) (path string, cleanup func(), err error) {
+	dir, err := os.MkdirTemp(o.TmpDir, "osmsync-")
+	if err != nil {
+		return "", nil, err
+	}
+	cleanup = func() { _ = os.RemoveAll(dir) }
+	cut := filepath.Join(dir, "boundaries.osm.pbf")
+	if _, err := o.run(ctx, "tags-filter", file, "r/admin_level=8", "-o", cut); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	path = filepath.Join(dir, "boundaries.geojsonseq")
+	if _, err := o.run(ctx, "export", cut, "-f", "geojsonseq", "--geometry-types=polygon", "-o", path); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	return path, cleanup, nil
+}
+
 // Export cuts the extract with the filters and writes the elements as GeoJSON lines into a file of its own
 // that the caller removes (the returned `cleanup`).
 func (o Osmium) Export(ctx context.Context, file string) (path string, cleanup func(), err error) {

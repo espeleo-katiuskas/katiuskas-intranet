@@ -19,6 +19,9 @@ type Element struct {
 	Tags      map[string]string
 	// Geometry is the GeoJSON of the outline of a way or a relation; nil for a node.
 	Geometry map[string]any
+	// AreaID is the zone the point is in (a municipality, in Spain), 0 if it is in none that is known (set by
+	// AssignZones, from the boundaries of the extract).
+	AreaID int64
 }
 
 // Key is what identifies an element: an id is only unique among those of its own type.

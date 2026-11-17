@@ -186,6 +186,8 @@ type fakeExtractor struct {
 	stamp    time.Time
 	elements string
 	routes   string
+	// boundaries are the polygons of the municipalities, as the geojsonseq of osmium.
+	boundaries string
 }
 
 func (f *fakeExtractor) Timestamp(context.Context, string) (time.Time, error) { return f.stamp, nil }
@@ -193,6 +195,11 @@ func (f *fakeExtractor) Timestamp(context.Context, string) (time.Time, error) { 
 func (f *fakeExtractor) Export(context.Context, string) (string, func(), error) {
 	path := filepath.Join(f.dir, "e.geojsonseq")
 	return path, func() {}, os.WriteFile(path, []byte(f.elements), 0o600)
+}
+
+func (f *fakeExtractor) ExportBoundaries(context.Context, string) (string, func(), error) {
+	path := filepath.Join(f.dir, "boundaries.geojsonseq")
+	return path, func() {}, os.WriteFile(path, []byte(f.boundaries), 0o600)
 }
 
 func (f *fakeExtractor) ExportRoutes(context.Context, string) (string, func(), error) {
@@ -264,5 +271,96 @@ func TestSyncer(t *testing.T) {
 	// Another source has its own history.
 	if _, err := s.Sync(ctx, "canary-islands", "y.osm.pbf", false); err != nil {
 		t.Errorf("another source loads on its own: %v", err)
+	}
+}
+
+// A load works out the zone of each element from the boundaries of the extract and keeps it, and the search and
+// the detail say where it is ("Valdemanco, Madrid") with the zones of the club; an element that is in no zone
+// says nothing; and deleting the zone does not stop, it only empties the elements that were in it.
+func TestSyncerWorksOutTheZone(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := osmmirror.NewRepository(tx)
+	ctx := context.Background()
+	var code string
+	var zoneID int64
+	if err := tx.QueryRow(ctx, `SELECT code, id FROM areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&code, &zoneID); err != nil {
+		t.Fatal(err)
+	}
+	ex := &fakeExtractor{
+		dir: t.TempDir(), stamp: time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC),
+		elements: seq(
+			feature(point, `{"@type":"node","@id":1,"@version":1,"@timestamp":1700000000,"natural":"cave_entrance","name":"Cueva del Agua"}`),
+			feature(`{"type":"Point","coordinates":[10.0,50.0]}`, `{"@type":"node","@id":2,"@version":1,"@timestamp":1700000000,"natural":"cave_entrance","name":"Cueva del Agua"}`),
+		),
+		boundaries: boundary(`{"boundary":"administrative","admin_level":"8","ref:ine":"`+code+`000000"}`,
+			`{"type":"Polygon","coordinates":`+square(-4, 40, -3, 41)+`}`),
+	}
+	s := osmmirror.NewSyncer(repo, ex)
+	if res, err := s.Sync(ctx, "spain", "x.osm.pbf", false); err != nil || res.Added != 2 {
+		t.Fatalf("first load: %+v %v", res, err)
+	}
+	var one, two *int64
+	if err := tx.QueryRow(ctx, `SELECT (SELECT area_id FROM osm_elements WHERE osm_id = 1), (SELECT area_id FROM osm_elements WHERE osm_id = 2)`).Scan(&one, &two); err != nil {
+		t.Fatal(err)
+	}
+	if one == nil || *one != zoneID || two != nil {
+		t.Errorf("the first is in the zone and the second in none: %v %v", one, two)
+	}
+
+	service := osmmirror.NewService(repo)
+	found, err := service.Search(ctx, "cueva del agua", nil)
+	if err != nil || len(found) != 2 {
+		t.Fatalf("both are found: %+v %v", found, err)
+	}
+	where := map[int64]string{}
+	for _, p := range found {
+		where[p.ID] = p.Where
+	}
+	if where[1] != "Valdemanco, Madrid" || where[2] != "" {
+		t.Errorf("where each is: %+v", where)
+	}
+	d, err := repo.Get(ctx, "node", 1)
+	if err != nil || d.Where != "Valdemanco, Madrid" {
+		t.Errorf("the detail says where: %q %v", d.Where, err)
+	}
+
+	// The same extract again, a newer one: nothing changes, zones included.
+	ex.stamp = ex.stamp.Add(24 * time.Hour)
+	if res, err := s.Sync(ctx, "spain", "x.osm.pbf", false); err != nil || res.Changed != 0 || res.Unchanged != 2 {
+		t.Errorf("same elements, same zones: %+v %v", res, err)
+	}
+	// Without the boundary the element loses its zone, which is a change.
+	ex.stamp = ex.stamp.Add(24 * time.Hour)
+	ex.boundaries = ""
+	if res, err := s.Sync(ctx, "spain", "x.osm.pbf", false); err != nil || res.Changed != 1 {
+		t.Errorf("an element that loses its zone changes: %+v %v", res, err)
+	}
+}
+
+// The zone of an element is the one foreign key that is ON DELETE SET NULL: deleting the zone is not stopped by the
+// elements in it, and they are left in none (the next load puts them back where they are).
+func TestDeletingAZoneEmptiesTheElementsInIt(t *testing.T) {
+	tx := testutil.NewTx(t)
+	ctx := context.Background()
+	// A country and a zone of its own, so that no other test is in the way; and an id of the element that no
+	// other test uses, since the tests of several packages run at once on the same database.
+	var country, zone int64
+	if err := tx.QueryRow(ctx, `INSERT INTO areas (kind, name, norm_name) VALUES ('País', 'Zonalandia', 'zonalandia') RETURNING id`).Scan(&country); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO areas (parent_id, kind, name, norm_name) VALUES ($1, 'Provincia', 'Zona de prueba', 'zona de prueba') RETURNING id`, country).Scan(&zone); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, area_id)
+		VALUES ('node', 9000001, 1, now(), 'cave', 40, -3, '{}', 'h', 'spain', $1)`, zone); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM areas WHERE id = $1`, zone); err != nil {
+		t.Fatalf("a zone with elements in it can be deleted: %v", err)
+	}
+	var left *int64
+	if err := tx.QueryRow(ctx, `SELECT area_id FROM osm_elements WHERE osm_id = 9000001`).Scan(&left); err != nil || left != nil {
+		t.Errorf("the element is in no zone now: %v %v", left, err)
 	}
 }

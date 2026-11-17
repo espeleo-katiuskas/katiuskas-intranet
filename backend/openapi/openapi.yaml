@@ -3119,6 +3119,7 @@ paths:
                         lon: { type: number }
                         category: { type: string, enum: [cave, canyon, mine, hut, via_ferrata] }
                         name: { type: string }
+                        where: { type: string, description: "The municipality and the province (\"Rasines, Cantabria\"); left out if the element is in no known municipality." }
         "400": { description: "invalid_osm_query (too long) or invalid_osm_category." }
 
   /osm/nearby:
@@ -3184,6 +3185,7 @@ paths:
                   tags: { type: object, additionalProperties: { type: string } }
                   geometry: { type: object, nullable: true }
                   deleted_at: { type: string, format: date-time, nullable: true }
+                  where: { type: string, description: "The municipality and the province; left out if the element is in no known municipality." }
         "400": { description: "invalid_osm_element or invalid_id." }
         "404": { description: "not_found." }
 

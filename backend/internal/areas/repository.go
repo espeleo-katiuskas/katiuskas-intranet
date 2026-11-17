@@ -306,6 +306,7 @@ func (r *Repository) Merge(ctx context.Context, from, into int64) error {
 	for _, statement := range []string{
 		`UPDATE areas SET parent_id = $2 WHERE parent_id = $1`,
 		`UPDATE places SET area_id = $2 WHERE area_id = $1`,
+		`UPDATE osm_elements SET area_id = $2 WHERE area_id = $1`,
 		`DELETE FROM areas WHERE id = $1`,
 	} {
 		args := []any{from}

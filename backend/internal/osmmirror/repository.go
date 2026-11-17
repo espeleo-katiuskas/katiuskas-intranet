@@ -26,15 +26,16 @@ type Result struct {
 	Added, Changed, Deleted, Unchanged int
 }
 
-// ContentHash is a hash of what an element is as far as the mirror is concerned: its tags, its point and
-// its outline. Two loads of the same element give the same hash, and any change gives another, including a
+// ContentHash is a hash of what an element is as far as the mirror is concerned: its tags, its point, its
+// outline and the zone it is in. Two loads of the same element give the same hash, and any change gives another, including a
 // node of a way that moved (which does not change the way's version).
 func ContentHash(e Element) string {
 	body, _ := json.Marshal(struct { // Maps are written with their keys in order.
 		Tags     map[string]string `json:"tags"`
 		Lat, Lon float64
 		Geometry map[string]any `json:"geometry"`
-	}{e.Tags, e.Lat, e.Lon, e.Geometry})
+		AreaID   int64          `json:"area_id"`
+	}{e.Tags, e.Lat, e.Lon, e.Geometry, e.AreaID})
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
 }
@@ -137,7 +138,12 @@ func upsert(ctx context.Context, tx pgx.Tx, source string, list []Element) error
 	stamps, cats := make([]time.Time, n), make([]string, n)
 	lats, lons := make([]float64, n), make([]float64, n)
 	tags, geoms, hashes := make([]string, n), make([]*string, n), make([]string, n)
+	zones := make([]*int64, n)
 	for i, e := range list {
+		if e.AreaID != 0 {
+			zone := e.AreaID
+			zones[i] = &zone
+		}
 		types[i], ids[i], versions[i], stamps[i], cats[i] = e.Type, e.ID, int32(e.Version), e.Timestamp, e.Category
 		lats[i], lons[i] = e.Lat, e.Lon
 		t, err := json.Marshal(e.Tags)
@@ -157,16 +163,16 @@ func upsert(ctx context.Context, tx pgx.Tx, source string, list []Element) error
 	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, geometry,
-			content_hash, source)
-		SELECT t, i, v, ts, c, la, lo, tg::jsonb, g::jsonb, h, $11
+			content_hash, source, area_id)
+		SELECT t, i, v, ts, c, la, lo, tg::jsonb, g::jsonb, h, $11, z
 		FROM unnest($1::text[], $2::bigint[], $3::int[], $4::timestamptz[], $5::text[], $6::float8[], $7::float8[],
-			$8::text[], $9::text[], $10::text[]) AS u(t, i, v, ts, c, la, lo, tg, g, h)
+			$8::text[], $9::text[], $10::text[], $12::bigint[]) AS u(t, i, v, ts, c, la, lo, tg, g, h, z)
 		ON CONFLICT (osm_type, osm_id) DO UPDATE SET
 			version = EXCLUDED.version, osm_timestamp = EXCLUDED.osm_timestamp, category = EXCLUDED.category,
 			lat = EXCLUDED.lat, lon = EXCLUDED.lon, tags = EXCLUDED.tags, geometry = EXCLUDED.geometry,
-			content_hash = EXCLUDED.content_hash, source = EXCLUDED.source, fetched_at = now(),
-			changed_at = now(), deleted_at = NULL
-	`, types, ids, versions, stamps, cats, lats, lons, tags, geoms, hashes, source)
+			content_hash = EXCLUDED.content_hash, source = EXCLUDED.source, area_id = EXCLUDED.area_id,
+			fetched_at = now(), changed_at = now(), deleted_at = NULL
+	`, types, ids, versions, stamps, cats, lats, lons, tags, geoms, hashes, source, zones)
 	return err
 }
 
@@ -269,6 +275,9 @@ type Point struct {
 	Lon      float64 `json:"lon"`
 	Category string  `json:"category"`
 	Name     string  `json:"name,omitempty"`
+	// Where says the zone and the one it is in ("Rasines, Cantabria": the municipality and the province), when it
+	// is known; only a search and the detail of an element give it.
+	Where string `json:"where,omitempty"`
 	// names are all the names an element has (set by a search, to rank it): not in the JSON.
 	names []string
 }
@@ -285,7 +294,21 @@ type Detail struct {
 	Tags      map[string]string `json:"tags"`
 	Geometry  json.RawMessage   `json:"geometry"`
 	DeletedAt *time.Time        `json:"deleted_at"`
+	// Where says the zone the element is in and the one it is in ("Rasines, Cantabria"), when it is known.
+	Where string `json:"where,omitempty"`
 }
+
+// whereJoin adds to a query over `osm_elements e` the names of the zone of each element and of the zone it is
+// in (`z.names`, at most two: in Spain the municipality and the province), from the zones of the club.
+const whereJoin = `
+	LEFT JOIN LATERAL (
+		WITH RECURSIVE up AS (
+			SELECT a.id, a.parent_id, a.name, 0 AS depth FROM areas a WHERE a.id = e.area_id
+			UNION ALL
+			SELECT a.id, a.parent_id, a.name, up.depth + 1 FROM areas a JOIN up ON a.id = up.parent_id
+		)
+		SELECT (array_agg(name ORDER BY depth))[1:2] AS names FROM up
+	) z ON true`
 
 // InBounds is the elements that are not marked as gone inside a box and of the given categories, the ones
 // of the club's own activity first (caves, canyons and mines, then huts and via ferratas), at most limit of them;
@@ -331,9 +354,12 @@ func (r *Repository) Get(ctx context.Context, typ string, id int64) (Detail, err
 	var d Detail
 	var tags []byte
 	err := r.pool.QueryRow(ctx, `
-		SELECT osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, geometry, deleted_at
-		FROM osm_elements WHERE osm_type = $1 AND osm_id = $2
-	`, typ, id).Scan(&d.Type, &d.ID, &d.Version, &d.Timestamp, &d.Category, &d.Lat, &d.Lon, &tags, &d.Geometry, &d.DeletedAt)
+		SELECT e.osm_type, e.osm_id, e.version, e.osm_timestamp, e.category, e.lat, e.lon, e.tags, e.geometry,
+			e.deleted_at, coalesce(array_to_string(z.names, ', '), '')
+		FROM osm_elements e`+whereJoin+`
+		WHERE e.osm_type = $1 AND e.osm_id = $2
+	`, typ, id).Scan(&d.Type, &d.ID, &d.Version, &d.Timestamp, &d.Category, &d.Lat, &d.Lon, &tags, &d.Geometry,
+		&d.DeletedAt, &d.Where)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Detail{}, ErrNotFound
 	}
@@ -369,8 +395,9 @@ func (r *Repository) SearchByWords(ctx context.Context, words, categories []stri
 	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT e.osm_type, e.osm_id, e.lat, e.lon, e.category, coalesce(e.tags->>'name', ''),
-			coalesce(e.tags->>'alt_name', ''), coalesce(e.tags->>'name:es', '')
-		FROM osm_elements e
+			coalesce(e.tags->>'alt_name', ''), coalesce(e.tags->>'name:es', ''),
+			coalesce(array_to_string(z.names, ', '), '')
+		FROM osm_elements e`+whereJoin+`
 		WHERE e.deleted_at IS NULL AND e.category = ANY($1) AND (e.tags ? 'name' OR e.tags ? 'alt_name')
 			AND NOT EXISTS (SELECT 1 FROM places p WHERE p.osm_type = e.osm_type AND p.osm_id = e.osm_id)`+where+`
 		LIMIT $2`, args...)
@@ -382,11 +409,31 @@ func (r *Repository) SearchByWords(ctx context.Context, words, categories []stri
 	for rows.Next() {
 		var p Point
 		var alt, es string
-		if err := rows.Scan(&p.Type, &p.ID, &p.Lat, &p.Lon, &p.Category, &p.Name, &alt, &es); err != nil {
+		if err := rows.Scan(&p.Type, &p.ID, &p.Lat, &p.Lon, &p.Category, &p.Name, &alt, &es, &p.Where); err != nil {
 			return nil, err
 		}
 		p.names = append([]string{p.Name, es}, strings.Split(alt, ";")...)
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// MunicipalityIDs is the zones of kind Municipio by their code (the INE code, five digits), which is what a
+// boundary of Spain says in its `ref:ine`.
+func (r *Repository) MunicipalityIDs(ctx context.Context) (map[string]int64, error) {
+	rows, err := r.pool.Query(ctx, `SELECT code, id FROM areas WHERE kind = 'Municipio' AND code IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := map[string]int64{}
+	for rows.Next() {
+		var code string
+		var id int64
+		if err := rows.Scan(&code, &id); err != nil {
+			return nil, err
+		}
+		ids[code] = id
+	}
+	return ids, rows.Err()
 }

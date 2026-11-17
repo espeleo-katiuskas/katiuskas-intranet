@@ -536,6 +536,13 @@ func TestMerge(t *testing.T) {
 	e.notifier.wait(t)
 	e.notifier.wait(t)
 	e.notifier.wait(t)
+	// An element of the OpenStreetMap mirror in the zone that goes: it follows the merge. (Its id is one no other
+	// test uses: the tests of several packages run at once on the same database.)
+	if _, err := e.tx.Exec(context.Background(), `
+		INSERT INTO osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, area_id)
+		VALUES ('node', 9100001, 1, now(), 'cave', 40, -3, '{}', 'h', 'spain', $1)`, from.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	rec := e.json("POST", areaPath(from)+"/merge", e.admin.token, map[string]any{"into_id": into.ID})
 	status(t, rec, http.StatusOK)
@@ -546,6 +553,11 @@ func TestMerge(t *testing.T) {
 	merged := decode[areas.Area](t, e.json("GET", areaPath(into), e.member.token, nil))
 	if merged.ChildCount != 1 || merged.PlaceCount != 1 {
 		t.Errorf("what was in the first should be in the second: %+v", merged)
+	}
+	var elementZone *int64
+	if err := e.tx.QueryRow(context.Background(), `SELECT area_id FROM osm_elements WHERE osm_id = 9100001`).Scan(&elementZone); err != nil ||
+		elementZone == nil || *elementZone != into.ID {
+		t.Errorf("the element of the mirror follows the merge: %v %v", elementZone, err)
 	}
 
 	// What is refused: itself, a zone below another one, a country, one that does not exist, and a zone
