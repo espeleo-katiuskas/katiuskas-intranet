@@ -308,19 +308,59 @@ club.
 What a hut offers is read as text, not as a state (a refugio has no state, `has_state`): `access`,
 `fee`, `capacity`, `beds`, `fireplace`, `drinking_water`, `ele` (the altitude), `website`.
 
-How many there are, from taginfo (the whole world, November 2026; the count for Spain alone is still
-to be had, see below): `tourism=wilderness_hut` 17,100 (8,900 nodes), `tourism=alpine_hut` 14,100
-(7,000 nodes) and `amenity=shelter` with `shelter_type=basic_hut` 8,300. That is the reason for
-requiring the `shelter_type`: `amenity=shelter` has 700,000 elements, of which `public_transport`
-(258,000), `picnic_shelter` (112,000), `gazebo` (59,000), `weather_shelter` (26,000) and `lean_to`
-(23,000) are the biggest, and none of them is a refugio. The `shelter_type` also has typos and
-variants in other languages (`hut`, `basic`, `refugio_forestal/montaña`, `chozo`…), each with a
-handful of elements, which are not worth chasing.
+How many there are in the whole world, from taginfo (November 2026; Spain is measured below):
+`tourism=wilderness_hut` 17,100 (8,900 nodes), `tourism=alpine_hut` 14,100 (7,000 nodes) and
+`amenity=shelter` with `shelter_type=basic_hut` 8,300. That is the reason for requiring the
+`shelter_type`: `amenity=shelter` has 700,000 elements, of which `public_transport` (258,000),
+`picnic_shelter` (112,000), `gazebo` (59,000), `weather_shelter` (26,000) and `lean_to` (23,000) are
+the biggest, and none of them is a refugio. The `shelter_type` also has typos and variants in other
+languages (`hut`, `basic`, `refugio_forestal/montaña`, `chozo`…), each with a handful of elements,
+which are not worth chasing.
 
-The attempt to count them for Spain with Overpass failed twice on the public instances (an empty
-answer, and "at capacity, all query workers are busy"), which is one more reason for downloading
-the data instead of asking for it (4): the count will come for free from the first extract of
-Spain, and the filters of this section should be tried against it before being fixed.
+**Measured on the extracts of 16 November 2026** (Spain and the Canary Islands, 1.56 GB, cut with
+`osmium tags-filter` in 21 seconds on this machine; what is left is under 1 MB, and exporting it
+with `osmium export` takes a few seconds more). Elements, not shapes (a closed way is exported
+twice by `osmium export`, as a line and as a polygon: count it once):
+
+| Filter | Elements | With a name | Nodes / ways / relations |
+|---|---|---|---|
+| `natural=cave_entrance` | 9,476 | 8,171 | 9,424 / 51 / 1 |
+| `natural=sinkhole` | 1,353 | 394 | 1,210 / 142 / 1 |
+| `man_made=adit` | 1,358 | 1,076 | 1,311 / 47 / 0 |
+| `man_made=mineshaft` | 801 | 211 | 382 / 418 / 1 |
+| `historic=mine` | 175 | 121 | 112 / 62 / 1 |
+| `tourism=wilderness_hut` | 862 | 740 | 195 / 665 / 2 |
+| `tourism=alpine_hut` | 445 | 410 | 150 / 294 / 1 |
+| `amenity=shelter` + `shelter_type=basic_hut` | 346 | 246 | 104 / 242 / 0 |
+| `highway=via_ferrata` | 309 | 238 | 17 / 292 / 0 |
+
+- **Huts: 1,653 elements** with the three tags above, and **three out of four are ways** (the
+  buildings), so ways are not an extra but the normal case for a refugio. 1,396 have a name.
+- **Caves: 9,476, of which 99.5% are nodes.** 86% have a name; few have anything else: 15% an
+  altitude (`ele`), 8% a description, 4% `wikidata`, 1.4% a website, and 2 a `cave:ref`, 7 a
+  `depth` and 19 a `length`. So OSM gives the club a **name and a point**, and little more: the
+  depth, the length and the sheet remain the club's to write.
+- **Huts have more text**, when mapped with care: `fee` 19%, `capacity` 14%, `description` 13%,
+  `access` 13%, `website` 12%, `operator` 11%, `ele` 24%; `beds` only 13 times.
+- **`amenity=shelter` is mostly not a hut**: of 9,100 elements, 2,005 have no `shelter_type`,
+  1,920 are bus stops, 683 `sun_shelter`, 545 `lean_to`, 451 `picnic_shelter`, 384
+  `weather_shelter`, 333 `rock_shelter`, 249 `gazebo`: the filter must keep only
+  `basic_hut` (346).
+- **Mines**: 2,334 adits, shafts and mines, of which half have no name (shafts: 26% do), and a
+  third are ways. Whether they are "places" for the club is to settle (12).
+
+(An attempt to count the huts of Spain with Overpass failed twice before this, on two public
+instances: an empty answer and "at capacity". The extract gave all of this in under a minute.)
+
+**What the tags miss.** A scan of the whole Spanish file for names with "refugio" (34 seconds,
+`osmium cat` into `grep`) gives 1,977 elements, of which: 398 `wilderness_hut`, 180 `alpine_hut`
+and 91 `basic_hut` (the three filters, so already taken), **278 `amenity=shelter` with no
+`shelter_type`** (most with just that tag and a name: "Refugio Arroyetas", "Refugio de la Plana de
+Diego"; real refugios libres in many cases), 160 buildings (some `building=hut`, many are
+`building=bunker`, anti-aircraft shelters), 13 caves, and 390 of other things (hostels,
+guest houses, a restaurant, a church, bus stops, a trailhead) that are not what the club means.
+So **a name that says "Refugio" on an `amenity=shelter` is a good extra candidate** (278 more), and
+the other names are not, which agrees with taking them only by hand (see below).
 
 Some will be mapped with only a name that says "Refugio": those are found by linking by hand an
 existing place (see 8), not by guessing.
