@@ -2415,6 +2415,28 @@ html.map-is-expanded {
   margin-top: 8px;
 }
 
+/* The elements of OpenStreetMap that a place may be linked to: one row each, with its button. */
+.osm-candidates {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0 8px 0 0; /* Room for the scrollbar, which would cover the buttons. */
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.osm-candidates li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.osm-candidates li:last-child {
+  border-bottom: none;
+}
+
 /* The ring that marks the points of OpenStreetMap, in the selector of layers. */
 .osm-ring {
   display: inline-block;

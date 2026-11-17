@@ -852,6 +852,20 @@ known, in metres above sea level.
   unless an activity went to it.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`
+- **PUT** `/places/{id}/links/osm` — *Any baseline role*. Says which element of the OpenStreetMap
+  mirror the place is, instead of the one it was, if any: nothing else of the place changes (but
+  `updated_by` and `updated_at`). The element stops being a candidate on the map. (The path is not
+  `/places/{id}/osm`, which would clash with `/places/types/{id}` in the router.)
+  - body: `osm_type*` (`node`, `way` or `relation`), `osm_id*`
+  - returns: 200 `Place`
+  - errors: 400 `invalid_id`, `invalid_body`, `unknown_osm_element` (not in the mirror, or a type
+    that is not one, or an id that is not positive); 404 `not_found`; 409 `osm_element_in_use`
+    (another place already is that element)
+- **DELETE** `/places/{id}/links/osm` — *Any baseline role*. Says the place is not an element of
+  OpenStreetMap any more; the element stays in the mirror, and is a candidate again. Doing it on a
+  place that has none is no error.
+  - returns: 200 `Place`
+  - errors: 400 `invalid_id`; 404 `not_found`
 - **POST** `/places/{id}/points` — *Any baseline role*. Adds one of the other points of a place.
   Adding, changing or removing one counts as a change of the place (`updated_by`, `updated_at`).
   - body: `kind*` (`parking`, `approach`, `waypoint`, `access` or `other`), `lat*`, `lon*`,
@@ -948,6 +962,15 @@ reads; nothing here changes the mirror, and nothing in these requests goes to Op
   - returns: 200 `OsmElement`
   - errors: 400 `invalid_osm_element` (a type that is not `node`, `way` or `relation`), 400
     `invalid_id`; 404 `not_found`
+- **GET** `/osm/nearby` — *Any baseline role*. The elements near a point that are not yet a place,
+  for linking a place of the catalogue to one (`PUT /places/{id}/links/osm`): those whose name looks
+  like `name` first (`exact`: the same name ignoring case, accents and punctuation; `similar`: one
+  holds the other, or they share a word that is not a generic one like "cueva" or "sima"), then the
+  nearest, at most 30.
+  - query: `lat*`, `lon*`, `radius` (metres, 500 by default, 2000 at most), `name`, `category`
+    (as in `/osm/elements`, all if left out)
+  - returns: 200 `{elements: [OsmCandidate]}`
+  - errors: 400 `invalid_bbox` (the point is not valid), `invalid_radius`, `invalid_osm_category`
 
 ## Zones
 
@@ -2157,6 +2180,15 @@ What a map needs to draw an element of the mirror.
 | `lon` | number |
 | `category` | cave/canyon/hut/via_ferrata |
 | `name` | text, left out if the element has none |
+
+### `OsmCandidate`
+
+An `OsmPoint` and:
+
+| Field | Type |
+|---|---|
+| `distance_m` | integer, metres from the point asked for |
+| `name_match` | exact/similar, left out if the name does not look like the one asked |
 
 ### `OsmElement`
 

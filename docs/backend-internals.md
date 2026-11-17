@@ -1304,6 +1304,22 @@ keeps its element for good. An element that is a place is no longer a candidate:
 it out, as the map shows it as that place. The data that the new place starts with is the frontend's
 doing (the dialog copies what the tags say), not the API's, and the person confirms every field.
 
+**Linking a place that already exists.** `PUT /places/{id}/links/osm` (`Service.LinkOsm`,
+`Repository.SetOsm`) says which element a place is, instead of the one it was, and `DELETE` takes
+the link away (the element stays in the mirror and is a candidate again). Nothing of the place
+changes but `updated_by` and `updated_at`, and the same two constraints as when creating decide (400
+`unknown_osm_element`, 409 `osm_element_in_use`). The path is `/links/osm` because
+`/places/{id}/osm` clashes with `/places/types/{id}` in the router (a `PUT` on `/places/types/osm`
+would match both), which the tests found. To choose the element, `GET /osm/nearby`
+(`Service.Nearby`) gives the ones within a radius (500 m by default, 2 km at most) that are not yet
+a place: it takes the box around the circle from `InBounds`, measures the distance of each
+(haversine) and ranks them, the ones whose name looks like the place's first. Names are compared
+with `areas.Normalize` (case, accents and punctuation do not count): `exact` when they are the same,
+`similar` when one holds the other or they share a word of five letters or more that is not a
+generic one ("cueva", "sima", "barranco", "refugio"…, which every one of them has). Nothing is
+linked by itself: the person chooses, and a name that does not look like it is still offered if it
+is near.
+
 ## Telegram
 
 **Telegram** (`internal/telegram`): a minimal client for the Telegram Bot HTTP API

@@ -381,6 +381,19 @@ coordinates. A note above the form says where the data comes from. Saving sends 
 `osm_id` with the rest, so the place keeps its element, and the page goes to the new place; that
 element is no longer offered as a candidate.
 
+**Linking a place to OpenStreetMap.** The page of a place (`/lugar`) has a section "OpenStreetMap"
+that says whether the place is an element of OpenStreetMap (its type and id) and has the buttons to
+link and unlink it. "Vincular con OpenStreetMap" opens a dialog (`js/osm-link.js`, built with
+`buildDialog` of `place-dialog.js`) with the elements near the place that are not yet a place, from
+`GET /osm/nearby`: one row for each, with its name, what it is, its type and id, how far it is and,
+if it looks like the place's name, "mismo nombre" or "nombre parecido" (those come first, then the
+nearest), and a button to link it. A cave or a canyon is looked for among the caves or the canyons,
+and any other place among the huts and the via ferratas; a select widens the circle from 500 m to 1
+or 2 km, and a newer search drops the answer of an older one. Choosing one calls `PUT
+/places/{id}/links/osm` and reloads the page; a linked place says "Vincular con otro elemento" and
+has "Desvincular", which asks first and calls `DELETE`. The element that a place is no longer
+appears on the map of `/lugares` as a candidate, and does again when the link is taken away.
+
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
 `/admin`, of the library, of `/material` and of the places) is drawn instead, under 640px, as a card

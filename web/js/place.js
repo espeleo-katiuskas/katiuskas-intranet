@@ -16,6 +16,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import { bindFiles, fileRowsHtml } from './place-files.js';
+import { openOsmLinkDialog } from './osm-link.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import {
   coordinatesHtml,
@@ -169,7 +170,22 @@ async function renderMap() {
   map.fitBounds(group.getBounds(), { padding: [30, 30], maxZoom: 16 });
 }
 
+const OSM_TYPE_NAMES = { node: 'nodo', way: 'vía', relation: 'relación' };
+
+// Whether the place is an element of OpenStreetMap, and the buttons to say it is or that it is not.
+function renderOsm() {
+  const linked = place.osm_type && place.osm_id;
+  document.getElementById('osm-status').textContent = linked
+    ? `Este lugar está vinculado con un elemento de OpenStreetMap (${OSM_TYPE_NAMES[place.osm_type] ?? place.osm_type} ${place.osm_id}).`
+    : 'Este lugar no está vinculado con ningún elemento de OpenStreetMap. Vincularlo evita que su punto salga en el mapa como un candidato más.';
+  document.getElementById('osm-link').textContent = linked
+    ? 'Vincular con otro elemento'
+    : 'Vincular con OpenStreetMap';
+  document.getElementById('osm-unlink').hidden = !linked;
+}
+
 function render() {
+  renderOsm();
   document.title = `${place.name} — Club de Espeleología Katiuskas`;
   document.getElementById('place-name').textContent = place.name;
   document.getElementById('place-meta').textContent = [place.type_name, place.subtype, place.where]
@@ -303,6 +319,28 @@ document.getElementById('edit-place').addEventListener('click', () => {
       await load();
     },
   });
+});
+
+document.getElementById('osm-link').addEventListener('click', () => {
+  openOsmLinkDialog({
+    place,
+    onLinked: async () => {
+      showFeedback('Lugar vinculado con OpenStreetMap.');
+      await load();
+    },
+  });
+});
+
+document.getElementById('osm-unlink').addEventListener('click', async () => {
+  if (!confirm('¿Desvincular este lugar de OpenStreetMap? Su elemento volverá a salir en el mapa.'))
+    return;
+  try {
+    await apiFetch(`/places/${placeId}/links/osm`, { method: 'DELETE' });
+    showFeedback('Lugar desvinculado de OpenStreetMap.');
+    await load();
+  } catch (err) {
+    showError(err.message);
+  }
 });
 
 document.getElementById('add-point').addEventListener('click', () => {

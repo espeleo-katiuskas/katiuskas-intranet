@@ -399,8 +399,11 @@ Islands were not searched) there are 268 of them, plus one loose way; nothing el
    zone proposed from them (`/areas/locate`, so the zones of the elements are not needed for this),
    and `POST /places` keeps `osm_type` and `osm_id`: promotion on demand, the option chosen in 7. An
    element that is a place is no longer a candidate.
-4. **Link** the places that already exist (matching by distance and name, reviewed by hand) and
-   the field-by-field display of 8, with the flag when OSM changes.
+4. **Link** (partly done): linking and unlinking a place that already exists (`PUT`/`DELETE
+   /places/{id}/links/osm`, the candidates near it by distance and name with `GET /osm/nearby`, and
+   the dialog and the section "OpenStreetMap" of the page of a place). **Still to do**: the
+   field-by-field display of 8 ("Según OpenStreetMap" next to the club's data), the flag when OSM
+   changes, and a list to review the places that already exist in one go.
 5. **Zones** for the elements (6), the other countries, the other filters (12).
 6. **Contribute** (9), if wanted.
 
