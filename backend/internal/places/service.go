@@ -79,6 +79,16 @@ func clean(in Input) (Input, error) {
 	if in.AreaID <= 0 {
 		return Input{}, ErrAreaRequired
 	}
+	if (in.OsmType == nil) != (in.OsmID == nil) {
+		return Input{}, ErrUnknownOsmElement
+	}
+	if in.OsmType != nil {
+		t := strings.TrimSpace(*in.OsmType)
+		if t != "node" && t != "way" && t != "relation" || *in.OsmID <= 0 {
+			return Input{}, ErrUnknownOsmElement
+		}
+		in.OsmType = &t
+	}
 	in.State = strings.TrimSpace(in.State)
 	switch State(in.State) {
 	case "", StateOpen, StatePermitRequired, StateTourist, StateClosed:

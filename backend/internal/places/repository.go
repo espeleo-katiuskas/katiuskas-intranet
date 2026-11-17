@@ -33,6 +33,12 @@ func isForeignKeyViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode
 }
 
+// violates says whether the error is a violation of the named constraint.
+func violates(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.ConstraintName == constraint
+}
+
 // ----- places -----
 
 const listColumns = `
@@ -92,9 +98,9 @@ func (r *Repository) ListPlaces(ctx context.Context) ([]ListItem, error) {
 func (r *Repository) GetPlace(ctx context.Context, id int64) (Place, error) {
 	var p Place
 	targets := append(p.ListItem.scanTargets(), &p.Access, &p.Description, &p.TechnicalSheet,
-		&p.CreatedBy, &p.CreatedAt, &p.UpdatedBy, &p.UpdatedAt)
+		&p.OsmType, &p.OsmID, &p.CreatedBy, &p.CreatedAt, &p.UpdatedBy, &p.UpdatedAt)
 	err := r.pool.QueryRow(ctx, `
-		SELECT`+listColumns+`, p.access, p.description, p.technical_sheet,
+		SELECT`+listColumns+`, p.access, p.description, p.technical_sheet, p.osm_type, p.osm_id,
 			cu.login, p.created_at, uu.login, p.updated_at`+listFrom+`
 		JOIN users cu ON cu.id = p.created_by
 		JOIN users uu ON uu.id = p.updated_by
@@ -154,13 +160,19 @@ func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in I
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO places (type_id, kind, has_state, name, alt_names, state, subtype_id, system_id, area_id,
 			lat, lon, altitude_m, access, description, depth_m, horizontal_length_m, geology_id,
-			technical_sheet, created_by, updated_by)
+			technical_sheet, osm_type, osm_id, created_by, updated_by)
 		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-			$19, $19)
+			$19, $20, $21, $21)
 		RETURNING id
 	`, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.SystemID, in.AreaID,
 		*in.Lat, *in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM, in.HorizontalLengthM,
-		in.GeologyID, in.TechnicalSheet, userID).Scan(&id)
+		in.GeologyID, in.TechnicalSheet, in.OsmType, in.OsmID, userID).Scan(&id)
+	if violates(err, "places_osm_element_fkey") {
+		return Place{}, ErrUnknownOsmElement
+	}
+	if violates(err, "places_osm_element_key") {
+		return Place{}, ErrOsmElementInUse
+	}
 	if isForeignKeyViolation(err) {
 		return Place{}, ErrUnknownType
 	}

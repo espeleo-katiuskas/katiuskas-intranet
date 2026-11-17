@@ -107,6 +107,8 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrNotYours, http.StatusForbidden, "place_file_not_yours"},
 		{ErrTypeNotFound, http.StatusNotFound, "not_found"},
 		{ErrUnknownType, http.StatusBadRequest, "unknown_place_type"},
+		{ErrUnknownOsmElement, http.StatusBadRequest, "unknown_osm_element"},
+		{ErrOsmElementInUse, http.StatusConflict, "osm_element_in_use"},
 		{ErrTypeRequired, http.StatusBadRequest, "place_type_required"},
 		{ErrAreaRequired, http.StatusBadRequest, "place_area_required"},
 		{ErrUnknownArea, http.StatusBadRequest, "unknown_area"},
@@ -381,6 +383,10 @@ type placeBody struct {
 	HorizontalLengthM *int     `json:"horizontal_length_m"`
 	GeologyID         *int64   `json:"geology_id"`
 	TechnicalSheet    *string  `json:"technical_sheet"`
+	// OsmType and OsmID are for a place made from an element of the OpenStreetMap mirror; only a creation
+	// takes them, an edit does not read them.
+	OsmType *string `json:"osm_type"`
+	OsmID   *int64  `json:"osm_id"`
 }
 
 func (b placeBody) input() Input { return Input(b) }
@@ -440,7 +446,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	before, beforeErr := h.service.GetPlace(r.Context(), id)
-	p, err := h.service.UpdatePlace(r.Context(), id, actorID(r.Context()), body.input())
+	in := body.input()
+	in.OsmType, in.OsmID = nil, nil // The element a place is does not change with an edit.
+	p, err := h.service.UpdatePlace(r.Context(), id, actorID(r.Context()), in)
 	if err != nil {
 		writeError(w, err, "could not edit the place")
 		return

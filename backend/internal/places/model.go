@@ -65,6 +65,11 @@ var (
 	ErrNotFound      = errors.New("place not found")
 	ErrPointNotFound = errors.New("point not found")
 	ErrTypeNotFound  = errors.New("type of place not found")
+	// ErrUnknownOsmElement is a place given an OpenStreetMap element that is not in the mirror, or only
+	// the type or only the id of one.
+	ErrUnknownOsmElement = errors.New("there is no such OpenStreetMap element in the mirror: osm_type (node, way or relation) and osm_id go together")
+	// ErrOsmElementInUse means another place already is that OpenStreetMap element.
+	ErrOsmElementInUse = errors.New("another place already is that OpenStreetMap element")
 	// ErrUnknownType is a place given a type that does not exist.
 	ErrUnknownType     = errors.New("there is no such type of place")
 	ErrTypeRequired    = errors.New("the type of the place is required")
@@ -182,6 +187,9 @@ type Place struct {
 	Access         *string `json:"access,omitempty"`
 	Description    *string `json:"description,omitempty"`
 	TechnicalSheet *string `json:"technical_sheet,omitempty"`
+	// OsmType and OsmID are the OpenStreetMap element the place is, when it is one (the mirror has it).
+	OsmType *string `json:"osm_type,omitempty"`
+	OsmID   *int64  `json:"osm_id,omitempty"`
 	// AreaPath is the zone and the ones it is in, the country first, each with its kind.
 	AreaPath []AreaRef `json:"area_path"`
 	// CreatedBy and UpdatedBy are logins (the last person who changed the place or its points).
@@ -213,6 +221,10 @@ type Input struct {
 	HorizontalLengthM *int
 	GeologyID         *int64
 	TechnicalSheet    *string
+	// OsmType and OsmID say which OpenStreetMap element the place is. They are given when a place is
+	// created, from an element of the mirror, and an edit leaves them as they were.
+	OsmType *string
+	OsmID   *int64
 }
 
 // Point is one of the other points of a place.

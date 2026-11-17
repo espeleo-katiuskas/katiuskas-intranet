@@ -2565,7 +2565,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Place" }
-        "400": { description: "invalid_body, place_name_required, place_type_required, unknown_place_type, place_area_required, unknown_area, invalid_place_state, invalid_coordinates, invalid_altitude, unknown_geology, invalid_place_measure or invalid_place_fields (a depth, a horizontal length or a geology on a place that is not a cave, a technical sheet on one that is neither a cave nor a canyon)." }
+        "400": { description: "invalid_body, place_name_required, place_type_required, unknown_place_type, place_area_required, unknown_area, invalid_place_state, invalid_coordinates, invalid_altitude, unknown_geology, invalid_place_measure, unknown_osm_element (not in the mirror, or only the type or only the id) or invalid_place_fields (a depth, a horizontal length or a geology on a place that is not a cave, a technical sheet on one that is neither a cave nor a canyon)." }
+        "409": { description: "osm_element_in_use — another place already is that OpenStreetMap element." }
 
   /places/{id}:
     parameters:
@@ -6860,6 +6861,8 @@ components:
         horizontal_length_m: { type: integer, minimum: 0, maximum: 2000000, nullable: true, description: "Only for a cavity (a place whose type is of the cave kind)." }
         geology_id: { type: integer, nullable: true, description: "What a cave is formed in (of GET /places/geologies). Only for a cavity." }
         technical_sheet: { type: string, nullable: true, description: "What has to be installed to go through it. Only for a cavity or a canyon." }
+        osm_type: { type: string, enum: [node, way, relation], nullable: true, description: "With osm_id, the element of the OpenStreetMap mirror the place is (GET /osm/elements). Only creating reads it; an edit leaves it as it was." }
+        osm_id: { type: integer, format: int64, nullable: true }
 
     PlaceListItem:
       type: object
@@ -6895,6 +6898,8 @@ components:
             access: { type: string }
             description: { type: string }
             technical_sheet: { type: string }
+            osm_type: { type: string, enum: [node, way, relation], description: "Left out if the place is not an element of OpenStreetMap." }
+            osm_id: { type: integer, format: int64 }
             area_path: { type: array, description: "The zone and the ones it is in, the country first.", items: { $ref: "#/components/schemas/AreaRef" } }
             created_by: { type: string, description: "Login of who added it." }
             created_at: { type: string, format: date-time }
