@@ -399,7 +399,7 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 		Gone             int    `json:"gone"`
 		LastRunStatus    string `json:"last_run_status"`
 		LastError        string `json:"last_error"`
-		DataAgeDays      int    `json:"data_age_days"`
+		DataAgeDays      *int   `json:"data_age_days"`
 		Added            int    `json:"added"`
 		Changed          int    `json:"changed"`
 		UnknownZones     int    `json:"unknown_zones"`
@@ -474,14 +474,14 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 		t.Fatalf("sorted by name: %+v", got.OSM.Sources)
 	}
 	if spain.Elements != 2 || spain.Gone != 1 || spain.LastRunStatus != "ok" || spain.Added != 2 || spain.Changed != 1 ||
-		spain.DataAgeDays != 3 || spain.Stale || spain.Failing {
+		spain.DataAgeDays == nil || *spain.DataAgeDays != 3 || spain.Stale || spain.Failing {
 		t.Errorf("spain went well: %+v", spain)
 	}
 	if spain.UnknownZones != 2 || spain.UnknownZoneCodes != "28999,41999" || canary.UnknownZones != 0 {
 		t.Errorf("spain has two municipalities the club does not know, and is no problem: %+v", spain)
 	}
 	if canary.Elements != 1 || canary.LastRunStatus != "failed" || canary.LastError != "download: status 503" ||
-		canary.DataAgeDays != 20 || canary.Added != 4 || !canary.Stale || !canary.Failing {
+		canary.DataAgeDays == nil || *canary.DataAgeDays != 20 || canary.Added != 4 || !canary.Stale || !canary.Failing {
 		t.Errorf("canary-islands is old and failed: %+v", canary)
 	}
 	if len(got.Problems) != 2 || !strings.Contains(got.Problems[0]+got.Problems[1], "falló: download: status 503") ||
@@ -497,5 +497,15 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 	})
 	if len(got.Problems) != 0 || got.OSM.Sources[0].Stale {
 		t.Errorf("no check, no problem: %q %+v", got.Problems, got.OSM.Sources)
+	}
+
+	// Data of a few hours ago is 0 days old, and the age is still there (a page that took its absence for a
+	// number said "hace undefined días").
+	got = read(t, info, func(tx pgx.Tx) {
+		exec(t, tx, `INSERT INTO osm_sync_runs (source, source_timestamp, started_at, finished_at, status)
+			VALUES ('spain', now() - interval '2 hours', now(), now(), 'ok')`)
+	})
+	if len(got.OSM.Sources) != 1 || got.OSM.Sources[0].DataAgeDays == nil || *got.OSM.Sources[0].DataAgeDays != 0 {
+		t.Errorf("data of today has an age of 0 days: %+v", got.OSM.Sources)
 	}
 }

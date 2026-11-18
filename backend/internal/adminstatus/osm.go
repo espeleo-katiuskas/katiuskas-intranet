@@ -26,7 +26,7 @@ type osmSourceStatus struct {
 	// date of the data in the extract, and what it did.
 	LastOKAt      *time.Time `json:"last_ok_at,omitempty"`
 	DataTimestamp *time.Time `json:"data_timestamp,omitempty"`
-	DataAgeDays   int        `json:"data_age_days,omitempty"`
+	DataAgeDays   int        `json:"data_age_days"`
 	Added         int        `json:"added"`
 	Changed       int        `json:"changed"`
 	Deleted       int        `json:"deleted"`

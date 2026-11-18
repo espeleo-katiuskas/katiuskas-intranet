@@ -579,6 +579,13 @@ const OSM_SOURCE_LABELS = {
 // "Mirror de OpenStreetMap": the copy of caves, canyons, mines, huts and via ferratas that a weekly load keeps (it runs
 // outside the API, so nobody would notice it stopping): for each extract, its elements, the date of its data and
 // how the last loads went. A load that failed, or data that is too old, is also in the list of problems.
+// How many calendar days ago a moment was, counting days and not hours, in the browser's time zone as the date
+// shown next to it is: data of 22:00 yesterday is "hace 1 día" on a day whose date is not the same.
+function calendarDaysAgo(iso) {
+  const day = (date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.round((day(new Date()) - day(new Date(iso))) / 86_400_000);
+}
+
 function osmGroup(osm) {
   const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   if (!osm) return '';
@@ -596,7 +603,10 @@ function osmGroup(osm) {
       ),
     ];
     if (source.data_timestamp) {
-      const age = escapeHtml(`hace ${source.data_age_days} días`);
+      const days = calendarDaysAgo(source.data_timestamp);
+      const age = escapeHtml(
+        days === 0 ? 'de hoy' : days === 1 ? 'hace 1 día' : `hace ${days} días`,
+      );
       parts.push(
         `datos del ${escapeHtml(formatDate(source.data_timestamp))} (${source.stale ? `<strong>${age}</strong>` : age})`,
         escapeHtml(
