@@ -21,6 +21,10 @@ type MutationNotifier interface {
 	Send(ctx context.Context, text string) error
 }
 
+// textLogger is what a notifier says of itself when it writes the text it is given to the log instead of
+// sending it, so that NotifyAsync does not write it a second time.
+type textLogger interface{ LogsText() bool }
+
 // NotifyAsync sends text to notifier on its own goroutine, with a
 // bounded timeout and a context detached from the request (which may
 // already be gone by the time the send completes) — the same
@@ -34,7 +38,11 @@ type MutationNotifier interface {
 // through this instead of duplicating the goroutine/timeout dance at
 // each call site.
 func NotifyAsync(notifier MutationNotifier, text string) {
-	slog.Info("notice", "text", text)
+	// A notifier that logs the text itself (telegram.NoopSender, with Telegram unconfigured) already does it:
+	// writing it here too would make every notice appear twice in the log.
+	if l, ok := notifier.(textLogger); !ok || !l.LogsText() {
+		slog.Info("notice", "text", text)
+	}
 	if notifier == nil {
 		return
 	}

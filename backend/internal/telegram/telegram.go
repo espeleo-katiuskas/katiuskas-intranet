@@ -31,6 +31,9 @@ type Sender interface {
 // has configured a bot for yet.
 type NoopSender struct{}
 
+// LogsText says that Send writes the text to the log (httpapi.NotifyAsync does not write it again).
+func (NoopSender) LogsText() bool { return true }
+
 func (NoopSender) Send(_ context.Context, text string) error {
 	slog.Info("telegram message not sent: no TELEGRAM_BOT_TOKEN/TELEGRAM_LOG_CHAT_ID configured, logging instead",
 		"text", text)

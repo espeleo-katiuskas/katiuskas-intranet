@@ -75,6 +75,25 @@ func TestNotifyAsyncWritesToTheLog(t *testing.T) {
 	}
 }
 
+// A notifier that logs the text itself (Telegram unconfigured) is not logged a second time.
+type loggingNotifier struct{ fakeMutationNotifier }
+
+func (*loggingNotifier) LogsText() bool { return true }
+
+func TestNotifyAsyncDoesNotLogTwice(t *testing.T) {
+	var out bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	notifier := &loggingNotifier{}
+	NotifyAsync(notifier, "ya lo escribe el notificador")
+	notifier.waitForMessage(t)
+	if strings.Contains(out.String(), "ya lo escribe el notificador") {
+		t.Errorf("the notifier logs it, so NotifyAsync must not: %q", out.String())
+	}
+}
+
 type diffSubject struct {
 	Name  string
 	Phone *string
