@@ -55,7 +55,7 @@ function searchText(place) {
       place.subtype,
       place.geology,
       STATE_LABELS[place.state],
-      place.where,
+      place.area_names,
     ]
       .filter(Boolean)
       .join(' '),

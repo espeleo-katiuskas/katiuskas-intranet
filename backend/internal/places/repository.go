@@ -44,11 +44,13 @@ func violates(err error, constraint string) bool {
 
 const listColumns = `
 	p.id, p.type_id, t.name, p.kind, p.name, p.alt_names, COALESCE(p.state, ''), p.subtype_id, st.name, p.system_id, sy.name,
-	p.area_id, w.ids, w.where_text,
+	p.area_id, w.ids, w.where_text, w.names_text,
 	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name`
 
 // listFrom is a place with its type and, through the tree of zones, the ids and the names of the zone it
-// is in and of the ones it is in, from the most specific to the country (depth 0 is the zone itself).
+// is in and of the ones it is in, from the most specific to the country (depth 0 is the zone itself). The
+// text of where it is leaves out the autonomous community when there is a province (in Spain the province
+// says it already): "Valdemanco, Madrid, España", while the ids and the names for the search keep every zone.
 const listFrom = `
 	FROM places p
 	JOIN place_types t ON t.id = p.type_id
@@ -57,17 +59,22 @@ const listFrom = `
 	LEFT JOIN place_systems sy ON sy.id = p.system_id
 	JOIN LATERAL (
 		WITH RECURSIVE up AS (
-			SELECT a.id, a.parent_id, a.name, 0 AS depth FROM areas a WHERE a.id = p.area_id
+			SELECT a.id, a.parent_id, a.kind, a.name, 0 AS depth FROM areas a WHERE a.id = p.area_id
 			UNION ALL
-			SELECT a.id, a.parent_id, a.name, up.depth + 1 FROM areas a JOIN up ON a.id = up.parent_id
+			SELECT a.id, a.parent_id, a.kind, a.name, up.depth + 1 FROM areas a JOIN up ON a.id = up.parent_id
 		)
-		SELECT array_agg(id ORDER BY depth DESC) AS ids, string_agg(name, ', ' ORDER BY depth) AS where_text FROM up
+		SELECT array_agg(id ORDER BY depth DESC) AS ids,
+			string_agg(name, ', ' ORDER BY depth) FILTER (
+				WHERE kind <> 'Comunidad autónoma' OR NOT EXISTS (SELECT 1 FROM up u WHERE u.kind = 'Provincia')
+			) AS where_text,
+			string_agg(name, ', ' ORDER BY depth) AS names_text
+		FROM up
 	) w ON true`
 
 func (it *ListItem) scanTargets() []any {
 	return []any{
 		&it.ID, &it.TypeID, &it.TypeName, &it.Kind, &it.Name, &it.AltNames, &it.State, &it.SubtypeID,
-		&it.Subtype, &it.SystemID, &it.System, &it.AreaID, &it.AreaIDs, &it.Where, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
+		&it.Subtype, &it.SystemID, &it.System, &it.AreaID, &it.AreaIDs, &it.Where, &it.AreaNames, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
 		&it.Geology,
 	}
 }

@@ -554,13 +554,17 @@ func TestAPersonWithPlacesCannotBeDeletedBlindly(t *testing.T) {
 }
 
 // Where a place is: the most specific zone, which says its country, province… as the zones it is in; the
-// listing and the place give them, and an edit may move it.
+// listing and the place give them, and an edit may move it. The text of where it is has no autonomous
+// community when there is a province (in Spain the province says it already), the ids and the path do.
 func TestAreaOfAPlace(t *testing.T) {
 	e := newEnv(t)
 	p := e.newPlace(e.cavidad, "Sima de la Peña", nil)
 	e.notifier.wait(t)
-	if p.AreaID != valdemanco || p.Where != "Valdemanco, Madrid, Comunidad de Madrid, España" || len(p.AreaIDs) != 4 || p.AreaIDs[3] != valdemanco {
+	if p.AreaID != valdemanco || p.Where != "Valdemanco, Madrid, España" || len(p.AreaIDs) != 4 || p.AreaIDs[3] != valdemanco {
 		t.Errorf("unexpected zone: %d %q %v", p.AreaID, p.Where, p.AreaIDs)
+	}
+	if p.AreaNames != "Valdemanco, Madrid, Comunidad de Madrid, España" {
+		t.Errorf("the names for the search keep the community: %q", p.AreaNames)
 	}
 	var kinds, names []string
 	for _, ref := range p.AreaPath {
@@ -574,6 +578,19 @@ func TestAreaOfAPlace(t *testing.T) {
 		t.Errorf("the listing should say where it is too: %+v", item)
 	}
 
+	// In a community with no province, or in a country that has neither, the text says all there is.
+	for name, want := range map[string]string{"Comunidad de Madrid": "Comunidad de Madrid, España", "Ceuta": "Ceuta, España"} {
+		var zone int64
+		if err := e.tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE name = $1 AND kind IN ('Comunidad autónoma', 'Ciudad autónoma')`, name).Scan(&zone); err != nil {
+			t.Fatal(err)
+		}
+		in := decode[places.Place](t, e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Sima de la Peña", map[string]any{"area_id": zone})))
+		e.notifier.wait(t)
+		if in.Where != want || len(in.AreaIDs) != 2 {
+			t.Errorf("%s: %q %v", name, in.Where, in.AreaIDs)
+		}
+	}
+
 	// A place may be only in a country, and an edit moves it, saying so in the notice.
 	var spain int64
 	if err := e.tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE parent_id IS NULL AND code = 'ES'`).Scan(&spain); err != nil {
@@ -585,7 +602,7 @@ func TestAreaOfAPlace(t *testing.T) {
 	if moved.Where != "España" || len(moved.AreaIDs) != 1 || len(moved.AreaPath) != 1 {
 		t.Errorf("a place in a country only: %+v", moved)
 	}
-	if msg := e.notifier.wait(t); !strings.Contains(msg, "Where: Valdemanco, Madrid, Comunidad de Madrid, España → España") {
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "Where: Ceuta, España → España") {
 		t.Errorf("the notice should say it moved: %q", msg)
 	}
 

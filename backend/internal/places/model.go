@@ -161,12 +161,15 @@ type ListItem struct {
 	System   *string `json:"system,omitempty"`
 	// AreaID is the most specific zone it is in; AreaIDs are that zone and the ones it is in, the
 	// country first, so that a list can be filtered by any of them; Where says them, from the most
-	// specific one to the country: "Valdemanco, Madrid, Comunidad de Madrid, España".
-	AreaID  int64   `json:"area_id"`
-	AreaIDs []int64 `json:"area_ids"`
-	Where   string  `json:"where"`
-	Lat     float64 `json:"lat"`
-	Lon     float64 `json:"lon"`
+	// specific one to the country, without the autonomous community when there is a province (in Spain the
+	// province says it already): "Valdemanco, Madrid, España". AreaNames are the names of all of them, the
+	// community too, for a search to look in.
+	AreaID    int64   `json:"area_id"`
+	AreaIDs   []int64 `json:"area_ids"`
+	Where     string  `json:"where"`
+	AreaNames string  `json:"area_names"`
+	Lat       float64 `json:"lat"`
+	Lon       float64 `json:"lon"`
 	// AltitudeM is the altitude of the main coordinate, in metres above sea level, if it is known.
 	AltitudeM         *int `json:"altitude_m,omitempty"`
 	DepthM            *int `json:"depth_m,omitempty"`

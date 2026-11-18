@@ -248,33 +248,34 @@ coordinates as a link) are in `places-common.js`.
 
 **Where it is** is chosen with `area-picker.js`: one text box where a person types part of a name (a
 municipality, a province, a country) and chooses among what `GET /areas?search=` finds, each shown
-with the zones it is in ("Valdemanco — Madrid, Comunidad de Madrid, España"), so that two with the
-same name are told apart. The search ignores case and accents ("coruna" finds "A Coruña") and is
-made 200 ms after the last key; the list opens under the box (`.area-combo`), is used with the mouse
-or with the arrows, Enter and Escape (Escape closes the list, not the dialog), and what is chosen is
-shown under the box as a chain with its kind ("Municipio · España › Comunidad de Madrid › Madrid ›
-Valdemanco"). Typing again undoes the choice, and the box is invalid until a zone is chosen, which
-the form needs. A new place starts with no zone: it is chosen every time, unless the coordinates are
-written first: a pause after the last key asks `GET /areas/locate` and puts the zone it answers in
-the field, with a line that says it was proposed from the coordinates. It only fills an empty field
-or one still holding an earlier proposal, never what a person chose or is typing, and a failure says
-nothing. In the form the zone ("Dónde está") comes just before "Cómo llegar", after the coordinates,
-the measures, the altitude and the geology. If the zone is not in the list, "¿No está? Añade una
-zona" opens `area-dialog.js`: the zone it goes in ("Dentro de", chosen with the same field, the one
-already chosen in the place's form if there is), its name and its kind, which is left blank to take
-that of the zones already below (the dialog says which) and is required for the first one below
-another; once added it is the chosen zone. Anybody can; an admin may also leave "Dentro de" empty to
-add a country (the form passes `allowRoot` to the dialog for an admin). To rename, move, delete or
-add inside a zone, admin has "Zonas" on `/lugares` (`areas-manager.js`): "Añadir una zona" opens the
-same dialog to add a zone anywhere, with "Dentro de" optional (`allowRoot`; left empty it adds a
-country; text there that is not a choice is refused, never taken for "none"). Its search field says
-"Elige una zona para modificarla". It finds a zone with the same field and shows its chain, its kind
-and how many zones and places are in it, with its name and kind to change, "Mover dentro de" (the
-zone it is in now, to be changed for another, or emptied to make it a country; after a confirmation
-that says that all it has goes with it), "Añadir una zona dentro" and "Borrar zona", which is
-disabled for a zone with something in it (and says why). There is no way to merge two zones here, on
-purpose: it moves everything in one to the other and cannot be undone, so it is only done through
-the API (`POST /areas/{id}/merge`).
+with the zones it is in ("Valdemanco — Madrid, España"), so that two with the same name are told
+apart. The search ignores case and accents ("coruna" finds "A Coruña") and is made 200 ms after the
+last key; the list opens under the box (`.area-combo`), is used with the mouse or with the arrows,
+Enter and Escape (Escape closes the list, not the dialog), and what is chosen is shown under the box
+as a chain with its kind ("Municipio · España › Madrid › Valdemanco"), in which, as in the list and
+in the text of where a place is, the autonomous community is left out when there is a province
+(`shownAncestors`: in Spain the province says it already). Typing again undoes the choice, and the
+box is invalid until a zone is chosen, which the form needs. A new place starts with no zone: it is
+chosen every time, unless the coordinates are written first: a pause after the last key asks `GET
+/areas/locate` and puts the zone it answers in the field, with a line that says it was proposed from
+the coordinates. It only fills an empty field or one still holding an earlier proposal, never what a
+person chose or is typing, and a failure says nothing. In the form the zone ("Dónde está") comes
+just before "Cómo llegar", after the coordinates, the measures, the altitude and the geology. If the
+zone is not in the list, "¿No está? Añade una zona" opens `area-dialog.js`: the zone it goes in
+("Dentro de", chosen with the same field, the one already chosen in the place's form if there is),
+its name and its kind, which is left blank to take that of the zones already below (the dialog says
+which) and is required for the first one below another; once added it is the chosen zone. Anybody
+can; an admin may also leave "Dentro de" empty to add a country (the form passes `allowRoot` to the
+dialog for an admin). To rename, move, delete or add inside a zone, admin has "Zonas" on `/lugares`
+(`areas-manager.js`): "Añadir una zona" opens the same dialog to add a zone anywhere, with "Dentro
+de" optional (`allowRoot`; left empty it adds a country; text there that is not a choice is refused,
+never taken for "none"). Its search field says "Elige una zona para modificarla". It finds a zone
+with the same field and shows its chain, its kind and how many zones and places are in it, with its
+name and kind to change, "Mover dentro de" (the zone it is in now, to be changed for another, or
+emptied to make it a country; after a confirmation that says that all it has goes with it), "Añadir
+una zona dentro" and "Borrar zona", which is disabled for a zone with something in it (and says
+why). There is no way to merge two zones here, on purpose: it moves everything in one to the other
+and cannot be undone, so it is only done through the API (`POST /areas/{id}/merge`).
 
 **Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
 (see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the

@@ -2,29 +2,37 @@ import { apiFetch, escapeHtml } from './api.js';
 
 // A field to choose a zone of the tree of zones (a country, a province, a municipality…): the person types
 // part of a name and chooses among what is found, each shown with what it is in, so that two zones with
-// the same name are told apart ("Valdemanco — Madrid, Comunidad de Madrid, España"). It is used to say
+// the same name are told apart ("Valdemanco — Madrid, España"). It is used to say
 // where a place is, to say where a new zone goes, and by the admin to find the zone to change.
 
 const SEARCH_DELAY_MS = 200;
 const SEARCH_LIMIT = 12;
 
-// What is above a zone, the nearest first: "Madrid, Comunidad de Madrid, España".
+// The ancestors of a zone that are shown, the country first: all of them but the autonomous community when
+// there is a province (in Spain the province says it already), as the text of where a place is does.
+function shownAncestors(area) {
+  const above = area.ancestors ?? [];
+  const hasProvince = above.some((a) => a.kind === 'Provincia');
+  return hasProvince ? above.filter((a) => a.kind !== 'Comunidad autónoma') : above;
+}
+
+// What is above a zone, the nearest first: "Madrid, España".
 function aboveText(area) {
-  return [...(area.ancestors ?? [])]
+  return [...shownAncestors(area)]
     .reverse()
     .map((a) => a.name)
     .join(', ');
 }
 
-// A zone for a list: "Valdemanco — Madrid, Comunidad de Madrid, España".
+// A zone for a list: "Valdemanco — Madrid, España".
 function areaLabel(area) {
   const above = aboveText(area);
   return above ? `${area.name} — ${above}` : area.name;
 }
 
-// The chain from the country to the zone: "España › Comunidad de Madrid › Madrid › Valdemanco".
+// The chain from the country to the zone: "España › Madrid › Valdemanco".
 function areaChain(area) {
-  return [...(area.ancestors ?? []), area].map((a) => a.name).join(' › ');
+  return [...shownAncestors(area), area].map((a) => a.name).join(' › ');
 }
 
 // The markup of the field. Put it in a form and give the element to bindAreaPicker.

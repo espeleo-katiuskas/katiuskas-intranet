@@ -885,9 +885,9 @@ lookup for them). Only admin and board delete a place, and only admin manages th
 change is announced on Telegram (`httpapi.NotifyAsync`), a place edit with the `DiffFields` of what
 changed (`placeAuditFields`) as the other resources do. A notice that names a place, whether it is
 of the place, of one of its points or of one of its files, ends the name with where it is
-(`inWhere`: "en Valdemanco, Comunidad de Madrid, España", `Place.Where`), so a name that several
-places share can be told apart; one about a system, or a list of places in the notice of an
-activity or a system, names them as before.
+(`inWhere`: "en Valdemanco, Madrid, España", `Place.Where`), so a name that several places share can
+be told apart; one about a system, or a list of places in the notice of an activity or a system,
+names them as before.
 
 **Kinds.** A type has a `kind` (`cave`, `canyon` or `general`) that cannot change; Cavidad is
 `cave`, Cañón is `canyon`, and a type an admin adds is always `general`, so those two are fixed (409
@@ -999,9 +999,11 @@ name in the Telegram notice ("al lugar", "al sistema"). A file is a `File` with 
 statement). The listing and the place say it three ways, all worked out with a recursive query on
 the tree of zones (`listFrom`): `area_ids`, the zone and the ones it is in with the country first,
 so that a list can be filtered by any of them; `where`, their names from the most specific to the
-country, which the search of `/lugares` looks in, so that "Madrid" finds the places in the province,
-in a municipality of it and in the community; and, in the place only, `area_path`, the same with the
-`kind` of each. The edit notice diffs `Where`.
+country, without the autonomous community when there is a province (in Spain the province says it
+already: "Valdemanco, Madrid, España", worked out in `listFrom`); `area_names`, the same with every
+zone, the community too, which the search of `/lugares` looks in, so that "Madrid" finds the places
+in the province, in a municipality of it and in the community; and, in the place only, `area_path`,
+the same with the `kind` of each. The edit notice diffs `Where`.
 
 **The listing.** `GET /places` is unpaginated, like `GET /users`, and gives `ListItem`, the fields
 of a table and its filters, without the long texts or the points: the frontend filters and searches

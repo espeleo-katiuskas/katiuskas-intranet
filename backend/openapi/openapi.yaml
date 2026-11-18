@@ -7051,7 +7051,8 @@ components:
         system: { type: string, description: "The name of that system." }
         area_id: { type: integer, description: "The most specific zone it is in." }
         area_ids: { type: array, items: { type: integer }, description: "That zone and the ones it is in, the country first." }
-        where: { type: string, description: "The names of those zones from the most specific to the country: Valdemanco, Madrid, Comunidad de Madrid, España." }
+        where: { type: string, description: "The names of those zones from the most specific to the country, without the autonomous community when there is a province: Valdemanco, Madrid, España." }
+        area_names: { type: string, description: "The names of all of those zones, the community too, from the most specific to the country, for a search to look in: Valdemanco, Madrid, Comunidad de Madrid, España." }
         lat: { type: number }
         lon: { type: number }
         altitude_m: { type: integer, description: "Altitude of the main coordinate, in metres above sea level." }

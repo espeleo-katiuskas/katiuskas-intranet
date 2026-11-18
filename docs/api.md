@@ -2139,12 +2139,15 @@ Everything of a `PlaceListItem`, and:
 
 `area_id` is the most specific zone it is in; `area_ids` are that zone and the ones it is in, the
 country first, so that a list can be filtered by any of them; `where` says them from the most
-specific one to the country ("Valdemanco, Madrid, Comunidad de Madrid, España"); `area_path` is the
-same as references, the country first and with each `kind`. `kind` says what the place may have:
-`depth_m`, `horizontal_length_m` and `geology_id` (with its name in `geology`) only when it is
-`cave`, `technical_sheet` when it is `cave` or `canyon`. `altitude_m`, optional, is that of the main
-coordinate (the other points have their own). `updated_by` and `updated_at` are the last change of
-the place, of any of its points or of its files (the same as the creation until there is one).
+specific one to the country, without the autonomous community when there is a province, since in
+Spain the province says it already ("Valdemanco, Madrid, España"); `area_names` are the names of all
+of them, the community too ("Valdemanco, Madrid, Comunidad de Madrid, España"), for a search to look
+in; `area_path` is the same as references, the country first and with each `kind`. `kind` says what
+the place may have: `depth_m`, `horizontal_length_m` and `geology_id` (with its name in `geology`)
+only when it is `cave`, `technical_sheet` when it is `cave` or `canyon`. `altitude_m`, optional, is
+that of the main coordinate (the other points have their own). `updated_by` and `updated_at` are the
+last change of the place, of any of its points or of its files (the same as the creation until there
+is one).
 
 ### `ActivityPlace`
 
