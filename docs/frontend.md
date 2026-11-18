@@ -197,21 +197,25 @@ Cerrada: how the place can be visited, each with a line that explains it, `STATE
 `places-common.js`, under the field of the form and next to the badge on the page; a place whose
 type has no state shows none), where it is (`where`: the zone, the province and the country; the
 search looks in `area_names`, which has the community too, so "Madrid" finds the places of the
-province and of the community), the measures of a cave in short ("8m ↓ · 1500m ⇄": depth and
-horizontal length, each with its meaning as a tooltip; `measuresHtml`) and in how many activities,
-not counting the cancelled ones, the place is one of those they go to (`activity_count`, a number,
-"—" when there is none), with a search that looks in the name, the other names, the type, the state
-and where it is (accents and case ignored, every word has to appear, the geology of a cave included)
-and three selects, by type, by subtype and by state, of which the subtype is there only when the
-type chosen is Cavidad and the state only when it is "Todos" or a type that has one (a filter that
-is hidden is also cleared, so that it never filters unseen); the type of a row has the geology of a
-cave under it. "Lista" and "Mapa" switch the table for a map of the same places, with the same
-filters (see "The map of the places" below); `/lugares?vista=mapa` opens it, `&lugar=<id>` also
-opens the popup of that place and `&sistema=<id>` starts the view on the cavities of that system.
-Any member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the page of
-the place once it is saved; admin gets "Tipos y geologías", a dialog with three tables to add,
-rename and delete the general types (Cavidad and Cañón show "Fijo" and cannot be touched; each says
-"Con estado" or "Sin estado", and a new one has the box "Con estado", which cannot be changed
+province and of the community), its depth and its horizontal length, each in a column of its own in
+metres (only a cavity has them: a dash for the rest) and in how many activities, not counting the
+cancelled ones, the place is one of those they go to (`activity_count`, a number, "—" when there is
+none). The table is ordered by name, A first, to begin with, and the headers of name, where, depth,
+length and activities order it (`sortable-headers.js`, as in `/admin`; on a phone, where each row is
+a card, they are the buttons "Ordenar por"): a click picks the column and another turns it round,
+the columns that are numbers begin with the greatest, and a place with no value in one (a canyon has
+no depth) goes last either way. The table has a search that looks in the name, the other names, the
+type, the state and where it is (accents and case ignored, every word has to appear, the geology of
+a cave included) and three selects, by type, by subtype and by state, of which the subtype is there
+only when the type chosen is Cavidad and the state only when it is "Todos" or a type that has one (a
+filter that is hidden is also cleared, so that it never filters unseen); the type of a row has the
+geology of a cave under it. "Lista" and "Mapa" switch the table for a map of the same places, with
+the same filters (see "The map of the places" below); `/lugares?vista=mapa` opens it, `&lugar=<id>`
+also opens the popup of that place and `&sistema=<id>` starts the view on the cavities of that
+system. Any member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the
+page of the place once it is saved; admin gets "Tipos y geologías", a dialog with three tables to
+add, rename and delete the general types (Cavidad and Cañón show "Fijo" and cannot be touched; each
+says "Con estado" or "Sin estado", and a new one has the box "Con estado", which cannot be changed
 afterwards), the subtypes of the cavities and the geologies of the caves (none of these two is
 fixed; one that has places cannot be deleted), all with the same code (`bindCatalogue` in
 `places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: the data (other names,

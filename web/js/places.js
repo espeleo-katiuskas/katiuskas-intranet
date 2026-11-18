@@ -12,12 +12,12 @@ import { initPage } from './layout.js';
 import { createOsmLayer } from './osm-layer.js';
 import { initModal, openModal } from './modal.js';
 import { openPlaceDialog } from './place-dialog.js';
+import { initSortableHeaders } from './sortable-headers.js';
 import {
   loadGeologies,
   loadSubtypes,
   loadSystems,
   loadTypes,
-  measuresHtml,
   placeTypeLabel,
   STATE_LABELS,
   stateBadge,
@@ -62,6 +62,35 @@ function searchText(place) {
   );
 }
 
+// A measure in metres, or a dash if the place has none (only a cavity has them).
+function metres(value) {
+  return value == null ? '—' : `${value} m`;
+}
+
+// How the table is ordered: by name, A first, to begin with; the columns that are numbers start with the
+// greatest. A place with no value in a numeric column (a canyon has no depth) goes last either way.
+const sort = { key: 'name', desc: false };
+const NUMBER_OF = {
+  depth: (place) => place.depth_m,
+  length: (place) => place.horizontal_length_m,
+  activities: (place) => place.activity_count,
+};
+
+function compareBy(key, desc) {
+  const byName = (a, b) => a.name.localeCompare(b.name, 'es') || a.id - b.id;
+  const number = NUMBER_OF[key];
+  return (a, b) => {
+    if (number) {
+      const [x, y] = [number(a), number(b)];
+      if (x == null || y == null) return x == null && y == null ? byName(a, b) : x == null ? 1 : -1;
+      return (desc ? y - x : x - y) || byName(a, b);
+    }
+    const field = key === 'where' ? 'where' : 'name';
+    const order = a[field].localeCompare(b[field], 'es');
+    return (desc ? -order : order) || byName(a, b);
+  };
+}
+
 function renderPlace(place) {
   return `
     <tr>
@@ -77,7 +106,8 @@ function renderPlace(place) {
       }</td>
       <td>${stateBadge(place.state)}</td>
       <td>${escapeHtml(place.where)}</td>
-      <td>${measuresHtml(place) || '—'}</td>
+      <td class="nowrap">${metres(place.depth_m)}</td>
+      <td class="nowrap">${metres(place.horizontal_length_m)}</td>
       <td>${place.activity_count || '—'}</td>
     </tr>`;
 }
@@ -228,9 +258,10 @@ function renderPlaces() {
       (!subtypeFilter.value || place.subtype_id === Number(subtypeFilter.value)) &&
       words.every((word) => searchText(place).includes(word)),
   );
+  shown.sort(compareBy(sort.key, sort.desc));
   tableBody.innerHTML = shown.length
     ? shown.map(renderPlace).join('')
-    : `<tr><td colspan="5">${allPlaces.length ? 'Ningún lugar coincide con la búsqueda.' : 'Todavía no hay ningún lugar.'}</td></tr>`;
+    : `<tr><td colspan="7">${allPlaces.length ? 'Ningún lugar coincide con la búsqueda.' : 'Todavía no hay ningún lugar.'}</td></tr>`;
   countLine.hidden = allPlaces.length === 0;
   countLine.textContent = `${shown.length} de ${allPlaces.length} lugares`;
   if (mapView) renderMap(shown);
@@ -303,6 +334,11 @@ async function load() {
 }
 
 searchInput.addEventListener('input', renderPlaces);
+initSortableHeaders(document.getElementById('places-head'), {
+  sort,
+  defaultDesc: (key) => key in NUMBER_OF,
+  onChange: renderPlaces,
+});
 typeFilter.addEventListener('change', () => {
   syncFilters();
   renderPlaces();
