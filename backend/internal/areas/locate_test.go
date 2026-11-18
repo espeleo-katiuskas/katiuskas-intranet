@@ -43,6 +43,18 @@ func TestNominatim(t *testing.T) {
 		t.Errorf("expected the answer to be kept, %d requests, %v", requests.Load(), err)
 	}
 
+	// Portugal tags its codes `ref:ine` too, with six digits for a parish, and the first five of those are the
+	// code of some Spanish municipality (the Azores, near 38.5, -28.5, gave L'Alcúdia de Crespins): they are
+	// not taken for one, even if a country were missing from the answer.
+	body = `{"name":"Criação Velha","address":{"country_code":"pt"},"extratags":{"ref:ine":"460203"}}`
+	if got, err := n.Containing(ctx, 38.5030, -28.5040); err != nil || got != (areas.Containing{CountryCode: "PT"}) {
+		t.Errorf("a Portuguese parish is no Spanish municipality: %+v, %v", got, err)
+	}
+	body = `{"address":{"country_code":"es"},"extratags":{"ref:ine":"460203"}}`
+	if got, err := n.Containing(ctx, 39.0, -0.5); err != nil || got.MunicipalityCode != "" {
+		t.Errorf("six digits are not a Spanish reference: %+v, %v", got, err)
+	}
+
 	// Outside Spain there is no INE code, only the country; a ref that is not a code is not taken for one.
 	body = `{"address":{"country_code":"pt"},"extratags":{"ref:ine":"abc"}}`
 	if got, err := n.Containing(ctx, 38.7, -9.1); err != nil || got != (areas.Containing{CountryCode: "PT"}) {

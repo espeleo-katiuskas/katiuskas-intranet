@@ -1056,17 +1056,20 @@ form of a place. `Service.Locate` asks a `Boundaries` source (`Nominatim`, in `l
 `NOMINATIM_URL` is `off`, and then the answer is always `null`) for the ISO code of the country and
 the INE code of the municipality that contain the point: a reverse search at the level of a
 municipality (`zoom=10`, `extratags=1`), whose answer for a Spanish municipality carries `ref:ine`,
-eleven digits of which the first five are the code. It looks the zone up by code: the municipality
-first (`kind = 'Municipio'`, since a community and a province can share a code), then the country (a
-zone below none). It is a help, so it never says more than it knows (no zone, or the sea, is
-`{"area": null}`, not an error) and a failure is 502 `locate_unavailable`, which the form ignores.
-**Why Nominatim and not Overpass:** an `is_in` query on Overpass says the same, but the public
-instances are very often at capacity and took half a minute, or did not answer, where Nominatim
-takes a fraction of a second. Its usage policy asks for at most one request a second and a client
-that says who it is, so the requests are spaced out by a second (`Spacing` changes it, for an
-instance of one's own), the answers are kept 24 hours by the point rounded to about ten metres
-(2,000 at most), and the request says only a generic name as its client. Nothing about the person
-goes out, only the coordinate.
+eleven digits of which the first five are the code (`areas.MunicipalityCode`, which takes it only
+from five or eleven digits and only when the country is `ES`: Portugal's statistics institute is
+also called INE, its parishes have a six-digit `ref:ine`, and the first five digits of one of them
+are the code of a Spanish municipality; the Azores gave L'Alcúdia de Crespins). It looks the zone up
+by code: the municipality first (`kind = 'Municipio'`, since a community and a province can share a
+code), then the country (a zone below none). It is a help, so it never says more than it knows (no
+zone, or the sea, is `{"area": null}`, not an error) and a failure is 502 `locate_unavailable`,
+which the form ignores. **Why Nominatim and not Overpass:** an `is_in` query on Overpass says the
+same, but the public instances are very often at capacity and took half a minute, or did not answer,
+where Nominatim takes a fraction of a second. Its usage policy asks for at most one request a second
+and a client that says who it is, so the requests are spaced out by a second (`Spacing` changes it,
+for an instance of one's own), the answers are kept 24 hours by the point rounded to about ten
+metres (2,000 at most), and the request says only a generic name as its client. Nothing about the
+person goes out, only the coordinate.
 
 **Searching a name.** `GET /areas/geocode?q=` serves the search box of the maps. `Service.Geocode`
 asks a `Geocoder` (the same `Nominatim` value as `Boundaries`, so that both share one queue of
@@ -1345,24 +1348,26 @@ extract, and `AssignZones` reads them one feature at a time (Spain has about 8,9
 keeping them all to test 13,000 points would be a waste). What a boundary is is up to a
 `ZoneResolver`, a function from its tags to the id of a zone of the club (0 if it is none):
 `MunicipalityResolver` is Spain's, which takes a `boundary=administrative` of level 8 with a
-`ref:ine` whose first five digits (the other six are the entity) are the `code` of a zone of kind
-Municipio, from the map that `Repository.MunicipalityIDs` reads at the start of the load; another
-country adds its own rule, with its own reference, once its zones are in the catalogue. For each
-boundary the points inside its box are found with a grid of 0.1° cells and tested with
-`polygon.contains` (even-odd, so a hole is outside); the first zone to hold a point keeps it. The id
-goes into `ContentHash` and is written with the element (`osm_elements.area_id`, `ON DELETE SET
-NULL`: derived data, worked out again on the next load, so deleting a zone is not stopped by it, and
-`areas.Repository.Merge` moves the elements to the zone that stays); the names of the zone and of
-the one above it are joined only when it is read (`whereJoin`: `Point.Where` in a search and
-`Detail.Where`). A failure to read the boundaries fails the load, since storing the elements without
-it would erase every zone. A boundary that the resolver recognizes (it has a code) but whose code
-the club has no zone for is counted: `AssignZones` returns it in `ZoneResult.Unknown`, the load logs
-a warning and stores the count and the first twenty codes in its row (`osm_sync_runs.unknown_zones`,
-`unknown_zone_codes`), and the status of the system shows them (not as a problem: the elements are
-just left without a zone). It is how the club learns that its list of municipalities is behind (a
-new municipality, a merger); the list is updated by hand, once a year or so, with
-`scripts/generate-areas-seed.py` and a new migration. About 2 % of the elements are in no
-municipality (the coast, Gibraltar, Ceuta, the Basque condominiums).
+`ref:ine` of five or eleven digits (`areas.MunicipalityCode`: the Portuguese parishes that an
+extract of Spain holds near the border have six, of another system) whose first five digits (the
+other six are the entity) are the `code` of a zone of kind Municipio, from the map that
+`Repository.MunicipalityIDs` reads at the start of the load; another country adds its own rule, with
+its own reference, once its zones are in the catalogue. For each boundary the points inside its box
+are found with a grid of 0.1° cells and tested with `polygon.contains` (even-odd, so a hole is
+outside); the first zone to hold a point keeps it. The id goes into `ContentHash` and is written
+with the element (`osm_elements.area_id`, `ON DELETE SET NULL`: derived data, worked out again on
+the next load, so deleting a zone is not stopped by it, and `areas.Repository.Merge` moves the
+elements to the zone that stays); the names of the zone and of the one above it are joined only when
+it is read (`whereJoin`: `Point.Where` in a search and `Detail.Where`). A failure to read the
+boundaries fails the load, since storing the elements without it would erase every zone. A boundary
+that the resolver recognizes (it has a code) but whose code the club has no zone for is counted:
+`AssignZones` returns it in `ZoneResult.Unknown`, the load logs a warning and stores the count and
+the first twenty codes in its row (`osm_sync_runs.unknown_zones`, `unknown_zone_codes`), and the
+status of the system shows them (not as a problem: the elements are just left without a zone). It is
+how the club learns that its list of municipalities is behind (a new municipality, a merger); the
+list is updated by hand, once a year or so, with `scripts/generate-areas-seed.py` and a new
+migration. About 2 % of the elements are in no municipality (the coast, Gibraltar, Ceuta, the Basque
+condominiums).
 
 **Searching by name.** `GET /osm/search?q=` (`Service.Search`, `Repository.SearchByWords`) is how a
 person finds the cave they know the name of, to make a place of it. The text is normalized with

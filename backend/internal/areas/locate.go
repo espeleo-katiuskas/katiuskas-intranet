@@ -142,12 +142,16 @@ type nominatimAnswer struct {
 	ExtraTags map[string]string `json:"extratags"`
 }
 
-// municipalityCode is the INE code of the municipality a `ref:ine` names: its first five digits.
-func municipalityCode(ref string) string {
-	if len(ref) < 5 {
+// MunicipalityCode is the INE code of the Spanish municipality that a `ref:ine` names: its first five digits.
+// A Spanish reference is the five digits of the municipality, or eleven (the municipality followed by the
+// entity); anything else is not one. That matters because Portugal's statistics institute is also called INE
+// and OpenStreetMap tags its codes `ref:ine` too, with four digits (a municipality) or six (a parish), and the
+// first five digits of a Portuguese parish are the code of some Spanish municipality.
+func MunicipalityCode(ref string) string {
+	if len(ref) != 5 && len(ref) != 11 {
 		return ""
 	}
-	for _, r := range ref[:5] {
+	for _, r := range ref {
 		if r < '0' || r > '9' {
 			return ""
 		}
@@ -191,7 +195,10 @@ func (n *Nominatim) Containing(ctx context.Context, lat, lon float64) (Containin
 		if code := strings.ToUpper(answer.Address.CountryCode); len(code) == 2 {
 			found.CountryCode = code
 		}
-		found.MunicipalityCode = municipalityCode(answer.ExtraTags["ref:ine"])
+		// Only Spain's references are INE codes of the club's catalogue: Portugal's `ref:ine` is another system.
+		if found.CountryCode == "ES" {
+			found.MunicipalityCode = MunicipalityCode(answer.ExtraTags["ref:ine"])
+		}
 	}
 	n.remember(key, found)
 	return found, nil

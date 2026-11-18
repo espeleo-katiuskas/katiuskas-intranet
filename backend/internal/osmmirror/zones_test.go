@@ -34,7 +34,10 @@ func TestAssignZones(t *testing.T) {
 		boundary(level8("28033000000"), `{"type":"MultiPolygon","coordinates":[`+square(5, 5, 6, 6)+`,`+square(7, 7, 8, 8)+`]}`) +
 		boundary(`{"boundary":"administrative","admin_level":"8"}`, `{"type":"Polygon","coordinates":`+square(15, 15, 16, 16)+`}`) + // No reference.
 		boundary(`{"place":"village","name":"Algo"}`, `{"type":"Polygon","coordinates":`+square(17, 17, 18, 18)+`}`) +
-		boundary(level8("28034000000"), `{"type":"Polygon","coordinates":`+square(19, 19, 20, 20)+`}`) // Not in the catalogue.
+		boundary(level8("28034000000"), `{"type":"Polygon","coordinates":`+square(19, 19, 20, 20)+`}`) + // Not in the catalogue.
+		// A Portuguese parish: its `ref:ine` has six digits, the first five of which are the code of a
+		// Spanish municipality of the catalogue, and it is not that one.
+		boundary(level8("280300"), `{"type":"Polygon","coordinates":`+square(21, 21, 22, 22)+`}`)
 	elements := []osmmirror.Element{
 		at(1, 1),       // in the first municipality
 		at(1, 3),       // in the second, whose code is the five digits
@@ -45,6 +48,7 @@ func TestAssignZones(t *testing.T) {
 		at(15.5, 15.5), // in a boundary with no reference
 		at(17.5, 17.5), // in a polygon that is not a boundary
 		at(19.5, 19.5), // in a municipality that the club does not have
+		at(21.5, 21.5), // in a Portuguese parish
 	}
 	// The zones of the club, by INE code; 28034 is on the map but not in the catalogue.
 	resolve := osmmirror.MunicipalityResolver(map[string]int64{"28030": 30, "28031": 31, "28032": 32, "28033": 33})
@@ -52,7 +56,7 @@ func TestAssignZones(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []int64{30, 31, 0, 32, 33, 0, 0, 0, 0}
+	want := []int64{30, 31, 0, 32, 33, 0, 0, 0, 0, 0}
 	for i, w := range want {
 		if elements[i].AreaID != w {
 			t.Errorf("element %d: expected zone %d, got %d", i, w, elements[i].AreaID)

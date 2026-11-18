@@ -1013,9 +1013,9 @@ admin alone.
   - returns: 200 `[Area]`
   - errors: 400 `invalid_id` (a `parent_id` that is not a number); 404 `not_found`
 - **GET** `/areas/locate` — *Any baseline role*. Proposes the zone a point is in, asking a Nominatim
-  instance (OpenStreetMap's geocoder): the municipality by the INE code of its `ref:ine` when the
-  seed has it, else the country by its ISO code. It is a help, not a fact; the answer is kept for a
-  day, and the requests to the instance are spaced a second apart.
+  instance (OpenStreetMap's geocoder): the municipality by the INE code of its `ref:ine` (only in
+  Spain) when the seed has it, else the country by its ISO code. It is a help, not a fact; the
+  answer is kept for a day, and the requests to the instance are spaced a second apart.
   - query: `lat*`, `lon*`
   - returns: 200 `{area}`, an `Area` with its `ancestors`, or `null` when none is known or the
     lookup is off (`NOMINATIM_URL=off`)

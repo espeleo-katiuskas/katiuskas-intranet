@@ -8,6 +8,8 @@ import (
 	"io"
 	"math"
 	"sort"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/areas"
 )
 
 // The zone of each element: the one whose boundary holds its point (a municipality, in Spain). The
@@ -40,16 +42,14 @@ func MunicipalityResolver(ids map[string]int64) ZoneResolver {
 		if tags["boundary"] != "administrative" || tags["admin_level"] != "8" {
 			return 0, ""
 		}
+		// Only a Spanish reference counts: an extract that crosses the border has Portugal's parishes, whose
+		// `ref:ine` is six digits of another system (areas.MunicipalityCode).
 		ref, _ := tags["ref:ine"].(string)
-		if len(ref) < 5 {
+		code := areas.MunicipalityCode(ref)
+		if code == "" {
 			return 0, ""
 		}
-		for _, r := range ref[:5] {
-			if r < '0' || r > '9' {
-				return 0, ""
-			}
-		}
-		return ids[ref[:5]], ref[:5]
+		return ids[code], code
 	}
 }
 

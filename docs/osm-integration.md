@@ -64,17 +64,18 @@ and way 123 are different things. A known limit: if a mapper replaces a node by 
 building around the point), the id changes, so a place linked to the node is told that its element
 is gone, and the new way is a candidate to link again by hand.
 
-**The zone of each element comes from the boundaries of its own extract.** Asking Nominatim for
-each element was out of the question (one request a second, and bulk use is against its policy),
-and PostGIS would have been a new dependency for production, the backup and the prod→testing copy.
-Each load also cuts the municipal boundaries (`admin_level=8`) and gives each element the zone
-whose polygon holds its point (`osm_elements.area_id`; 97.7 % get one, in 2,196 municipalities; the
-rest are on the coast, where a sea cave is outside the polygon, or in Gibraltar, Ceuta and the
-Basque condominiums). Ceuta and Melilla are autonomous cities, with no province or municipality
-below them, so their zone is the city, found by the INE code of their municipality (51001, 52001).
-Melilla's boundary is in the extract, but Ceuta's is not a closed polygon in it (it shares its
-border with Morocco, which the extract cuts), so the elements of Ceuta have no zone yet. A
-`ZoneResolver` says which zone of the club a boundary is: Spain's reads the `ref:ine`. Another
+**The zone of each element comes from the boundaries of its own extract.** Asking Nominatim for each
+element was out of the question (one request a second, and bulk use is against its policy), and
+PostGIS would have been a new dependency for production, the backup and the prod→testing copy. Each
+load also cuts the municipal boundaries (`admin_level=8`) and gives each element the zone whose
+polygon holds its point (`osm_elements.area_id`; 97.7 % get one, in 2,196 municipalities; the rest
+are on the coast, where a sea cave is outside the polygon, or in Gibraltar, Ceuta and the Basque
+condominiums). Ceuta and Melilla are autonomous cities, with no province or municipality below them,
+so their zone is the city, found by the INE code of their municipality (51001, 52001). Melilla's
+boundary is in the extract, but Ceuta's is not a closed polygon in it (it shares its border with
+Morocco, which the extract cuts), so the elements of Ceuta have no zone yet. A `ZoneResolver` says
+which zone of the club a boundary is: Spain's reads the `ref:ine` (five or eleven digits: Portugal's
+parishes, also tagged `ref:ine`, have six and are not taken for Spanish municipalities). Another
 country needs a rule of its own and its zones in the catalogue. Country polygons were tried as a
 fallback and cannot be used: in an extract that cuts it, the relation of a country is not a closed
 polygon (only Andorra's was built). The column is `ON DELETE SET NULL`, the one foreign key that is
