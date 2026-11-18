@@ -3263,14 +3263,14 @@ paths:
         "409": { description: "duplicate_area." }
     delete:
       summary: Delete a zone
-      description: Admin only. Only a zone with no zones below it and no places in it, and never a country.
+      description: Admin only. Only a zone with no zones below it and no places in it (a country too).
       security: [{ bearerAuth: [] }]
       responses:
         "204": { description: Deleted }
         "400": { description: "invalid_id." }
         "403": { description: "Requires admin." }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: "area_is_country, area_has_children or area_in_use." }
+        "409": { description: "area_has_children or area_in_use." }
 
   /areas/{id}/merge:
     parameters:
@@ -3302,7 +3302,7 @@ paths:
         "400": { description: "invalid_id, invalid_body or area_merge_self." }
         "403": { description: "Requires admin." }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: "area_is_country, area_merge_parents (they are not below the same zone) or duplicate_area (a zone below this one has the name of one below the other)." }
+        "409": { description: "area_merge_parents (they are not below the same zone) or duplicate_area (a zone below this one has the name of one below the other)." }
 
   /library/types:
     get:

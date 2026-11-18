@@ -1085,13 +1085,13 @@ rename: it locks the row and walks up from the new parent to refuse the zone its
 descendants (409 `area_move_cycle`), `Service.Update` checks the name against the siblings of the
 new parent first and the unique index is the backstop (409 `duplicate_area`). The places keep
 pointing at their zone, so their path changes with it. Deleting a zone, which only works if nothing
-is below it and no place is in it, and never for a country (409 `area_is_country`,
-`area_has_children`, `area_in_use`). **Merging** (`POST /areas/{id}/merge`) is the way out when a
-zone was added twice: it locks both rows (always in the same order, so two merges do not wait for
-each other), requires both to be below the same zone, moves the zones below the first one and the
-places in it to the second, and deletes the first, in one transaction. If a zone below the first one
-has the name of one below the second, nothing is merged (409 `duplicate_area`). Every change is
-announced on Telegram.
+is below it and no place is in it, a country included (409 `area_has_children`, `area_in_use`).
+**Merging** (`POST /areas/{id}/merge`) is the way out when a zone was added twice: it locks both
+rows (always in the same order, so two merges do not wait for each other), requires both to be below
+the same zone (two countries are: the root of the tree), moves the zones below the first one and the
+places in it to the second, and deletes the first, in one transaction; the one that stays takes the
+official code of the first if it has none. If a zone below the first one has the name of one below
+the second, nothing is merged (409 `duplicate_area`). Every change is announced on Telegram.
 
 ## Document archive
 

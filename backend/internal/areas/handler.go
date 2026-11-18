@@ -72,7 +72,6 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrDuplicate, http.StatusConflict, "duplicate_area"},
 		{ErrHasChildren, http.StatusConflict, "area_has_children"},
 		{ErrInUse, http.StatusConflict, "area_in_use"},
-		{ErrCountry, http.StatusConflict, "area_is_country"},
 		{ErrMergeParents, http.StatusConflict, "area_merge_parents"},
 	} {
 		if errors.Is(err, m.err) {

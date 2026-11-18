@@ -1127,8 +1127,8 @@ Constraints:
 
 Rules outside the database: only a country is a root (the API never creates one), the name is at
 most 200 characters and the kind 60, a zone is only deleted when nothing is below it and no place is
-in it, two zones are merged only below the same one, and the first zone below another one needs its
-`kind` said (the rest take the one their siblings have).
+in it (a country too), two zones are merged only below the same one (two countries are), and the
+first zone below another one needs its `kind` said (the rest take the one their siblings have).
 
 ### `place_types`
 

@@ -271,7 +271,7 @@ country; text there that is not a choice is refused, never taken for "none"). It
 and how many zones and places are in it, with its name and kind to change, "Mover dentro de" (the
 zone it is in now, to be changed for another, or emptied to make it a country; after a confirmation
 that says that all it has goes with it), "Añadir una zona dentro" and "Borrar zona", which is
-disabled for a country or a zone with something in it (and says why). There is no way to merge two
+disabled for a zone with something in it (and says why). There is no way to merge two
 zones here, on purpose: it moves everything in one to the other and cannot be undone, so it is only
 done through the API (`POST /areas/{id}/merge`).
 

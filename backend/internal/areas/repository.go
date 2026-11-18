@@ -263,8 +263,9 @@ func (r *Repository) Delete(ctx context.Context, id int64) error {
 }
 
 // Merge moves the zones below `from` and the places in it to `into`, and deletes `from`, in one
-// transaction. Both have to be below the same zone, and none of the zones below `from` can have the
-// name of one below `into`.
+// transaction. Both have to be below the same zone (or both be countries), and none of the zones
+// below `from` can have the name of one below `into`. If `into` has no official code and `from` has
+// one, `into` takes it.
 func (r *Repository) Merge(ctx context.Context, from, into int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -288,10 +289,9 @@ func (r *Repository) Merge(ctx context.Context, from, into int64) error {
 		}
 		parents[id] = parent
 	}
-	if parents[from] == nil || parents[into] == nil {
-		return ErrCountry
-	}
-	if *parents[from] != *parents[into] {
+	// Two countries have no zone above them: both are below the root, so they can be merged.
+	if (parents[from] == nil) != (parents[into] == nil) ||
+		(parents[from] != nil && *parents[from] != *parents[into]) {
 		return ErrMergeParents
 	}
 	var clash bool
@@ -307,6 +307,7 @@ func (r *Repository) Merge(ctx context.Context, from, into int64) error {
 		`UPDATE areas SET parent_id = $2 WHERE parent_id = $1`,
 		`UPDATE places SET area_id = $2 WHERE area_id = $1`,
 		`UPDATE osm_elements SET area_id = $2 WHERE area_id = $1`,
+		`UPDATE areas SET code = (SELECT code FROM areas WHERE id = $1) WHERE id = $2 AND code IS NULL`,
 		`DELETE FROM areas WHERE id = $1`,
 	} {
 		args := []any{from}

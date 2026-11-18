@@ -84,16 +84,10 @@ function build() {
       plural(zone.place_count, 'lugar', 'lugares');
     renameForm.elements.name.value = zone.name;
     renameForm.elements.kind.value = zone.kind;
-    // A country is renamed but never deleted; the rest only when nothing is in them.
-    const isCountry = !zone.parent_id;
-    deleteButton.disabled = isCountry || zone.child_count > 0 || zone.place_count > 0;
-    deleteButton.title = isCountry
-      ? 'Un país no se puede borrar'
-      : zone.child_count > 0
-        ? 'Tiene otras zonas dentro'
-        : zone.place_count > 0
-          ? 'Tiene lugares'
-          : '';
+    // A zone (a country too) is deleted only when nothing is in it.
+    deleteButton.disabled = zone.child_count > 0 || zone.place_count > 0;
+    deleteButton.title =
+      zone.child_count > 0 ? 'Tiene otras zonas dentro' : zone.place_count > 0 ? 'Tiene lugares' : '';
     // Where it is now; changing it and sending the form moves the zone (with all that is below it).
     const here = zone.id;
     const parent = zone.parent_id ? await apiFetch(`/areas/${zone.parent_id}`) : null;

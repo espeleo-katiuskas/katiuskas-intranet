@@ -212,15 +212,13 @@ func (s *Service) Update(ctx context.Context, id int64, name, kind string, move 
 	return s.repo.Update(ctx, id, kind, name, normalized, move)
 }
 
-// Delete removes a zone that has no zones below it and no places. A country is never deleted.
+// Delete removes a zone that has no zones below it and no places (a country too, if it has none).
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	a, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return err
 	}
 	switch {
-	case a.ParentID == nil:
-		return ErrCountry
 	case a.ChildCount > 0:
 		return ErrHasChildren
 	case a.PlaceCount > 0:
@@ -229,7 +227,8 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return s.repo.Delete(ctx, id)
 }
 
-// Merge moves everything in a zone to another below the same one, and deletes the first.
+// Merge moves everything in a zone to another below the same one, and deletes the first. Two countries
+// are below the same one: the root of the tree.
 func (s *Service) Merge(ctx context.Context, from, into int64) error {
 	if from == into {
 		return ErrMergeSelf

@@ -504,7 +504,7 @@ func TestRename(t *testing.T) {
 	status(t, e.json("PUT", fmt.Sprintf("/api/v1/areas/%d", e.portugal), e.admin.token, map[string]any{"name": "República Portuguesa"}), http.StatusOK)
 }
 
-// A zone is deleted only if nothing is below it and no place is in it, and a country never is.
+// A zone is deleted only if nothing is below it and no place is in it, a country included.
 func TestDelete(t *testing.T) {
 	e := newEnv(t)
 	leaf := e.add(e.madrid, "Hoja", "")
@@ -514,7 +514,7 @@ func TestDelete(t *testing.T) {
 	e.placeIn(used.ID)
 	errorCode(t, e.json("DELETE", areaPath(parent), e.admin.token, nil), 409, "area_has_children")
 	errorCode(t, e.json("DELETE", areaPath(used), e.admin.token, nil), 409, "area_in_use")
-	errorCode(t, e.json("DELETE", fmt.Sprintf("/api/v1/areas/%d", e.spain), e.admin.token, nil), 409, "area_is_country")
+	errorCode(t, e.json("DELETE", fmt.Sprintf("/api/v1/areas/%d", e.spain), e.admin.token, nil), 409, "area_has_children")
 	errorCode(t, e.json("DELETE", "/api/v1/areas/987654321", e.admin.token, nil), 404, "not_found")
 	for i := 0; i < 4; i++ {
 		e.notifier.wait(t)
@@ -560,12 +560,12 @@ func TestMerge(t *testing.T) {
 		t.Errorf("the element of the mirror follows the merge: %v %v", elementZone, err)
 	}
 
-	// What is refused: itself, a zone below another one, a country, one that does not exist, and a zone
+	// What is refused: itself, a zone below another one, a country with a zone, one that does not exist, and a zone
 	// whose children have the name of one of the target's.
 	other := e.add(e.madridCommunity, "En otro sitio", "Provincia")
 	errorCode(t, e.json("POST", areaPath(into)+"/merge", e.admin.token, map[string]any{"into_id": into.ID}), 400, "area_merge_self")
 	errorCode(t, e.json("POST", areaPath(into)+"/merge", e.admin.token, map[string]any{"into_id": other.ID}), 409, "area_merge_parents")
-	errorCode(t, e.json("POST", fmt.Sprintf("/api/v1/areas/%d/merge", e.spain), e.admin.token, map[string]any{"into_id": e.portugal}), 409, "area_is_country")
+	errorCode(t, e.json("POST", fmt.Sprintf("/api/v1/areas/%d/merge", e.spain), e.admin.token, map[string]any{"into_id": into.ID}), 409, "area_merge_parents")
 	errorCode(t, e.json("POST", areaPath(into)+"/merge", e.admin.token, map[string]any{"into_id": 987654321}), 404, "not_found")
 	errorCode(t, e.json("POST", "/api/v1/areas/987654321/merge", e.admin.token, map[string]any{"into_id": into.ID}), 404, "not_found")
 	a := e.add(e.madrid, "Pueblo A", "")
@@ -576,6 +576,36 @@ func TestMerge(t *testing.T) {
 	if still := decode[areas.Area](t, e.json("GET", areaPath(a), e.member.token, nil)); still.ChildCount != 1 {
 		t.Errorf("a refused merge changes nothing: %+v", still)
 	}
+}
+
+// Countries are deleted when empty and merged with each other, like any zone; a merge keeps the official
+// code if the country that stays has none, and a country cannot be merged with a zone that is in another.
+func TestCountriesDeleteAndMerge(t *testing.T) {
+	e := newEnv(t)
+	country := func(name string) areas.Area {
+		rec := e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"name": name})
+		status(t, rec, http.StatusCreated)
+		e.notifier.wait(t)
+		return decode[areas.Area](t, rec)
+	}
+	empty := country("Vacilandia")
+	status(t, e.json("DELETE", areaPath(empty), e.admin.token, nil), http.StatusNoContent)
+	e.notifier.wait(t)
+
+	from, into := country("Antigua Unión"), country("Nueva Unión")
+	if _, err := e.tx.Exec(context.Background(), `UPDATE areas SET code = 'ZZ' WHERE id = $1`, from.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.add(from.ID, "Capital", "Ciudad")
+	e.placeIn(from.ID)
+	e.notifier.wait(t)
+	errorCode(t, e.json("POST", areaPath(from)+"/merge", e.admin.token, map[string]any{"into_id": e.madrid}), 409, "area_merge_parents")
+	status(t, e.json("POST", areaPath(from)+"/merge", e.admin.token, map[string]any{"into_id": into.ID}), http.StatusOK)
+	merged := decode[areas.Area](t, e.json("GET", areaPath(into), e.member.token, nil))
+	if merged.ChildCount != 1 || merged.PlaceCount != 1 || merged.Code == nil || *merged.Code != "ZZ" {
+		t.Errorf("the country that stays has what was in the other, and its code: %+v", merged)
+	}
+	errorCode(t, e.json("GET", areaPath(from), e.member.token, nil), 404, "not_found")
 }
 
 // Only an admin adds a country, a zone that is in no other one; its kind is "País" unless it is said.

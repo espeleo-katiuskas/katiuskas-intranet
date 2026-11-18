@@ -1048,14 +1048,14 @@ admin alone.
     `area_move_cycle` (into itself or into a zone below it)
 - **DELETE** `/areas/{id}` — *Admin*. Deletes a zone with no zones below it and no places in it.
   - returns: 204
-  - errors: 400 `invalid_id`; 404 `not_found`; 409 `area_is_country`, `area_has_children`,
-    `area_in_use`
+  - errors: 400 `invalid_id`; 404 `not_found`; 409 `area_has_children`, `area_in_use`
 - **POST** `/areas/{id}/merge` — *Admin*. Moves the zones below this one and the places in it to
-  another zone below the same one, and deletes this one.
+  another zone below the same one (two countries count as below the same one), and deletes this
+  one. If the zone that stays has no official code and this one has, it takes it.
   - body: `into_id*`
   - returns: 200 `{id}`: the zone it was merged into
   - errors: 400 `invalid_id`, `invalid_body`, `area_merge_self`; 404 `not_found`; 409
-    `area_is_country`, `area_merge_parents` (they are not below the same zone), `duplicate_area` (a
+    `area_merge_parents` (they are not below the same zone), `duplicate_area` (a
     zone below this one has the name of one below the other)
 
 ## Distributions
@@ -1393,7 +1393,8 @@ Nested fields:
   the date of its data, how old that is, and what it did, and how many municipal boundaries it found
   that the club has no zone for, with the first of their INE codes: the list of municipalities is
   behind, which is not a problem); `stale` says the data is older than the limit and `failing` that
-  the latest load failed. `sources` is empty if the mirror was never loaded; `osm` is left out if it cannot be read
+  the latest load failed. `sources` is empty if the mirror was never loaded; `osm` is left out if it
+  cannot be read
 - `activity`: `{users, requests}`, each `{last_hour, last_day, last_month}`; left out if it cannot
   be read. `users` counts the different people with a session used in the period (a session counts
   in the period of its last use only; an administrator acting as somebody else does not count) and

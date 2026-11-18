@@ -126,7 +126,6 @@ const texts = {
   duplicate_area: 'Ya hay una zona con ese nombre dentro de esa.',
   area_has_children: 'Esta zona tiene otras zonas dentro y no se puede borrar.',
   area_in_use: 'Esta zona tiene lugares y no se puede borrar.',
-  area_is_country: 'Un país no se puede borrar ni fusionar.',
   area_merge_parents: 'Solo se pueden fusionar dos zonas que estén dentro de la misma.',
   unknown_place_type: 'Ese tipo de lugar no existe.',
   place_type_required: 'Elige el tipo de lugar.',

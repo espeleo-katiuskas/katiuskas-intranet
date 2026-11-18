@@ -31,8 +31,6 @@ var (
 	ErrDuplicate     = errors.New("there is already a zone with that name there")
 	ErrHasChildren   = errors.New("the zone has zones below it and cannot be deleted")
 	ErrInUse         = errors.New("the zone has places and cannot be deleted")
-	// ErrCountry means a country, which is a root of the tree, cannot be deleted or merged.
-	ErrCountry = errors.New("a country cannot be deleted or merged")
 	// ErrMergeParents means two zones are merged only if they are below the same one.
 	ErrMergeParents = errors.New("only two zones below the same one can be merged")
 	ErrMergeSelf    = errors.New("a zone cannot be merged into itself")
