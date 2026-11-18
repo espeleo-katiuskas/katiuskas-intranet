@@ -320,8 +320,11 @@ func TestSyncerWorksOutTheZone(t *testing.T) {
 		t.Errorf("where each is: %+v", where)
 	}
 	d, err := repo.Get(ctx, "node", 1)
-	if err != nil || d.Where != "Valdemanco, Madrid" {
-		t.Errorf("the detail says where: %q %v", d.Where, err)
+	if err != nil || d.Where != "Valdemanco, Madrid" || d.AreaID == nil || *d.AreaID != zoneID {
+		t.Errorf("the detail says where, and in which zone: %q %v %v", d.Where, d.AreaID, err)
+	}
+	if d2, err := repo.Get(ctx, "node", 2); err != nil || d2.AreaID != nil || d2.Where != "" {
+		t.Errorf("an element in no zone has none: %+v %v", d2.AreaID, err)
 	}
 
 	// The same extract again, a newer one: nothing changes, zones included.

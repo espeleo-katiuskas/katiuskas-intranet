@@ -294,8 +294,10 @@ type Detail struct {
 	Tags      map[string]string `json:"tags"`
 	Geometry  json.RawMessage   `json:"geometry"`
 	DeletedAt *time.Time        `json:"deleted_at"`
-	// Where says the zone the element is in and the one it is in ("Rasines, Cantabria"), when it is known.
-	Where string `json:"where,omitempty"`
+	// AreaID is the zone the element is in (a row of `areas`), when it is known, and Where says it and the
+	// one it is in ("Rasines, Cantabria").
+	AreaID *int64 `json:"area_id,omitempty"`
+	Where  string `json:"where,omitempty"`
 }
 
 // whereJoin adds to a query over `osm_elements e` the names of the zone of each element and of the zone it is
@@ -355,11 +357,11 @@ func (r *Repository) Get(ctx context.Context, typ string, id int64) (Detail, err
 	var tags []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT e.osm_type, e.osm_id, e.version, e.osm_timestamp, e.category, e.lat, e.lon, e.tags, e.geometry,
-			e.deleted_at, coalesce(array_to_string(z.names, ', '), '')
+			e.deleted_at, e.area_id, coalesce(array_to_string(z.names, ', '), '')
 		FROM osm_elements e`+whereJoin+`
 		WHERE e.osm_type = $1 AND e.osm_id = $2
 	`, typ, id).Scan(&d.Type, &d.ID, &d.Version, &d.Timestamp, &d.Category, &d.Lat, &d.Lon, &tags, &d.Geometry,
-		&d.DeletedAt, &d.Where)
+		&d.DeletedAt, &d.AreaID, &d.Where)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Detail{}, ErrNotFound
 	}
