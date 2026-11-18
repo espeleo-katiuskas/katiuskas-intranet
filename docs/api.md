@@ -2241,6 +2241,7 @@ An `OsmPoint` and:
 | `tags` | object of text, all the tags as they are |
 | `geometry` | GeoJSON of its outline (a polygon, a line or a `MultiLineString` for a canyon), null for a node |
 | `deleted_at` | datetime, when it stopped being in OpenStreetMap; null if it is |
+| `area_id` | integer, the zone of `areas` the element is in; left out if it is in none known |
 | `where` | text, "municipality, province", left out if the element is in no known municipality |
 
 ### `ArchiveEntry`

@@ -248,6 +248,17 @@ function ensurePlaceDialog() {
     syncKind();
     syncState();
   });
+  // Puts a zone that is already known (the one of an element of OpenStreetMap) in "Dónde está", as a proposal
+  // like the one of the coordinates: a person may change it, and then it is theirs.
+  function proposeKnownArea(area, text) {
+    lookup += 1; // An answer of the zone of the coordinates that is still coming is dropped.
+    proposing = true;
+    areaPicker.setArea(area);
+    proposing = false;
+    proposedId = area.id;
+    proposal.textContent = text;
+    proposal.hidden = false;
+  }
   syncState();
   placeDialog = {
     dialog,
@@ -260,6 +271,7 @@ function ensurePlaceDialog() {
     updateCoordinates,
     areaPicker,
     proposeArea,
+    proposeKnownArea,
   };
   return placeDialog;
 }
@@ -342,6 +354,7 @@ function openPlaceDialog({
     updateCoordinates,
     areaPicker,
     proposeArea,
+    proposeKnownArea,
   } = ensurePlaceDialog();
   document.getElementById('pd-title').textContent = place ? 'Editar lugar' : 'Nuevo lugar';
   const osmNote = document.getElementById('pd-osm-note');
@@ -404,7 +417,25 @@ function openPlaceDialog({
   const start = fromOsm ? { lat: osm.lat, lon: osm.lon } : coordinates;
   if (!place && start) form.elements.coordinates.value = formatDecimal(start.lat, start.lon);
   updateCoordinates();
-  if (!place && start) proposeArea();
+  if (!place && start) {
+    if (fromOsm && osm.area_id) {
+      // The element has its zone already (the load worked it out): no need to ask where the coordinates are,
+      // which would go to an outside service. If it cannot be read, the coordinates are asked as always.
+      apiFetch(`/areas/${osm.area_id}`)
+        .then((area) => {
+          // Not if the dialog was closed meanwhile, or the person already chose a zone or is typing one.
+          const typing = document.getElementById('pd-area').value.trim() !== '';
+          if (!dialog.open || areaPicker.area || typing) return;
+          proposeKnownArea(
+            area,
+            `Zona del elemento de OpenStreetMap: ${areaChain(area)}. Cámbiala si no es esa.`,
+          );
+        })
+        .catch(() => proposeArea());
+    } else {
+      proposeArea();
+    }
+  }
   syncKind();
   syncState();
   form.onsubmit = async (event) => {

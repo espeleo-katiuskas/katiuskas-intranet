@@ -383,10 +383,14 @@ click on a ring is for the ring (it does not offer to create a place). The popup
 OpenStreetMap says already in it (`osmDefaults`): the type its category suggests (Cavidad, Cañón,
 Refugio or Vía ferrata; the subtype and the state are left to the person), the name, the other names
 (`alt_name`, `name:es`), the altitude (`ele`), for a cavity the depth and the length when the tags
-are numbers, the description with the website at the end, and the coordinates, from which the zone
-is proposed as with any coordinates. A note above the form says where the data comes from. Saving
-sends `osm_type` and `osm_id` with the rest, so the place keeps its element, and the page goes to
-the new place; that element is no longer offered as a candidate.
+are numbers, the description with the website at the end, and the coordinates. The zone is the one
+the element already has (`area_id` of `GET /osm/elements/{type}/{id}`, read with `GET /areas/{id}`
+and proposed as "Zona del elemento de OpenStreetMap: …", which the person may change), so nothing is
+asked of the outside service; an element in no known zone (the sea, Gibraltar) falls back to
+proposing the zone of its coordinates as with any coordinates (`GET /areas/locate`). A note above
+the form says where the data comes from. Saving sends `osm_type` and `osm_id` with the rest, so the
+place keeps its element, and the page goes to the new place; that element is no longer offered as a
+candidate.
 
 **Linking a place to OpenStreetMap.** The page of a place (`/lugar`) has a section "OpenStreetMap"
 that says whether the place is an element of OpenStreetMap (its type and id) and has the buttons to

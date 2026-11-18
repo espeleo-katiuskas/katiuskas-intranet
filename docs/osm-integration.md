@@ -170,10 +170,13 @@ The zone is part of what the mirror hashes, so the first load after this change 
 as changed (once), and a load in which an element changes municipality says it changed. It does not
 touch the places: the notice of what changed in an element looks at its tags and its point.
 
+The form of a place made from an element takes the zone of the element (`area_id`, with `GET
+/areas/{id}`) as its proposal, so nothing is asked of Nominatim; only an element in no known zone
+falls back to the zone of its coordinates.
+
 **Still to do**: a nearest-municipality fallback for the coastal ones, and the zone of the elements
-of other countries (the country alone, from the country polygons) if they are ever loaded. The form
-of a place made from an element still asks Nominatim for the zone of its coordinates, which works;
-it could take the element's own zone instead.
+of other countries, which needs a rule of its own for each (a reference and a level) and its zones
+in the catalogue.
 
 ## 7. How the elements become places
 
@@ -431,7 +434,7 @@ deleted, as with any other.
    selector of layers of the map of `/lugares`, from zoom 11 up and by the box in view, with a popup
    (the data, a button) and the ODbL credit on the map. "Añadir al catálogo" opens the form of a new
    place with the name, other names, altitude, description, type and coordinates filled in and the
-   zone proposed from them (`/areas/locate`, so the zones of the elements are not needed for this),
+   zone taken from the element's own (or, for one in no known zone, proposed from its coordinates),
    and `POST /places` keeps `osm_type` and `osm_id`: promotion on demand, the option chosen in 7. An
    element that is a place is no longer a candidate. The magnifier of the map also searches the
    mirror by name (`GET /osm/search`), which is how a cave is found to make a place of it, since the
