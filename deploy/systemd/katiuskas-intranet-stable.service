@@ -14,7 +14,7 @@ Description=Katiuskas Intranet API (production)
 After=network.target postgresql.service
 
 [Service]
-Type=simple
+Type=exec
 User=intranet
 Group=intranet
 WorkingDirectory=/opt/katiuskas-intranet-stable

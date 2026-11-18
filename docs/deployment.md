@@ -215,7 +215,7 @@ Description=Katiuskas Intranet API
 After=network.target postgresql.service
 
 [Service]
-Type=simple
+Type=exec
 User=intranet
 Group=intranet
 WorkingDirectory=/opt/katiuskas-intranet
@@ -247,7 +247,9 @@ sudo systemctl enable --now katiuskas-intranet-stable katiuskas-intranet-testing
 ```
 
 `enable` makes it start by itself when the machine reboots; `Restart=on-failure` makes it restart by
-itself if the process dies.
+itself if the process dies. `Type=exec` (rather than `simple`) makes `systemctl start` and `restart`
+fail at once if the binary cannot be run (it is missing, or the user is wrong), instead of reporting
+success and failing afterwards.
 
 ## 5. Caddy
 
