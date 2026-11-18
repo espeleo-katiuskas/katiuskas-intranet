@@ -970,16 +970,16 @@ func TestRequestMagicLinkSkipsSomeoneWithNoBaselineRole(t *testing.T) {
 	user := testutil.InsertUser(t, s.tx, "611222333")
 
 	rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 unknown_details, as for details nobody has, got %d", rec.Code)
+	if rec.Code != http.StatusForbidden || errorCode(t, rec) != "no_access" {
+		t.Fatalf("expected 403 no_access, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if s.mailer.sent != 0 {
 		t.Errorf("expected no email for someone with no admin/board/member role, got %d sent", s.mailer.sent)
 	}
 }
 
-// Details that match nobody who can sign in are told so (404 unknown_details), the same for
-// a pair nobody has and for a person with no role that gives access; a match is a 200.
+// Details that match nobody who can sign in are told so: 404 unknown_details for a pair nobody
+// has, 403 no_access for a person with no role that gives access; a match is a 200.
 func TestRequestMagicLinkSaysWhenTheDetailsMatchNobody(t *testing.T) {
 	s := newTestServer(t)
 	user := s.insertUserWithRole(t, "611222333", "admin")
@@ -993,7 +993,6 @@ func TestRequestMagicLinkSaysWhenTheDetailsMatchNobody(t *testing.T) {
 		"right email, wrong phone": {"email": user.Email, "phone": "000000000"},
 		"unknown email":            {"email": "nobody@example.com", "phone": "000000000"},
 		"phone of someone else":    {"email": user.Email, "phone": noAccess.Phone},
-		"person with no access":    {"email": noAccess.Email, "phone": noAccess.Phone},
 	} {
 		rec := s.post(t, "/api/v1/auth/magic-link", body)
 		if rec.Code != http.StatusNotFound {
@@ -1003,6 +1002,10 @@ func TestRequestMagicLinkSaysWhenTheDetailsMatchNobody(t *testing.T) {
 		if code := errorCode(t, rec); code != "unknown_details" {
 			t.Errorf("%s: expected unknown_details, got %q", name, code)
 		}
+	}
+	rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": noAccess.Email, "phone": noAccess.Phone})
+	if rec.Code != http.StatusForbidden || errorCode(t, rec) != "no_access" {
+		t.Errorf("person with no access: expected 403 no_access, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if s.mailer.sent != 1 {
 		t.Errorf("expected exactly 1 email sent (only for the real match), got %d", s.mailer.sent)
@@ -1750,8 +1753,8 @@ func TestFailedAccessAttemptsAreReportedToTheLogChannel(t *testing.T) {
 		s := newTestServer(t)
 		user := testutil.InsertUser(t, s.tx, "611222333")
 		rec := s.post(t, "/api/v1/auth/magic-link", map[string]string{"email": user.Email, "phone": user.Phone})
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("expected 404 unknown_details, got %d", rec.Code)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 no_access, got %d", rec.Code)
 		}
 		msg := s.notifier.waitForMessage(t)
 		if !strings.Contains(msg, "Acceso fallido") || !strings.Contains(msg, user.Login) {

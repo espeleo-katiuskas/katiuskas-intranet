@@ -1450,17 +1450,17 @@ the send of a bot-flow magic-link DM.
   deferred to a goroutine (a background goroutine independently touching the database
   isn't safe against a request-scoped `pgx.Tx` — every handler test shares one, see
   `internal/authapi/handler_test.go`'s `capturingNotifier`).
-- `authapi.Handler.notifyAccessProblem` reports to that same channel when someone types
-  details on `/login` that don't work, so an admin can see it — a typo, or a person who
-  should have access: "⚠️ Acceso fallido" for an email and phone nobody has (the typed
-  values, trimmed and on one line by `logSafe`, plus the caller's address) or a person with
-  no role that gives access (their login), and "⚠️ Código de acceso rechazado" for a code
-  that is wrong or expired (the person's login) or typed with details nobody has. The
-  caller is told as well, with a 404 `unknown_details` for both (the club accepts that this
-  says who has access: it helps members who mistyped, and the per-address limit keeps it from
-  being scanned) — and a successful request, or one held back by the cooldown, reports nothing.
-  `RequestMagicLink` learns which case it was from `sendMagicLinkIfEligible`'s
-  `magicLinkOutcome`; the send is fire-and-forget like `notifyLogin`'s.
+- `authapi.Handler.notifyAccessProblem` reports to that same channel when someone types details on
+  `/login` that don't work, so an admin can see it — a typo, or a person who should have access: "⚠️
+  Acceso fallido" for an email and phone nobody has (the typed values, trimmed and on one line by
+  `logSafe`, plus the caller's address) or a person with no role that gives access (their login),
+  and "⚠️ Código de acceso rechazado" for a code that is wrong or expired (the person's login) or
+  typed with details nobody has. The caller is told as well, with a 404 `unknown_details` for the
+  first and a 403 `no_access` for the second (the club accepts that this says who has access: it
+  helps members who mistyped and former members who wonder why, and the per-address limit keeps it
+  from being scanned) — and a successful request, or one held back by the cooldown, reports nothing.
+  `RequestMagicLink` learns which case it was from `sendMagicLinkIfEligible`'s `magicLinkOutcome`;
+  the send is fire-and-forget like `notifyLogin`'s.
 - `authapi.Handler.notifyMagicLinkViaTelegram` DMs a sign-in link to whoever has linked
   their Telegram account (`users.Repository.TelegramChatIDForUser`). Whether the email
   `issueMagicLink` (the shared core both `sendMagicLinkIfEligible`, for the web endpoint,

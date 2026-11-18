@@ -54,6 +54,8 @@ const texts = {
   invalid_token: 'El enlace de acceso no es válido o ha caducado. Pide uno nuevo.',
   invalid_code: 'El código no es válido o ha caducado.',
   unknown_details: 'No hay ninguna persona con ese correo y ese teléfono que tenga acceso.',
+  no_access:
+    'No tienes acceso a la Intranet: solo pueden entrar los socios actuales. Si crees que es un error, ponte en contacto con la Junta Directiva.',
   not_impersonating: 'Esta sesión no es una impersonación.',
   cannot_impersonate_self: 'No puedes impersonarte a ti mismo.',
   not_eligible: 'Esa persona no puede usar la intranet, así que no se puede entrar como ella.',

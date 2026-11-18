@@ -286,11 +286,12 @@ URL.
   has at least one of the roles `admin`, `board` or `member` (`auth.BaselineRoles`, see
   "Permissions"): signing in would be of no use to someone who has none, so
   nothing is sent to them.
-- `/auth/magic-link` says so when the pair matches nobody who can sign in (404 `unknown_details`,
-  the same whether nobody has that email and phone or the person has no role that gives access), so
-  that a member who mistyped knows to check it, or to ask the Junta Directiva: the club accepts that
-  this tells who has access, which is no secret within it and helps far more than it exposes, and
-  the per-address limit keeps it from being scanned. For a match it is a 200 whether or not the
+- `/auth/magic-link` says so when the pair matches nobody who can sign in: 404 `unknown_details`
+  when nobody has that email and phone, so that a member who mistyped knows to check it, and 403
+  `no_access` when the person exists but has no role that gives access (a former member), so that
+  they know it is not a typo and to ask the Junta Directiva. The club accepts that this tells who
+  has access, which is no secret within it and helps far more than it exposes, and the per-address
+  limit keeps it from being scanned. For a match it is a 200 whether or not the
   email was really sent (the cooldown), so it cannot be used to send unwanted email.
 - `POST /auth/magic-link/consume-code` identifies the person by email+phone just like
   the request itself (the code alone is too short to serve as a lookup key) and always

@@ -94,14 +94,15 @@ paths:
         gets an email at all — signing in would leave them unable to
         call anything anyway.
 
-        When the pair matches nobody who can sign in — no one has that
-        email and phone together, or the person holds none of the roles
-        above — it answers 404 unknown_details, the same in both cases, so
-        that a member who mistyped something knows to check it, or to ask
-        the board. That lets the endpoint be used to check who has access,
-        which the club accepts (the per-address throttle below is what
-        keeps it from being scanned); both cases are also reported to the
-        administrators' log channel, with what was typed. A match is a 200
+        When the pair matches nobody — no one has that email and phone
+        together — it answers 404 unknown_details, so that a member who
+        mistyped something knows to check it; when it matches a person who
+        holds none of the roles above, it answers 403 no_access, so that
+        they know it is not a typo and to ask the board. That lets the
+        endpoint be used to check who has access, which the club accepts
+        (the per-address throttle below is what keeps it from being
+        scanned); both cases are also reported to the administrators' log
+        channel, with what was typed. A match is a 200
         whether or not an email was actually sent (a recent one might
         already be on its way), so the endpoint cannot be used to spam
         someone's inbox. The phone is compared by its digits, and a
@@ -144,8 +145,10 @@ paths:
                   message: { type: string, description: A fixed, generic confirmation text. }
         "400":
           description: invalid_body (malformed JSON) or missing_fields (email and phone are both required).
+        "403":
+          description: no_access — the person exists but holds no role that gives access to the intranet.
         "404":
-          description: unknown_details — no one with access has that email and phone together (no match, or a match with no role that gives access).
+          description: unknown_details — no one has that email and phone together.
         "429":
           description: rate_limited — too many requests from this address recently; try again later.
 

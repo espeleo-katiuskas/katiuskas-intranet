@@ -734,22 +734,24 @@ public address, and the API shortens the session there, `docs/architecture.md`, 
 "Sesión local", in the accent color, saying that the address is for shared use and the session will
 close by itself in a few hours (no number, so it can't disagree with `LocalTokenTTL`). Everywhere
 else it stays hidden. That second panel appears only when the API accepts the details; for a pair
-that matches nobody who can sign in it answers 404 `unknown_details`, and the first panel says so
-("Ese correo y ese teléfono no corresponden a nadie con acceso…") and asks to check them and, if
-they are right, to contact the Junta Directiva. The panel says an email with a link and a code will
-arrive. The link from that email is usually opened in another window or tab, which signs in there
-while this one keeps asking: `auth.js`'s `watchForSignInElsewhere` therefore listens for the
-`storage` event on the `token` key (and for the tab becoming visible again, for a browser that
-doesn't deliver it) and, when a stored token really is valid (`GET /auth/me`, as at load), sends
-this window to `/` already signed in — a stale or invalid one changes nothing. `login.html` also
-offers Telegram as a second way in, alongside (never instead of) the email/phone form: on load,
-`auth.js`'s `loadTelegramBotInfo` calls the unauthenticated `GET /auth/telegram-bot`
-(`authapi.Handler.TelegramBotInfo`, backed by `config.TelegramBotUsername`/`TELEGRAM_BOT_USERNAME` —
-independent of `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is,
-since it's only the public "@name" a `t.me/<username>` link needs) and, only if a username comes
-back non-empty, un-hides a note linking straight to the bot's chat — left hidden by default so
-there's no dead link (or flash of one) when Telegram isn't configured at all, or the request itself
-fails.
+that matches nobody it answers 404 `unknown_details`, and the first panel says so ("Ese correo y ese
+teléfono no corresponden a nadie con acceso…") and asks to check them and, if they are right, to
+contact the Junta Directiva; for a person with no role that gives access it answers 403 `no_access`,
+and the panel says "No tienes acceso a la Intranet: solo pueden entrar los socios actuales…" (the
+text of `error-texts.js`), without asking to check what was typed. The second panel says an email
+with a link and a code will arrive. The link from that email is usually opened in another window or
+tab, which signs in there while this one keeps asking: `auth.js`'s `watchForSignInElsewhere`
+therefore listens for the `storage` event on the `token` key (and for the tab becoming visible
+again, for a browser that doesn't deliver it) and, when a stored token really is valid (`GET
+/auth/me`, as at load), sends this window to `/` already signed in — a stale or invalid one changes
+nothing. `login.html` also offers Telegram as a second way in, alongside (never instead of) the
+email/phone form: on load, `auth.js`'s `loadTelegramBotInfo` calls the unauthenticated `GET
+/auth/telegram-bot` (`authapi.Handler.TelegramBotInfo`, backed by
+`config.TelegramBotUsername`/`TELEGRAM_BOT_USERNAME` — independent of
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID`, and not secret the way that token is, since it's only
+the public "@name" a `t.me/<username>` link needs) and, only if a username comes back non-empty,
+un-hides a note linking straight to the bot's chat — left hidden by default so there's no dead link
+(or flash of one) when Telegram isn't configured at all, or the request itself fails.
 
 `archive.js` itself doesn't lean on the session cookie described above (`dashboard.js`'s own simpler
 Documentos/Actas/Memorias links do instead) — downloading or previewing a document from the

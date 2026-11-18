@@ -160,14 +160,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/auth/impersonate/exit", h.authenticator.RequireAuth(http.HandlerFunc(h.ExitImpersonation)))
 }
 
-// RequestMagicLink says so when email+phone match nobody who can sign in
-// (404 unknown_details: no one has that pair, or the person holds no role that
-// could use the API, see auth.BaselineRoles), so that a member who mistyped
-// something knows to check it, or to ask the board. That lets the endpoint be
-// used to check who's in the system, which the club accepts: it is public
-// information within the club and the answer helps people far more than it
-// exposes them; the per-address rate limit (ipLimiter) is what keeps it from
-// being scanned. For a match it answers 200 whether or not a link was actually
+// RequestMagicLink says so when email+phone match nobody who can sign in: 404
+// unknown_details when no one has that pair, so that a member who mistyped
+// something knows to check it, and 403 no_access when the person exists but
+// holds no role that could use the API (see auth.BaselineRoles), so that a
+// former member knows it is not a typo and to ask the board. That lets the
+// endpoint be used to check who's in the system, which the club accepts: it is
+// public information within the club and the answers help people far more than
+// they expose them; the per-address rate limit (ipLimiter) is what keeps it
+// from being scanned. For a match it answers 200 whether or not a link was actually
 // sent (a recent one might already be on its way, the cooldown), so the
 // endpoint can't be used to spam a real person's inbox.
 func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
@@ -198,10 +199,14 @@ func (h *Handler) RequestMagicLink(w http.ResponseWriter, r *http.Request) {
 		h.notifyAccessProblem(fmt.Sprintf("⚠️ Acceso fallido: %s (%s) ha pedido un enlace, pero no tiene ningún rol que dé acceso (admin, board o member).",
 			user.Login, httpapi.ClientIP(r)))
 	}
-	if outcome == outcomeUnknownDetails || outcome == outcomeNoAccess {
-		// The same answer for both: that no one with access has that email and phone together.
+	switch outcome {
+	case outcomeUnknownDetails:
 		httpapi.WriteError(w, http.StatusNotFound, "unknown_details",
-			"no one with access has that email and phone together")
+			"no one has that email and phone together")
+		return
+	case outcomeNoAccess:
+		httpapi.WriteError(w, http.StatusForbidden, "no_access",
+			"the person has no role that gives access to the intranet")
 		return
 	}
 

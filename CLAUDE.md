@@ -156,9 +156,9 @@ also requires admin, board or member on top of the roles a route lists, so someo
 only for `ProtectAllowingCookie`, used by the file-serving routes of archive and userfiles (and
 nowhere else). Magic-link token 128 bits (it travels in a URL), 6-digit code bounded by
 `code_attempts`; the request and code-consume routes share one `IPRateLimiter`; the request says
-when email+phone match nobody with access (404 `unknown_details`, a deliberate choice), the code
-route does not. Impersonation is admin-only, short-lived (`ImpersonationTokenTTL`) and `POST
-/auth/impersonate/exit` needs only `RequireAuth`.
+when email+phone match nobody (404 `unknown_details`) or a person with no role that gives access
+(403 `no_access`), a deliberate choice; the code route does not. Impersonation is admin-only,
+short-lived (`ImpersonationTokenTTL`) and `POST /auth/impersonate/exit` needs only `RequireAuth`.
 
 **Roles.** `admin`, `board`, `member`, `former_member` are system roles; `board`, `member`,
 `former_member` are automatic (computed live in `roles.Repository.ListNamesForUser` from

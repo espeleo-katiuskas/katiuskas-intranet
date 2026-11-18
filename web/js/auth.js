@@ -1,4 +1,5 @@
 import { goAfterLogin, setToken } from './api.js';
+import { errorText } from './error-texts.js';
 import { initPickerSearch } from './picker-search.js';
 
 const API_BASE = '/api/v1';
@@ -229,9 +230,16 @@ async function handleRequestSubmit(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, phone }),
     });
+    if (response.status === 403) {
+      // no_access: the person exists but holds no role that gives access (a former member). It is
+      // not a typo, so it says so and does not ask to check what was typed.
+      errorBox.textContent = errorText('no_access');
+      errorBox.hidden = false;
+      return;
+    }
     if (response.status === 404) {
-      // unknown_details: nobody with access has that email and phone together. Said as it is,
-      // since a typo is by far the likeliest cause and the person can fix it, or ask the board.
+      // unknown_details: nobody has that email and phone together. Said as it is, since a typo
+      // is by far the likeliest cause and the person can fix it, or ask the board.
       errorBox.textContent =
         'Ese correo y ese teléfono no corresponden a nadie con acceso a la Intranet. Comprueba que los has escrito bien; si lo están, ponte en contacto con la Junta Directiva.';
       errorBox.hidden = false;
