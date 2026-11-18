@@ -1,6 +1,7 @@
 // Package osmmirror keeps a local copy of the elements of OpenStreetMap that matter to the club
-// (docs/osm-integration.md): caves, huts and via ferratas. It is fed by cmd/osmsync from the extracts that
-// Geofabrik publishes, never from a request, and only that command writes the table `osm_elements`.
+// (docs/osm-integration.md): caves, canyons, mines, huts and via ferratas. It is fed by cmd/osmsync from the
+// extracts that Geofabrik publishes, never from a request, and only that command writes the table
+// `osm_elements`.
 package osmmirror
 
 import (

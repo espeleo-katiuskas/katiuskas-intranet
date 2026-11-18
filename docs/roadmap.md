@@ -14,26 +14,10 @@ this order:
 
 - **Tracks**: the way of an approach or of a canyon, as a GPX attached to the place and drawn on its
   map.
-- **OpenStreetMap layer**: superseded by the larger plan of `osm-integration.md` (a local copy of
-  OSM, refreshed from downloaded extracts, instead of Overpass queries). The idea so far: the cave
-  entrances of OpenStreetMap (`natural=cave_entrance`, about 9,400 in Spain, almost all with a name
-  and a coordinate, few with an altitude, a description or a web page) shown on the map as grey
-  dots, apart from the catalogue, so that it keeps being the club's own. A member who sees one worth
-  having presses "Añadir al catálogo" and gets the dialog of a new place with the name, the other
-  names, the coordinate and the altitude filled in, and the id of the OpenStreetMap element kept in
-  the new place (a column in `places`) so that the same entrance is not offered again, nor added
-  twice. They would be asked for the area on view only, by the API (an Overpass query with a cache,
-  not from the browser: the public instances ask for light use and an identifiable client) and never
-  stored. The public Overpass instances are often at capacity (a simple query took half a minute,
-  and others did not answer at all), so the layer has to cope with slow and failed answers: a long
-  timeout, the cache, and a note saying that the layer could not be loaded now, without hindering
-  the rest of the map. The zone of a place added this way would be proposed with `GET
-  /areas/locate`, which already exists (the form of a place uses it when the coordinates are
-  written), and the member confirms or changes it. To settle: which subtype a cavity is
-  (OpenStreetMap does not say, only the name hints at it, so the member would choose it), the state
-  a place added this way starts with, and the credit: the data is ODbL, so the layer says where it
-  comes from and the id of OpenStreetMap is kept, and the catalogue must not be published as a
-  database without looking at what that asks for.
+- **OpenStreetMap**: built, as a local mirror of the elements that matter, a layer on the map, a
+  search by name, "Añadir al catálogo", the link of a place to its element and the notice of what
+  changed there. What is left (a few small things, and the decisions about private locations and
+  about contributing back to OpenStreetMap) is in section 5 of `osm-integration.md`.
 - **Coordinates for the zones**: `lat` and `lon` (optional) on `areas`, filled once from an open
   source (the IGN's *Nomenclátor Geográfico de Municipios y Entidades de Población* for Spain,
   GeoNames for countries and provinces), matching the names of the seed (migration 00062), which

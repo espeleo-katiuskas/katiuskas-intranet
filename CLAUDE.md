@@ -24,7 +24,7 @@ explanations live in `docs/`; read the one that matches the task before changing
 | `docs/architecture.md` | overview and business rules |
 | `docs/environments.md`, `docs/deployment.md` | local / testing / production, and how to deploy |
 | `docs/roadmap.md` | what is planned and not done yet, with the questions to settle before building it |
-| `docs/osm-integration.md` | the plan to base the places on a local copy of OpenStreetMap (the mirror is built, the rest is not) |
+| `docs/osm-integration.md` | how the places use OpenStreetMap: what is built, the decisions and why, what OSM has, what is open |
 
 Keep them in sync in the same change as the code: a route, body or error → `openapi.yaml` and
 `docs/api.md`; a migration → `docs/database.md`; a rule or invariant → its section in
