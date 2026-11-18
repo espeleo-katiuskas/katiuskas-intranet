@@ -338,6 +338,12 @@ async function load() {
   }
 }
 
+// The OpenStreetMap section (the link, what it says of the element and the buttons to copy it) lives inside
+// the dialog "Editar lugar": it is moved there while the dialog is open and back, hidden, when it closes.
+const osmSection = document.getElementById('osm-section');
+const osmHome = osmSection.parentElement;
+const editDialog = () => document.getElementById('place-dialog');
+
 document.getElementById('edit-place').addEventListener('click', () => {
   openPlaceDialog({
     types,
@@ -350,12 +356,23 @@ document.getElementById('edit-place').addEventListener('click', () => {
       await load();
     },
   });
+  document.getElementById('pd-osm-slot').append(osmSection);
+  osmSection.hidden = false;
+  editDialog().addEventListener(
+    'close',
+    () => {
+      osmSection.hidden = true;
+      osmHome.append(osmSection);
+    },
+    { once: true },
+  );
 });
 
 document.getElementById('osm-link').addEventListener('click', () => {
   openOsmLinkDialog({
     place,
     onLinked: async () => {
+      editDialog().close(); // Its form would show what the place was before.
       showFeedback('Lugar vinculado con OpenStreetMap.');
       await load();
     },
@@ -373,6 +390,7 @@ document.getElementById('osm-data').addEventListener('click', async (event) => {
       method: 'PUT',
       body: JSON.stringify(copyFromOsm(place, osmElement, button.dataset.osmCopy)),
     });
+    editDialog().close();
     showFeedback('Lugar actualizado con el dato de OpenStreetMap.');
     await load();
   } catch (err) {
@@ -400,6 +418,7 @@ document.getElementById('osm-unlink').addEventListener('click', async () => {
     return;
   try {
     await apiFetch(`/places/${placeId}/links/osm`, { method: 'DELETE' });
+    editDialog().close();
     showFeedback('Lugar desvinculado de OpenStreetMap.');
     await load();
   } catch (err) {

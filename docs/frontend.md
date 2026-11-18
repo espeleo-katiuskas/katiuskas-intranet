@@ -393,9 +393,13 @@ the form says where the data comes from. Saving sends `osm_type` and `osm_id` wi
 place keeps its element, and the page goes to the new place; that element is no longer offered as a
 candidate.
 
-**Linking a place to OpenStreetMap.** The page of a place (`/lugar`) has a section "OpenStreetMap"
-that says whether the place is an element of OpenStreetMap (its type and id) and has the buttons to
-link and unlink it. "Vincular con OpenStreetMap" opens a dialog (`js/osm-link.js`, built with
+**Linking a place to OpenStreetMap.** The page of a place (`/lugar`) has no section for it, since it
+is rarely used: the section "OpenStreetMap" is inside the dialog "Editar lugar" (`#osm-section` in
+`lugar.html`, hidden on the page; `place.js` moves it into the slot `#pd-osm-slot` of the dialog
+when it opens and back when it closes). It says whether the place is an element of OpenStreetMap
+(its type and id) and has the buttons to link and unlink it. Linking, unlinking and copying a value
+from OpenStreetMap save at once, so they close the dialog (its form would show the place as it was)
+and reload the page. "Vincular con OpenStreetMap" opens a dialog (`js/osm-link.js`, built with
 `buildDialog` of `place-dialog.js`) with the elements near the place that are not yet a place, from
 `GET /osm/nearby`: one row for each, with its name, what it is, its type and id, how far it is and,
 if it looks like the place's name, "mismo nombre" or "nombre parecido" (those come first, then the
@@ -406,28 +410,29 @@ or 2 km, and a newer search drops the answer of an older one. Choosing one calls
 has "Desvincular", which asks first and calls `DELETE`. The element that a place is no longer
 appears on the map of `/lugares` as a candidate, and does again when the link is taken away.
 
-A linked place also shows **what OpenStreetMap says of its element** under that line (`osmDataHtml`
-in `osm-link.js`, from `GET /osm/elements/{type}/{id}`, asked once for each element and drawn again
-whenever the place is): the name, the other names, the coordinates (with how far they are from the
-place's), the altitude, the facts of the popup (rappel, difficulty, capacity, fee, access, operator,
-description), the website and the date it was last edited there. It is shown as it is, never merged
-into the club's data, which is what the rest of the page shows; a badge "no coincide con el lugar"
-marks the name that is neither the place's name nor one of its other names, coordinates more than 25
-m from the place's, and an altitude more than 20 m from the place's, and a note says when the
-element is no longer in OpenStreetMap (marked as gone by a load), suggesting to link another or to
-unlink.
+A linked place also shows **what OpenStreetMap says of its element** under that line, in the dialog
+(`osmDataHtml` in `osm-link.js`, from `GET /osm/elements/{type}/{id}`, asked once for each element
+and drawn again whenever the place is): the name, the other names, the coordinates (with how far
+they are from the place's), the altitude, the facts of the popup (rappel, difficulty, capacity, fee,
+access, operator, description), the website and the date it was last edited there. It is shown as it
+is, never merged into the club's data, which is what the rest of the page shows; a badge "no
+coincide con el lugar" marks the name that is neither the place's name nor one of its other names,
+coordinates more than 25 m from the place's, and an altitude more than 20 m from the place's, and a
+note says when the element is no longer in OpenStreetMap (marked as gone by a load), suggesting to
+link another or to unlink.
 
-When the element has changed (`osm_changes` of the place) a notice above that block says what: each
-change as "antes «…», ahora «…»" under the name that a person knows it by (`CHANGE_LABELS`), with a
-button **Marcar como revisado** (`POST /places/{id}/links/osm/review`). The list of places marks
-such a place with a badge "OSM ha cambiado" (`osm_changed`). The rows of the block that do not agree
-with the place have a button that copies the value into it, with the edit of the place (`PUT
-/places/{id}`, built by `copyFromOsm` from the place as the page has it, so nothing else changes):
-"Usar como nombre" (the old name stays among the other names, so it is not lost), "Añadir a los
-otros nombres" (only the new ones), "Usar estas coordenadas", "Usar esta altitud" and "Copiar a la
-descripción", which is only offered when the place has no description, since what the club wrote is
-never replaced. Copying does not review: whoever has looked at everything says so with the other
-button.
+When the element has changed (`osm_changes` of the place) a notice on the page itself
+(`#osm-changes`, under the buttons of the place, the only trace of OpenStreetMap there) says what,
+and where to look: each change as "antes «…», ahora «…»" under the name that a person knows it by
+(`CHANGE_LABELS`), with a button **Marcar como revisado** (`POST /places/{id}/links/osm/review`).
+The list of places marks such a place with a badge "OSM ha cambiado" (`osm_changed`). The rows of
+the block that do not agree with the place have a button that copies the value into it, with the
+edit of the place (`PUT /places/{id}`, built by `copyFromOsm` from the place as the page has it, so
+nothing else changes): "Usar como nombre" (the old name stays among the other names, so it is not
+lost), "Añadir a los otros nombres" (only the new ones), "Usar estas coordenadas", "Usar esta
+altitud" and "Copiar a la descripción", which is only offered when the place has no description,
+since what the club wrote is never replaced. Copying does not review: whoever has looked at
+everything says so with the other button.
 
 **The mirror of OpenStreetMap in `/admin`.** The status of the system has a group "Mirror de
 OpenStreetMap" (`osmGroup` in `admin.js`, from `osm` of `GET /admin/status`): the elements in total

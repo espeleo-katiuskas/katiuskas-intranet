@@ -27,6 +27,8 @@
     <button id="delete-place" type="button" class="btn btn-danger btn-small" data-roles="admin,board">Borrar lugar</button>
   </div>
 
+  <div id="osm-changes"></div>
+
   <section id="system-section" hidden>
     <h2>Sistema</h2>
     <p id="system-intro"></p>
@@ -39,17 +41,6 @@
     <h2>Mapa</h2>
     <div id="place-map" class="places-map small"></div>
     <p class="subtitle"><a id="place-map-link" href="/lugares?vista=mapa">Ver en el mapa de todos los lugares</a></p>
-  </section>
-
-  <section id="osm-section">
-    <h2>OpenStreetMap</h2>
-    <p id="osm-status"></p>
-    <div id="osm-changes"></div>
-    <div id="osm-data"></div>
-    <div class="panel-actions">
-      <button id="osm-link" type="button" class="btn btn-secondary btn-small">Vincular con OpenStreetMap</button>
-      <button id="osm-unlink" type="button" class="btn btn-secondary btn-small" hidden>Desvincular</button>
-    </div>
   </section>
 
   <section>
@@ -122,7 +113,17 @@
   </section>
 
   <p class="subtitle" id="place-authorship"></p>
-    </main>
+      <!-- Shown inside the dialog "Editar lugar" (place.js moves it there while it is open). -->
+  <section id="osm-section" class="osm-block" hidden>
+    <h3>OpenStreetMap</h3>
+    <p id="osm-status"></p>
+    <div id="osm-data"></div>
+    <div class="panel-actions">
+      <button id="osm-link" type="button" class="btn btn-secondary btn-small">Vincular con OpenStreetMap</button>
+      <button id="osm-unlink" type="button" class="btn btn-secondary btn-small" hidden>Desvincular</button>
+    </div>
+  </section>
+</main>
   </div>
 </div>
 <script type="module" src="js/place.js"></script>

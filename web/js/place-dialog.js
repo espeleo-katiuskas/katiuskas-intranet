@@ -150,6 +150,7 @@ function ensurePlaceDialog() {
           ${HINT}
         </div>
       </div>
+      <div id="pd-osm-slot"></div>
       <div class="panel-actions">
         <button id="pd-submit" type="submit" class="btn btn-primary">Crear lugar</button>
         <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>

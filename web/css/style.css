@@ -2459,6 +2459,13 @@ html.map-is-expanded {
   padding-left: 20px;
 }
 
+/* The OpenStreetMap part of the dialog "Editar lugar", apart from the fields of the form. */
+.osm-block {
+  margin: 20px 0 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #ddd);
+}
+
 /* The elements of OpenStreetMap that a place may be linked to: one row each, with its button. */
 .osm-candidates {
   list-style: none;

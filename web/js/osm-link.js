@@ -291,7 +291,7 @@ function osmChangesHtml(place) {
   return `<div class="osm-changes">
     <p><strong>OpenStreetMap ha cambiado este elemento</strong> desde que se vinculó o se revisó por última vez:</p>
     <ul>${lines}</ul>
-    <p class="hint">Mira lo que dice abajo y copia al lugar lo que quieras; no se cambia nada solo.</p>
+    <p class="hint">Míralo en «Editar lugar», en el apartado de OpenStreetMap, y copia al lugar lo que quieras; no se cambia nada solo.</p>
     <button type="button" class="btn btn-secondary btn-small" data-osm-review>Marcar como revisado</button>
   </div>`;
 }
