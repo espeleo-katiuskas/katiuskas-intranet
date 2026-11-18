@@ -62,8 +62,9 @@ DATABASE intranet_test`, then the `CREATE DATABASE` above) or tests fail with "c
 exist". CI starts fresh each run.
 
 Other checks: `go build ./...`, `go vet ./...` (from `backend/`), `make run` (no Docker),
-`make build`, and after editing the spec
-`python3 -c "import yaml; yaml.safe_load(open('backend/openapi/openapi.yaml'))"`.
+`make build`, and after editing the spec `pip install openapi-spec-validator==0.9.0` (once) and
+`openapi-spec-validator backend/openapi/openapi.yaml`, which is what CI runs: a plain YAML parse
+does not see a description with a comma outside quotes, which is split into keys of its own.
 Before committing Go code (global rule): `go fmt`, `go build`, `go vet`, `go test -race`,
 `staticcheck`, `govulncheck`, in that order.
 
