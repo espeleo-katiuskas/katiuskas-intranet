@@ -287,7 +287,7 @@ func TestPlaceCRUD(t *testing.T) {
 		p.CreatedBy != e.member.user.Login || p.UpdatedBy != e.member.user.Login || len(p.Points) != 0 {
 		t.Errorf("unexpected place: %+v", p)
 	}
-	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha añadido el lugar «Sima de la Peña» (Cavidad)") {
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha añadido el lugar «Sima de la Peña» (Cavidad) en Valdemanco") {
 		t.Errorf("unexpected notice: %q", msg)
 	}
 	// The default state is open, blank names are none and the list of them is always there.
@@ -326,7 +326,7 @@ func TestPlaceCRUD(t *testing.T) {
 	if edited.CreatedBy != e.member.user.Login || edited.UpdatedBy != e.other.user.Login || edited.UpdatedAt.Before(edited.CreatedAt) {
 		t.Errorf("it should say who created it and who changed it: %+v", edited)
 	}
-	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha editado el lugar «Sima de la Peña»") || !strings.Contains(msg, "Name:") {
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha editado el lugar «Sima de la Peña» en Valdemanco") || !strings.Contains(msg, "Name:") {
 		t.Errorf("unexpected edit notice: %q", msg)
 	}
 	errorCode(t, e.json("PUT", "/api/v1/places/987654", e.member.token, body(e.cavidad, "X", nil)), 404, "not_found")
@@ -337,7 +337,7 @@ func TestPlaceCRUD(t *testing.T) {
 	status(t, e.json("POST", placePath(p, "/points"), e.member.token, map[string]any{"kind": "parking", "lat": 40.4, "lon": -3.6}), http.StatusCreated)
 	e.notifier.wait(t)
 	status(t, e.json("DELETE", placePath(p, ""), e.board.token, nil), http.StatusNoContent)
-	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha borrado el lugar «Sima de la Peña II»") {
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha borrado el lugar «Sima de la Peña II» en Valdemanco") {
 		t.Errorf("unexpected delete notice: %q", msg)
 	}
 	errorCode(t, e.json("GET", placePath(p, ""), e.member.token, nil), 404, "not_found")
@@ -445,7 +445,7 @@ func TestPoints(t *testing.T) {
 	if pt.Kind != places.PointParking || *pt.Name != "Pista" || pt.Lat != 40.4 || pt.PlaceID != p.ID {
 		t.Errorf("unexpected point: %+v", pt)
 	}
-	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha añadido el punto «Pista» (parking) al lugar «Cueva»") {
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha añadido el punto «Pista» (parking) al lugar «Cueva» en Valdemanco") {
 		t.Errorf("unexpected notice: %q", msg)
 	}
 	status(t, add(map[string]any{"kind": "waypoint", "name": "  "}), http.StatusCreated)
@@ -835,7 +835,7 @@ func TestFiles(t *testing.T) {
 		photo.FileSize != int64(len(png)) || photo.PlaceID == nil || *photo.PlaceID != p.ID || photo.SystemID != nil {
 		t.Errorf("unexpected file: %+v", photo)
 	}
-	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha adjuntado «boca.png» al lugar «Cueva»") {
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha adjuntado «boca.png» al lugar «Cueva» en Valdemanco") {
 		t.Errorf("unexpected notice: %q", msg)
 	}
 	// A page is never shown by the browser: it is a download (checked below), whatever its name says.
@@ -885,7 +885,7 @@ func TestFiles(t *testing.T) {
 	// Who removes: whoever attached it, admin and board; not another member.
 	errorCode(t, e.json("DELETE", placePath(p, fmt.Sprintf("/files/%d", photo.ID)), e.member.token, nil), 403, "place_file_not_yours")
 	status(t, e.json("DELETE", placePath(p, fmt.Sprintf("/files/%d", photo.ID)), e.other.token, nil), http.StatusNoContent)
-	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha quitado «boca.png» del lugar «Cueva»") {
+	if msg := e.notifier.wait(t); !strings.Contains(msg, "ha quitado «boca.png» del lugar «Cueva» en Valdemanco") {
 		t.Errorf("unexpected notice: %q", msg)
 	}
 	if _, err := e.storage.Open(p.ID, photo.ID); !errors.Is(err, fs.ErrNotExist) {

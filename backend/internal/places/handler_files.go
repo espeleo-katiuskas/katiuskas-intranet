@@ -86,13 +86,13 @@ func serveFile(w http.ResponseWriter, r *http.Request, f File, file *os.File) {
 type ownerMaker func(int64) fileOwner
 
 // ownerLabel says what the owner is called in a notice: "el lugar «Cueva»" or "el sistema «Cueva»".
-func (h *Handler) ownerName(ctx context.Context, o fileOwner) (kind, name string, ok bool) {
+func (h *Handler) ownerName(ctx context.Context, o fileOwner) (kind, label string, ok bool) {
 	if o.isSystem() {
 		sys, err := h.service.GetSystem(ctx, o.id)
-		return "sistema", sys.Name, err == nil
+		return "sistema", "«" + sys.Name + "»", err == nil
 	}
 	p, err := h.service.GetPlace(ctx, o.id)
-	return "lugar", p.Name, err == nil
+	return "lugar", "«" + p.Name + "»" + inWhere(p.Where), err == nil
 }
 
 func (h *Handler) listFiles(owner ownerMaker) http.HandlerFunc {
@@ -126,8 +126,8 @@ func (h *Handler) addFile(owner ownerMaker) http.HandlerFunc {
 			writeError(w, err, "could not attach the file")
 			return
 		}
-		if kind, ownerName, ok := h.ownerName(r.Context(), o); ok {
-			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📎 %s ha adjuntado «%s» al %s «%s».", f.UploadedBy, f.FileName, kind, ownerName))
+		if kind, label, ok := h.ownerName(r.Context(), o); ok {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📎 %s ha adjuntado «%s» al %s %s.", f.UploadedBy, f.FileName, kind, label))
 		}
 		httpapi.WriteJSON(w, http.StatusCreated, f)
 	}
@@ -173,8 +173,8 @@ func (h *Handler) deleteFile(owner ownerMaker) http.HandlerFunc {
 			writeError(w, err, "could not delete the file")
 			return
 		}
-		if kind, ownerName, ok := h.ownerName(r.Context(), o); ok {
-			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha quitado «%s» del %s «%s».", h.actorLogin(r.Context()), f.FileName, kind, ownerName))
+		if kind, label, ok := h.ownerName(r.Context(), o); ok {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha quitado «%s» del %s %s.", h.actorLogin(r.Context()), f.FileName, kind, label))
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}

@@ -883,7 +883,11 @@ points: there is no review, and the API says who and when (`created_by`, `update
 `updated_at` in `Place`, which the repository fills by joining `users`, so the handler needs no
 lookup for them). Only admin and board delete a place, and only admin manages the types. Every
 change is announced on Telegram (`httpapi.NotifyAsync`), a place edit with the `DiffFields` of what
-changed (`placeAuditFields`) as the other resources do.
+changed (`placeAuditFields`) as the other resources do. A notice that names a place, whether it is
+of the place, of one of its points or of one of its files, ends the name with where it is
+(`inWhere`: "en Valdemanco, Comunidad de Madrid, España", `Place.Where`), so a name that several
+places share can be told apart; one about a system, or a list of places in the notice of an
+activity or a system, names them as before.
 
 **Kinds.** A type has a `kind` (`cave`, `canyon` or `general`) that cannot change; Cavidad is
 `cave`, Cañón is `canyon`, and a type an admin adds is always `general`, so those two are fixed (409

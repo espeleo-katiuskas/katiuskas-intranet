@@ -395,6 +395,15 @@ type placeBody struct {
 
 func (b placeBody) input() Input { return Input(b) }
 
+// inWhere ends a notice that names a place with where it is (" en Madrid, Comunidad de Madrid, España"),
+// or with nothing if its zone is not known.
+func inWhere(where string) string {
+	if where == "" {
+		return ""
+	}
+	return " en " + where
+}
+
 // placeAuditFields are the Place fields an edit's notification diffs: those Input can change (the type
 // by its name).
 var placeAuditFields = []string{
@@ -435,7 +444,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not create the place")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📍 %s ha añadido el lugar «%s» (%s).", h.actorLogin(r.Context()), p.Name, p.TypeName))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📍 %s ha añadido el lugar «%s» (%s)%s.",
+		h.actorLogin(r.Context()), p.Name, p.TypeName, inWhere(p.Where)))
 	httpapi.WriteJSON(w, http.StatusCreated, p)
 }
 
@@ -459,8 +469,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if beforeErr == nil {
 		if diff := httpapi.DiffFields(before, p, placeAuditFields...); len(diff) > 0 {
-			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el lugar «%s»:\n%s",
-				h.actorLogin(r.Context()), before.Name, strings.Join(diff, "\n")))
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el lugar «%s»%s:\n%s",
+				h.actorLogin(r.Context()), before.Name, inWhere(before.Where), strings.Join(diff, "\n")))
 		}
 	}
 	httpapi.WriteJSON(w, http.StatusOK, p)
@@ -486,8 +496,8 @@ func (h *Handler) linkOsm(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not link the place to the OpenStreetMap element")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔗 %s ha vinculado el lugar «%s» con un elemento de OpenStreetMap (%s %d).",
-		h.actorLogin(r.Context()), p.Name, body.OsmType, body.OsmID))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔗 %s ha vinculado el lugar «%s»%s con un elemento de OpenStreetMap (%s %d).",
+		h.actorLogin(r.Context()), p.Name, inWhere(p.Where), body.OsmType, body.OsmID))
 	httpapi.WriteJSON(w, http.StatusOK, p)
 }
 
@@ -517,7 +527,8 @@ func (h *Handler) unlinkOsm(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not unlink the place from OpenStreetMap")
 		return
 	}
-	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔗 %s ha desvinculado el lugar «%s» de OpenStreetMap.", h.actorLogin(r.Context()), p.Name))
+	httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🔗 %s ha desvinculado el lugar «%s»%s de OpenStreetMap.",
+		h.actorLogin(r.Context()), p.Name, inWhere(p.Where)))
 	httpapi.WriteJSON(w, http.StatusOK, p)
 }
 
@@ -533,7 +544,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if getErr == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el lugar «%s».", h.actorLogin(r.Context()), p.Name))
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha borrado el lugar «%s»%s.",
+			h.actorLogin(r.Context()), p.Name, inWhere(p.Where)))
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -575,8 +587,8 @@ func (h *Handler) addPoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p, err := h.service.GetPlace(r.Context(), placeID); err == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📍 %s ha añadido el punto «%s» (%s) al lugar «%s».",
-			h.actorLogin(r.Context()), pointLabel(pt), pt.Kind, p.Name))
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("📍 %s ha añadido el punto «%s» (%s) al lugar «%s»%s.",
+			h.actorLogin(r.Context()), pointLabel(pt), pt.Kind, p.Name, inWhere(p.Where)))
 	}
 	httpapi.WriteJSON(w, http.StatusCreated, pt)
 }
@@ -601,8 +613,8 @@ func (h *Handler) updatePoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p, err := h.service.GetPlace(r.Context(), placeID); err == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado el punto «%s» (%s) del lugar «%s».",
-			h.actorLogin(r.Context()), pointLabel(pt), pt.Kind, p.Name))
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha cambiado el punto «%s» (%s) del lugar «%s»%s.",
+			h.actorLogin(r.Context()), pointLabel(pt), pt.Kind, p.Name, inWhere(p.Where)))
 	}
 	httpapi.WriteJSON(w, http.StatusOK, pt)
 }
@@ -623,8 +635,8 @@ func (h *Handler) deletePoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p, err := h.service.GetPlace(r.Context(), placeID); err == nil && getErr == nil {
-		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha quitado el punto «%s» (%s) del lugar «%s».",
-			h.actorLogin(r.Context()), pointLabel(pt), pt.Kind, p.Name))
+		httpapi.NotifyAsync(h.notifier, fmt.Sprintf("🗑️ %s ha quitado el punto «%s» (%s) del lugar «%s»%s.",
+			h.actorLogin(r.Context()), pointLabel(pt), pt.Kind, p.Name, inWhere(p.Where)))
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
