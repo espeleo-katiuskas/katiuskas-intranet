@@ -456,6 +456,28 @@ func (r *Repository) SearchByWords(ctx context.Context, words, categories []stri
 	return out, rows.Err()
 }
 
+// CountryIDs is the zones that an ISO 3166-1 code names: the countries (the states, with no zone above them) and
+// the territories that are not states (Gibraltar, Greenland…), by that code. For the boundaries of a country.
+func (r *Repository) CountryIDs(ctx context.Context) (map[string]int64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT code, id FROM areas WHERE code ~ '^[A-Z]{2}$' AND (parent_id IS NULL OR kind = $1)
+	`, areas.TerritoryKind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := map[string]int64{}
+	for rows.Next() {
+		var code string
+		var id int64
+		if err := rows.Scan(&code, &id); err != nil {
+			return nil, err
+		}
+		ids[code] = id
+	}
+	return ids, rows.Err()
+}
+
 // MunicipalityIDs is the zones of kind Municipio by their code (the INE code, five digits), which is what a
 // boundary of Spain says in its `ref:ine`, and the autonomous cities (Ceuta and Melilla, which have no
 // municipality below them) by the INE code of their municipality (51001, 52001).

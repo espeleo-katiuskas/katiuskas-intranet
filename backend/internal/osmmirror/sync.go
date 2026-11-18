@@ -113,7 +113,17 @@ func (s *Syncer) assignZones(ctx context.Context, file string, elements []Elemen
 	if err != nil {
 		return ZoneResult{}, err
 	}
-	return AssignZones(f, elements, MunicipalityResolver(ids))
+	countries, err := s.Repo.CountryIDs(ctx)
+	if err != nil {
+		return ZoneResult{}, err
+	}
+	return AssignZones(f, elements, ZoneRules{
+		Municipality: MunicipalityResolver(ids),
+		Country:      CountryResolver(countries),
+		Fixed:        FixedBoundaries(),
+		Zones:        ids,
+		NearestM:     NearestZoneMetres,
+	})
 }
 
 // maxUnknownCodes is how many codes of boundaries without a zone a load keeps in its row.
@@ -150,7 +160,7 @@ func (s *Syncer) load(ctx context.Context, name, file string, force bool) (Resul
 	if err != nil {
 		return Result{}, fmt.Errorf("work out the zones of %s: %w", name, err)
 	}
-	slog.Info("zones", "source", name, "elements", len(elements), "with_zone", zones.Assigned)
+	slog.Info("zones", "source", name, "elements", len(elements), "with_zone", zones.Assigned, "nearest", zones.Nearest)
 	if len(zones.Unknown) > 0 {
 		slog.Warn("municipal boundaries with no zone in the catalogue: its list of municipalities is behind",
 			"source", name, "count", len(zones.Unknown), "codes", strings.Join(firstOf(zones.Unknown), ","))

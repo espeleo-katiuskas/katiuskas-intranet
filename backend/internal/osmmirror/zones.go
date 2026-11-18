@@ -53,22 +53,84 @@ func MunicipalityResolver(ids map[string]int64) ZoneResolver {
 	}
 }
 
-// ZoneResult is what AssignZones did: how many elements got a zone, and the codes of the boundaries that the rule
-// knew but the club has no zone for, sorted and without repeats.
+// CountryResolver is the rule for the boundaries of a country or of a territory that is not a state (Andorra,
+// Gibraltar): a boundary tagged `boundary=administrative` and `admin_level=2` with an ISO 3166-1 code, whose zone
+// is the one of the catalogue that has that code (ids: the countries and the territories by their ISO code). It
+// is only for what no municipality holds, and a country the club has no zone for is not reported.
+func CountryResolver(ids map[string]int64) ZoneResolver {
+	return func(tags map[string]any) (int64, string) {
+		if tags["boundary"] != "administrative" || tags["admin_level"] != "2" {
+			return 0, ""
+		}
+		code, _ := tags["ISO3166-1:alpha2"].(string)
+		if code == "" {
+			code, _ = tags["ISO3166-1"].(string)
+		}
+		return ids[code], code
+	}
+}
+
+// NearestZoneMetres is how far from the boundary of a municipality an element that is in none may be and still
+// take it: the sea caves, which a boundary that follows the coast leaves a few metres out. It is short on
+// purpose: a longer one would give a municipality to what is across a land border.
+const NearestZoneMetres = 15
+
+// ZoneRules say what a boundary is, for AssignZones.
+type ZoneRules struct {
+	// Municipality is the rule of the boundaries that are the zone of what they hold (a municipality, in Spain),
+	// and the only one whose boundaries the club may lack a zone for (it is reported).
+	Municipality ZoneResolver
+	// Country is the rule of the boundaries of countries and territories, which only give a zone to what no
+	// municipality holds. May be nil.
+	Country ZoneResolver
+	// Fixed are boundaries that the extracts do not have as a polygon, and count as municipal ones: their Code
+	// is looked for in the same map as the municipalities'. The map of codes to zones is Zones.
+	Fixed []FixedBoundary
+	// Zones are the zones of the club by the code of a municipality, for the Fixed boundaries.
+	Zones map[string]int64
+	// NearestM is how close, in metres, to a municipal boundary an element in none takes that municipality
+	// (0: it does not).
+	NearestM float64
+}
+
+// ZoneResult is what AssignZones did: how many elements got a zone and, of those, how many by being close to a
+// boundary and not inside it, and the codes of the boundaries that the municipal rule knew but the club has no
+// zone for, sorted and without repeats.
 type ZoneResult struct {
 	Assigned int
+	Nearest  int
 	Unknown  []string
 }
 
+// nearest keeps, for each element, the closest municipality that is not holding it, if it is within reach.
+type nearest struct {
+	maxM float64
+	dist []float64
+	zone []int64
+}
+
+func newNearest(n int, maxM float64) *nearest {
+	d := make([]float64, n)
+	for i := range d {
+		d[i] = math.Inf(1)
+	}
+	return &nearest{maxM: maxM, dist: d, zone: make([]int64, n)}
+}
+
 // AssignZones reads the polygons that `osmium export -f geojsonseq` wrote (one feature per line) and sets the
-// AreaID of the elements whose point is inside the polygon of a boundary that `resolve` knows: the first that
-// holds it. It gives how many it set, and the codes of the boundaries that have no zone in the club. Elements in
-// no zone are left with none.
-func AssignZones(r io.Reader, elements []Element, resolve ZoneResolver) (ZoneResult, error) {
+// AreaID of the elements whose point is inside the polygon of a municipal boundary (the first that holds it),
+// then of those still in none that are inside the boundary of a country or a territory, then, if the rules say
+// so, of those still in none that are very close to a municipal boundary. It gives how many it set, and the
+// codes of the boundaries that have no zone in the club. Elements in no zone are left with none.
+func AssignZones(r io.Reader, elements []Element, rules ZoneRules) (ZoneResult, error) {
 	grid := map[cell][]int{}
 	for i := range elements {
 		c := cellOf(elements[i].Lon, elements[i].Lat)
 		grid[c] = append(grid[c], i)
+	}
+	var near *nearest
+	if rules.NearestM > 0 {
+		near = newNearest(len(elements), rules.NearestM)
 	}
 	type feature struct {
 		Geometry struct {
@@ -79,6 +141,18 @@ func AssignZones(r io.Reader, elements []Element, resolve ZoneResolver) (ZoneRes
 	}
 	result := ZoneResult{}
 	unknown := map[string]bool{}
+	for _, fixed := range rules.Fixed {
+		if zone := rules.Zones[fixed.Code]; zone != 0 {
+			result.Assigned += assignIn(fixed.Polygons, zone, elements, grid, near)
+		} else {
+			unknown[fixed.Code] = true
+		}
+	}
+	type late struct {
+		zone     int64
+		polygons []polygon
+	}
+	var countries []late
 	br := bufio.NewReaderSize(r, 1<<20)
 	for line := 1; ; line++ {
 		raw, err := br.ReadBytes('\n')
@@ -88,14 +162,22 @@ func AssignZones(r io.Reader, elements []Element, resolve ZoneResolver) (ZoneRes
 			if jsonErr := json.Unmarshal(raw, &f); jsonErr != nil {
 				return result, fmt.Errorf("boundary line %d: %w", line, jsonErr)
 			}
-			zone, code := resolve(f.Properties)
+			zone, code := rules.Municipality(f.Properties)
+			var countryZone int64
+			if zone == 0 && code == "" && rules.Country != nil {
+				countryZone, _ = rules.Country(f.Properties)
+			}
 			switch {
-			case zone != 0:
+			case zone != 0 || countryZone != 0:
 				polygons, convErr := polygonsOf(f.Geometry.Type, f.Geometry.Coordinates)
 				if convErr != nil {
 					return result, fmt.Errorf("boundary line %d: %w", line, convErr)
 				}
-				result.Assigned += assignIn(polygons, zone, elements, grid)
+				if zone != 0 {
+					result.Assigned += assignIn(polygons, zone, elements, grid, near)
+				} else {
+					countries = append(countries, late{countryZone, polygons})
+				}
 			case code != "":
 				unknown[code] = true // A boundary of a municipality that the club has no zone for.
 			}
@@ -105,6 +187,18 @@ func AssignZones(r io.Reader, elements []Element, resolve ZoneResolver) (ZoneRes
 		}
 		if err != nil {
 			return result, err
+		}
+	}
+	for _, c := range countries {
+		result.Assigned += assignIn(c.polygons, c.zone, elements, grid, nil)
+	}
+	if near != nil {
+		for i := range elements {
+			if elements[i].AreaID == 0 && near.zone[i] != 0 && near.dist[i] <= near.maxM {
+				elements[i].AreaID = near.zone[i]
+				result.Assigned++
+				result.Nearest++
+			}
 		}
 	}
 	for code := range unknown {
@@ -138,7 +232,8 @@ func polygonsOf(kind string, coordinates json.RawMessage) ([]polygon, error) {
 }
 
 // assignIn sets `zone` on the elements, still with none, that are inside any of the polygons, and says how many.
-func assignIn(polygons []polygon, zone int64, elements []Element, grid map[cell][]int) int {
+// With near, it also notes the elements that are outside but within its reach of the boundary of a polygon.
+func assignIn(polygons []polygon, zone int64, elements []Element, grid map[cell][]int, near *nearest) int {
 	assigned := 0
 	for _, p := range polygons {
 		if len(p) == 0 || len(p[0]) < 3 {
@@ -149,17 +244,31 @@ func assignIn(polygons []polygon, zone int64, elements []Element, grid map[cell]
 			minX, maxX = math.Min(minX, c[0]), math.Max(maxX, c[0])
 			minY, maxY = math.Min(minY, c[1]), math.Max(maxY, c[1])
 		}
-		lo, hi := cellOf(minX, minY), cellOf(maxX, maxY)
+		// The box that holds the polygon, and, to look for what is close to it, that box widened by the reach.
+		padLat := 0.0
+		if near != nil {
+			padLat = near.maxM / metresPerDegree
+		}
+		padLon := padLat / math.Max(math.Cos((minY+maxY)/2*math.Pi/180), 0.01)
+		lo, hi := cellOf(minX-padLon, minY-padLat), cellOf(maxX+padLon, maxY+padLat)
 		for x := lo.x; x <= hi.x; x++ {
 			for y := lo.y; y <= hi.y; y++ {
 				for _, i := range grid[cell{x, y}] {
 					e := &elements[i]
-					if e.AreaID != 0 || e.Lon < minX || e.Lon > maxX || e.Lat < minY || e.Lat > maxY {
+					if e.AreaID != 0 {
 						continue
 					}
-					if p.contains(e.Lon, e.Lat) {
+					inBox := e.Lon >= minX && e.Lon <= maxX && e.Lat >= minY && e.Lat <= maxY
+					if inBox && p.contains(e.Lon, e.Lat) {
 						e.AreaID = zone
 						assigned++
+						continue
+					}
+					if near == nil || e.Lon < minX-padLon || e.Lon > maxX+padLon || e.Lat < minY-padLat || e.Lat > maxY+padLat {
+						continue
+					}
+					if d := p.distanceM(e.Lon, e.Lat); d < near.dist[i] {
+						near.dist[i], near.zone[i] = d, zone
 					}
 				}
 			}

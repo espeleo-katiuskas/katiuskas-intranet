@@ -68,22 +68,31 @@ is gone, and the new way is a candidate to link again by hand.
 element was out of the question (one request a second, and bulk use is against its policy), and
 PostGIS would have been a new dependency for production, the backup and the prod→testing copy. Each
 load also cuts the municipal boundaries (`admin_level=8`) and gives each element the zone whose
-polygon holds its point (`osm_elements.area_id`; 97.7 % get one, in 2,196 municipalities; the rest
-are on the coast, where a sea cave is outside the polygon, or in Gibraltar, Ceuta and the Basque
-condominiums). Ceuta and Melilla are autonomous cities, with no province or municipality below them,
-so their zone is the city, found by the INE code of their municipality (51001, 52001). Melilla's
-boundary is in the extract, but Ceuta's is not a closed polygon in it (it shares its border with
-Morocco, which the extract cuts), so the elements of Ceuta have no zone yet. A `ZoneResolver` says
-which zone of the club a boundary is: Spain's reads the `ref:ine` (five or eleven digits: Portugal's
-parishes, also tagged `ref:ine`, have six and are not taken for Spanish municipalities). Another
-country needs a rule of its own and its zones in the catalogue. Country polygons were tried as a
-fallback and cannot be used: in an extract that cuts it, the relation of a country is not a closed
-polygon (only Andorra's was built). The column is `ON DELETE SET NULL`, the one foreign key that is
-not `RESTRICT` (a test names it and says why): the value is derived, so deleting a zone must not be
-stopped by it, and merging two moves the elements. A boundary whose INE code the club has no zone
-for (a new municipality, a merger) is counted by each load and shown in `/admin`: the signal that
-the list of municipalities needs updating, which is done by hand, about once a year, with
-`scripts/generate-areas-seed.py` and a new migration.
+polygon holds its point (`osm_elements.area_id`; 98.5 % get one, in 2,196 municipalities). Ceuta and
+Melilla are autonomous cities, with no province or municipality below them, so their zone is the
+city, found by the INE code of their municipality (51001, 52001). Melilla's boundary is in the
+extract, but Ceuta's is not a closed polygon in it (its land border with Morocco is made of ways
+that the extract cuts), so Ceuta's outline is written down in the code (`FixedBoundaries`, two rings
+simplified to twenty metres, from the ways that are in the extract). Gibraltar, a territory that is
+not a state, has its own boundary (`admin_level=2` with `ISO3166-1:alpha2=GI`) and gives the
+territory's zone to what no municipality holds, as the boundary of any country or territory does
+(`CountryResolver`; only Gibraltar's is built in an extract of Spain). A cave on the coast is often
+a few metres outside the polygon of the municipality, which follows the coastline: an element in
+none that is within 15 metres of a municipal boundary takes that municipality (`NearestZoneMetres`).
+That is short on purpose, since a land border cannot be told from a coast: some cave across the
+French border that is within those metres of Spain has a Spanish municipality (three in the data of
+November 2026), a proposal that the person who makes the place of it corrects. What is left without
+a zone is across the border (France, Portugal, Andorra, Morocco), in the Basque condominiums, or too
+far from a coast. A `ZoneResolver` says which zone of the club a boundary is: Spain's reads the
+`ref:ine` (five or eleven digits: Portugal's parishes, also tagged `ref:ine`, have six and are not
+taken for Spanish municipalities). Another country needs a rule of its own and its zones in the
+catalogue. Country polygons are of no use as a general fallback: in an extract that cuts it, the
+relation of a country is not a closed polygon. The column is `ON DELETE SET NULL`, the one foreign
+key that is not `RESTRICT` (a test names it and says why): the value is derived, so deleting a zone
+must not be stopped by it, and merging two moves the elements. A boundary whose INE code the club
+has no zone for (a new municipality, a merger) is counted by each load and shown in `/admin`: the
+signal that the list of municipalities needs updating, which is done by hand, about once a year,
+with `scripts/generate-areas-seed.py` and a new migration.
 
 **The two sides of a linked place are shown, not merged.** The OSM value is shown as OSM says it,
 the club's value wins in the club's own pages, and nothing is copied except by a person pressing
@@ -184,9 +193,6 @@ marked as gone by the next one.
 
 **Small things to do:**
 
-- A nearest-municipality fallback for the 2 % of the elements that are in no municipality (the
-  caves on the coast), and a way to give a zone to the elements of Ceuta, whose boundary is not a
-  closed polygon in the extract of Spain (for instance a box of its own for each autonomous city).
 - The point of a canyon (the upstream end, or the entrance the club knows) and the scale of its
   rating.
 - The map of a place does not draw the outline of its OSM element.

@@ -1358,11 +1358,11 @@ doing (the dialog copies what the tags say), not the API's, and the person confi
 
 **The zone of each element.** `osmmirror.AssignZones` (`zones.go`) sets `Element.AreaID`, the zone
 (a row of `areas`) the point is in, on each load, before the elements are stored: `Syncer` asks
-`Osmium.ExportBoundaries` for the polygons of the relations with `admin_level=8` of the same
-extract, and `AssignZones` reads them one feature at a time (Spain has about 8,900 and 80 MB:
-keeping them all to test 13,000 points would be a waste). What a boundary is is up to a
-`ZoneResolver`, a function from its tags to the id of a zone of the club (0 if it is none):
-`MunicipalityResolver` is Spain's, which takes a `boundary=administrative` of level 8 with a
+`Osmium.ExportBoundaries` for the polygons of the relations with `admin_level=8` (and those with an
+ISO 3166-1 code) of the same extract, and `AssignZones` reads them one feature at a time (Spain has
+about 8,900 and 80 MB: keeping them all to test 13,000 points would be a waste). What a boundary is
+is up to a `ZoneResolver`, a function from its tags to the id of a zone of the club (0 if it is
+none): `MunicipalityResolver` is Spain's, which takes a `boundary=administrative` of level 8 with a
 `ref:ine` of five or eleven digits (`areas.MunicipalityCode`: the Portuguese parishes that an
 extract of Spain holds near the border have six, of another system) whose first five digits (the
 other six are the entity) are the `code` of a zone of kind Municipio, from the map that
@@ -1381,8 +1381,21 @@ the first twenty codes in its row (`osm_sync_runs.unknown_zones`, `unknown_zone_
 status of the system shows them (not as a problem: the elements are just left without a zone). It is
 how the club learns that its list of municipalities is behind (a new municipality, a merger); the
 list is updated by hand, once a year or so, with `scripts/generate-areas-seed.py` and a new
-migration. About 2 % of the elements are in no municipality (the coast, Gibraltar, Ceuta, the Basque
-condominiums).
+migration. Three more rules give a zone to what no municipal polygon holds, in this order:
+`ZoneRules.Fixed`, the outline of Ceuta written down in `fixed.go` (its relation is incomplete in
+the extract of Spain: the ways of its land border lie in Morocco), which counts as a municipal
+boundary with the code 51001; `ZoneRules.Country`, `CountryResolver`, for the boundaries of a
+country or a territory with an ISO 3166-1 code (`boundary=administrative`, `admin_level=2`), by the
+zones that `Repository.CountryIDs` reads (the countries and the territories by their ISO code),
+applied after all the municipal ones, and of which only Gibraltar's is built in an extract of Spain,
+so its elements are in the territory's zone; and `ZoneRules.NearestM`, `NearestZoneMetres` (15), by
+which an element in none takes the municipality whose boundary is that close (`polygon.distanceM`,
+noted for each element while the polygons stream by, so the file is read once), which gives a zone
+to the sea caves that a coastal boundary leaves a few metres out. It cannot tell a coast from a land
+border, so a few elements just across a border get a municipality (a proposal, in the form that
+makes a place of one). About 1.5 % of the elements are in none: the ones across the border, in the
+Basque condominiums and a few far from a coast. The log of a load says how many were given a zone by
+being close (`nearest`).
 
 **Searching by name.** `GET /osm/search?q=` (`Service.Search`, `Repository.SearchByWords`) is how a
 person finds the cave they know the name of, to make a place of it. The text is normalized with

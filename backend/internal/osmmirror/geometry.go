@@ -196,3 +196,26 @@ func polygonOf(v any) (polygon, bool) {
 	}
 	return p, len(p) > 0
 }
+
+// metresPerDegree is the length of a degree of latitude, and of longitude at the equator.
+const metresPerDegree = 111320
+
+// distanceM is how far, in metres, the point (x, y) is from the boundary of the polygon (its outer ring and its
+// holes), on a plane around the point: good for the few metres that it is used for.
+func (p polygon) distanceM(x, y float64) float64 {
+	k := math.Cos(y * math.Pi / 180)
+	best := math.Inf(1)
+	for _, r := range p {
+		for i, j := 0, len(r)-1; i < len(r); j, i = i, i+1 {
+			ax, ay := (r[j][0]-x)*k, r[j][1]-y
+			bx, by := (r[i][0]-x)*k, r[i][1]-y
+			dx, dy := bx-ax, by-ay
+			t := 0.0
+			if l := dx*dx + dy*dy; l > 0 {
+				t = math.Max(0, math.Min(1, -(ax*dx+ay*dy)/l))
+			}
+			best = math.Min(best, math.Hypot(ax+t*dx, ay+t*dy))
+		}
+	}
+	return best * metresPerDegree
+}
