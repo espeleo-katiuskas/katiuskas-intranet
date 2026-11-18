@@ -2178,3 +2178,6 @@ at the end; that database has to be recreated when a new migration appears.
   state that administers it, with kind "Territorio" and their ISO code
 - `00078_territories_without_a_state.sql`: Antarctica, Western Sahara and Taiwan as roots of kind
   "Territorio", with their ISO code
+- `00079_areas_spanish_names.sql`: the 2 communities and 11 provinces whose INE name is in another
+  language or in two ("Girona", "Araba/Álava", "Illes Balears") get their Spanish name ("Gerona",
+  "Álava", "Islas Baleares")

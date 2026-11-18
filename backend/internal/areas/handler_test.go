@@ -260,9 +260,24 @@ func TestSeed(t *testing.T) {
 		t.Errorf("%d zones have a parent that is not there", n)
 	}
 	// The article the INE writes last is first again, and the two languages stay together.
-	for name, parent := range map[string]string{"A Coruña": "A Coruña", "La Vila Joiosa/Villajoyosa": "Alicante/Alacant", "L'Hospitalet de Llobregat": "Barcelona"} {
+	for name, parent := range map[string]string{"A Coruña": "La Coruña", "La Vila Joiosa/Villajoyosa": "Alicante", "L'Hospitalet de Llobregat": "Barcelona"} {
 		if n := count(`SELECT count(*) FROM areas m JOIN areas p ON p.id = m.parent_id WHERE m.kind = 'Municipio' AND m.name = $1 AND p.name = $2`, name, parent); n != 1 {
 			t.Errorf("expected the municipality %q in %q", name, parent)
+		}
+	}
+	// The communities and the provinces have their Spanish name, not the INE's (in the language of the
+	// territory, or in two); the municipalities keep the INE's.
+	for _, name := range []string{"Araba/Álava", "Alicante/Alacant", "Castellón/Castelló", "Valencia/València", "Illes Balears",
+		"Comunitat Valenciana", "A Coruña", "Girona", "Lleida", "Ourense", "Gipuzkoa", "Bizkaia"} {
+		if n := count(`SELECT count(*) FROM areas WHERE name = $1 AND kind IN ('Comunidad autónoma', 'Provincia')`, name); n != 0 {
+			t.Errorf("%q should be named in Spanish", name)
+		}
+	}
+	for name, kind := range map[string]string{"Álava": "Provincia", "Alicante": "Provincia", "Castellón": "Provincia", "Valencia": "Provincia",
+		"Islas Baleares": "Provincia", "Gerona": "Provincia", "Lérida": "Provincia", "Orense": "Provincia", "Guipúzcoa": "Provincia",
+		"Vizcaya": "Provincia", "La Coruña": "Provincia", "Comunidad Valenciana": "Comunidad autónoma"} {
+		if n := count(`SELECT count(*) FROM areas WHERE name = $1 AND kind = $2`, name, kind); n != 1 {
+			t.Errorf("expected the %s %q: %d", kind, name, n)
 		}
 	}
 	// norm_name is what Normalize gives, for every zone.

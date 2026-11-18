@@ -1036,7 +1036,12 @@ Migration `00077` adds the 51 territories that ISO 3166-1 has a code for and tha
 them by that code as it does a country. Antarctica, Western Sahara and Taiwan, which no state
 administers or whose administrator is disputed, are roots of kind "Territorio" (migration `00078`),
 not "País": that kind would say they are states, and ISO itself calls its entries "countries or
-areas".
+areas". **The names** of the communities and the provinces are the Spanish ones, since the
+intranet is in Spanish ("Álava", "Gerona", "Lérida", "Orense", "Guipúzcoa", "Vizcaya", "Islas
+Baleares", "La Coruña", "Comunidad Valenciana"), not the INE's, which are in the language of the
+territory or in two ("Araba/Álava", "Girona", "Illes Balears"): migration `00079` changed 2
+communities and 11 provinces by their INE code, and the seed script has the same names. The
+municipalities keep the INE's name ("València", "Girona", "A Coruña").
 **Ceuta and Melilla** are autonomous cities with no province and no municipality in law, so
 migration `00074` took out the two levels that the INE lists for each (what pointed at them moves up
 to the city): their zone is "Ciudad autónoma" directly below Spain. The INE code of their

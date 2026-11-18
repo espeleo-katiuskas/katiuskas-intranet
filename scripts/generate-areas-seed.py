@@ -69,13 +69,13 @@ COMMUNITIES = {
     "01": ("Andalucía", KIND_COMMUNITY),
     "02": ("Aragón", KIND_COMMUNITY),
     "03": ("Principado de Asturias", KIND_COMMUNITY),
-    "04": ("Illes Balears", KIND_COMMUNITY),
+    "04": ("Islas Baleares", KIND_COMMUNITY),
     "05": ("Canarias", KIND_COMMUNITY),
     "06": ("Cantabria", KIND_COMMUNITY),
     "07": ("Castilla y León", KIND_COMMUNITY),
     "08": ("Castilla-La Mancha", KIND_COMMUNITY),
     "09": ("Cataluña", KIND_COMMUNITY),
-    "10": ("Comunitat Valenciana", KIND_COMMUNITY),
+    "10": ("Comunidad Valenciana", KIND_COMMUNITY),
     "11": ("Extremadura", KIND_COMMUNITY),
     "12": ("Galicia", KIND_COMMUNITY),
     "13": ("Comunidad de Madrid", KIND_COMMUNITY),
@@ -87,22 +87,25 @@ COMMUNITIES = {
     "19": ("Melilla", KIND_CITY),
 }
 
-# INE code of the province -> (name, INE code of its community).
+# INE code of the province -> (name, INE code of its community). The names of the communities and the
+# provinces are the Spanish ones ("Álava", "Gerona", "Islas Baleares"), not the INE's, which are in the
+# language of the territory or in two ("Araba/Álava", "Girona", "Illes Balears"): migration 00079 changed
+# them in the database, and this keeps a regenerated seed the same. The municipalities keep the INE's.
 PROVINCES = {
-    "01": ("Araba/Álava", "16"), "02": ("Albacete", "08"), "03": ("Alicante/Alacant", "10"),
-    "04": ("Almería", "01"), "05": ("Ávila", "07"), "06": ("Badajoz", "11"), "07": ("Illes Balears", "04"),
+    "01": ("Álava", "16"), "02": ("Albacete", "08"), "03": ("Alicante", "10"),
+    "04": ("Almería", "01"), "05": ("Ávila", "07"), "06": ("Badajoz", "11"), "07": ("Islas Baleares", "04"),
     "08": ("Barcelona", "09"), "09": ("Burgos", "07"), "10": ("Cáceres", "11"), "11": ("Cádiz", "01"),
-    "12": ("Castellón/Castelló", "10"), "13": ("Ciudad Real", "08"), "14": ("Córdoba", "01"),
-    "15": ("A Coruña", "12"), "16": ("Cuenca", "08"), "17": ("Girona", "09"), "18": ("Granada", "01"),
-    "19": ("Guadalajara", "08"), "20": ("Gipuzkoa", "16"), "21": ("Huelva", "01"), "22": ("Huesca", "02"),
-    "23": ("Jaén", "01"), "24": ("León", "07"), "25": ("Lleida", "09"), "26": ("La Rioja", "17"),
+    "12": ("Castellón", "10"), "13": ("Ciudad Real", "08"), "14": ("Córdoba", "01"),
+    "15": ("La Coruña", "12"), "16": ("Cuenca", "08"), "17": ("Gerona", "09"), "18": ("Granada", "01"),
+    "19": ("Guadalajara", "08"), "20": ("Guipúzcoa", "16"), "21": ("Huelva", "01"), "22": ("Huesca", "02"),
+    "23": ("Jaén", "01"), "24": ("León", "07"), "25": ("Lérida", "09"), "26": ("La Rioja", "17"),
     "27": ("Lugo", "12"), "28": ("Madrid", "13"), "29": ("Málaga", "01"), "30": ("Murcia", "14"),
-    "31": ("Navarra", "15"), "32": ("Ourense", "12"), "33": ("Asturias", "03"), "34": ("Palencia", "07"),
+    "31": ("Navarra", "15"), "32": ("Orense", "12"), "33": ("Asturias", "03"), "34": ("Palencia", "07"),
     "35": ("Las Palmas", "05"), "36": ("Pontevedra", "12"), "37": ("Salamanca", "07"),
     "38": ("Santa Cruz de Tenerife", "05"), "39": ("Cantabria", "06"), "40": ("Segovia", "07"),
     "41": ("Sevilla", "01"), "42": ("Soria", "07"), "43": ("Tarragona", "09"), "44": ("Teruel", "02"),
-    "45": ("Toledo", "08"), "46": ("Valencia/València", "10"), "47": ("Valladolid", "07"),
-    "48": ("Bizkaia", "16"), "49": ("Zamora", "07"), "50": ("Zaragoza", "02"), "51": ("Ceuta", "18"),
+    "45": ("Toledo", "08"), "46": ("Valencia", "10"), "47": ("Valladolid", "07"),
+    "48": ("Vizcaya", "16"), "49": ("Zamora", "07"), "50": ("Zaragoza", "02"), "51": ("Ceuta", "18"),
     "52": ("Melilla", "19"),
 }
 
