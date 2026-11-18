@@ -1080,7 +1080,9 @@ the queue, so one person who sends many cannot hold everybody else up.
 (`POST /areas` with no `parent_id`: 403 `area_root_admin_only` for anybody else, and the kind is
 "País" unless given). A zone below Spain at any depth (`Service.Create` finds the country at the
 top of the parent's ancestors and compares it with the one whose code is `ES`) is only added by an
-admin (403 `area_spain_admin_only`): those come from the INE's lists, loaded by migrations.
+admin (403 `area_spain_admin_only`): those come from the INE's lists, loaded by migrations. The zone
+keeps who added it (`created_by`, a user id; the API says the login, `Area.CreatedBy`), which is
+empty for the seeded ones.
 The `kind` is the one most of its siblings have, unless it is given, and the first zone below
 another needs it said (400 `area_kind_required`). Nothing else is checked, so a typo is possible:
 that is what an admin fixes.

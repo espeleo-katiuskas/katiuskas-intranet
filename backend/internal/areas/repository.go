@@ -33,13 +33,13 @@ func pgCode(err error) string {
 
 // areaSelect is a zone with how many zones are below it and how many places are in it.
 const areaSelect = `
-	SELECT a.id, a.parent_id, a.kind, a.name, a.code,
+	SELECT a.id, a.parent_id, a.kind, a.name, a.code, coalesce(cu.login, ''),
 		(SELECT count(*) FROM areas c WHERE c.parent_id = a.id),
 		(SELECT count(*) FROM places p WHERE p.area_id = a.id)
-	FROM areas a`
+	FROM areas a LEFT JOIN users cu ON cu.id = a.created_by`
 
 func scanArea(row pgx.Row, a *Area) error {
-	return row.Scan(&a.ID, &a.ParentID, &a.Kind, &a.Name, &a.Code, &a.ChildCount, &a.PlaceCount)
+	return row.Scan(&a.ID, &a.ParentID, &a.Kind, &a.Name, &a.Code, &a.CreatedBy, &a.ChildCount, &a.PlaceCount)
 }
 
 func (r *Repository) collect(rows pgx.Rows) ([]Area, error) {
@@ -176,11 +176,12 @@ func (r *Repository) NameTaken(ctx context.Context, parentID *int64, normalized 
 	return taken, err
 }
 
-func (r *Repository) Create(ctx context.Context, parentID *int64, kind, name, normalized string) (Area, error) {
+// Create adds a zone, saying who (a user id) added it.
+func (r *Repository) Create(ctx context.Context, parentID *int64, kind, name, normalized string, createdBy int64) (Area, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO areas (parent_id, kind, name, norm_name) VALUES ($1, $2, $3, $4) RETURNING id
-	`, parentID, kind, name, normalized).Scan(&id)
+		INSERT INTO areas (parent_id, kind, name, norm_name, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id
+	`, parentID, kind, name, normalized, createdBy).Scan(&id)
 	switch pgCode(err) {
 	case uniqueViolationCode:
 		return Area{}, ErrDuplicate

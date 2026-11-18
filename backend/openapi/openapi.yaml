@@ -6959,6 +6959,7 @@ components:
         kind: { type: string, description: "The text that names its level: País, Comunidad autónoma, Provincia, Municipio…" }
         name: { type: string }
         code: { type: string, description: "An official code when there is one: ISO 3166-1 alpha-2 for a country, the INE's for a Spanish community, province or municipality." }
+        created_by: { type: string, description: "The login of whoever added the zone through the API; absent for the zones loaded with the catalogue." }
         child_count: { type: integer, description: "Zones directly below it." }
         place_count: { type: integer, description: "Places directly in it." }
         ancestors:

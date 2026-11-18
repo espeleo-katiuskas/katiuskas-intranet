@@ -592,6 +592,22 @@ func TestOnlyAnAdminAddsZonesInSpain(t *testing.T) {
 	status(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": e.portugal, "name": "Aveiro", "kind": "Distrito"}), http.StatusCreated)
 }
 
+// A zone added through the API says who added it (by login); the seeded zones say nobody.
+func TestCreatedBy(t *testing.T) {
+	e := newEnv(t)
+	if seeded := decode[areas.Area](t, e.json("GET", fmt.Sprintf("/api/v1/areas/%d", e.spain), e.member.token, nil)); seeded.CreatedBy != "" {
+		t.Errorf("a seeded zone has no author: %q", seeded.CreatedBy)
+	}
+	added := e.add(e.madrid, "Recién añadida", "Zona")
+	login := e.admin.user.Login // e.add adds as the admin.
+	if added.CreatedBy != login {
+		t.Errorf("the zone says who added it: %q, expected %q", added.CreatedBy, login)
+	}
+	if got := decode[areas.Area](t, e.json("GET", areaPath(added), e.member.token, nil)); got.CreatedBy != login {
+		t.Errorf("it is read back: %q", got.CreatedBy)
+	}
+}
+
 // Countries are deleted when empty and merged with each other, like any zone; a merge keeps the official
 // code if the country that stays has none, and a country cannot be merged with a zone that is in another.
 func TestCountriesDeleteAndMerge(t *testing.T) {

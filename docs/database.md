@@ -1100,10 +1100,13 @@ one that administers it), and an admin renames, merges and deletes them.
 | `norm_name` | text | no |  |
 | `code` | text | yes |  |
 | `created_at` | timestamptz | no | now() |
+| `created_by` | bigint | yes |  |
 
 Notes on the columns:
 
 - `parent_id`: The zone it is in; empty for a country.
+- `created_by`: Who added the zone through the API (`areas.Repository.Create`); empty for the zones
+  that the seeds load and for those added before the column existed.
 - `kind`: The level, in the club's words: "País", "Comunidad autónoma", "Provincia", "Municipio"…
 - `norm_name`: The name in lower case, without accents, and with every run of anything but letters
   and digits as one space ("Donostia/San Sebastián" is `donostia san sebastian`). It is what the
@@ -1116,7 +1119,7 @@ Notes on the columns:
 Constraints:
 
 - primary key (id)
-- `parent_id` → `areas(id)`, and not its own parent
+- `parent_id` → `areas(id)`, and not its own parent; `created_by` → `users(id)`
 - `kind` and `name` are not blank, `norm_name` is not empty, and `code` is not blank when there is
   one
 - unique `idx_areas_parent_name` on `(COALESCE(parent_id, 0), norm_name)`: below the same zone
@@ -2161,3 +2164,5 @@ at the end; that database has to be recreated when a new migration appears.
   municipality below them: what pointed at those zones moves up to the city, and they are deleted
 - `00075_osm_unknown_zones.sql`: `osm_sync_runs.unknown_zones` and `unknown_zone_codes`, the
   municipal boundaries of a load that the club has no zone for
+- `00076_areas_created_by.sql`: `areas.created_by`, who added a zone through the API (empty for the
+  seeded ones)

@@ -194,7 +194,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	a, err := h.service.Create(r.Context(), body.ParentID, body.Name, body.Kind, current.HasAnyRole("admin"))
+	a, err := h.service.Create(r.Context(), body.ParentID, body.Name, body.Kind, current.HasAnyRole("admin"), current.ID)
 	if err != nil {
 		writeError(w, err, "could not add the zone")
 		return

@@ -142,7 +142,8 @@ func cleanText(name, kind string) (string, string, string, error) {
 // is a "País" unless it is said otherwise.
 //
 // Only an admin adds a zone in Spain (below it at any depth): they are loaded from the INE's lists.
-func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string, admin bool) (Area, error) {
+// createdBy is the id of whoever adds it, which the zone keeps.
+func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string, admin bool, createdBy int64) (Area, error) {
 	name, kind, normalized, err := cleanText(name, kind)
 	if err != nil {
 		return Area{}, err
@@ -187,7 +188,7 @@ func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string
 	if taken {
 		return Area{}, ErrDuplicate
 	}
-	return s.repo.Create(ctx, parentID, kind, name, normalized)
+	return s.repo.Create(ctx, parentID, kind, name, normalized, createdBy)
 }
 
 // Update renames a zone and, if a kind is given, changes it; with move.Set it also puts it below another

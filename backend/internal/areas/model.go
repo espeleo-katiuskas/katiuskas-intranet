@@ -70,6 +70,9 @@ type Area struct {
 	Kind     string  `json:"kind"`
 	Name     string  `json:"name"`
 	Code     *string `json:"code,omitempty"`
+	// CreatedBy is the login of whoever added the zone through the API; absent for the zones that the seeds
+	// load, and for those added before it was recorded.
+	CreatedBy string `json:"created_by,omitempty"`
 	// ChildCount and PlaceCount are the zones and the places directly below it, not in all its descendants.
 	ChildCount int `json:"child_count"`
 	PlaceCount int `json:"place_count"`

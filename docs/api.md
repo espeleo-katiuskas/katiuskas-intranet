@@ -2040,15 +2040,17 @@ An item says whether it is `available` (in the library and not out on loan) but 
 | `kind` | text |
 | `name` | text |
 | `code` | text |
+| `created_by` | text |
 | `child_count` | integer |
 | `place_count` | integer |
 | `ancestors` | `[AreaRef]` |
 
 `parent_id` is absent for a country. `code` is an official code when there is one: ISO 3166-1
-alpha-2 for a country, the INE's for a Spanish community, province or municipality. `child_count`
-and `place_count` are the zones and the places directly below and in the zone, not in all its
-descendants. `ancestors`, the country first and without the zone itself, are given by a search and
-by `GET /areas/{id}`, not by the list of the zones below one.
+alpha-2 for a country, the INE's for a Spanish community, province or municipality. `created_by` is
+the login of whoever added the zone (`POST /areas`); it is absent for the zones that were loaded
+with the catalogue. `child_count` and `place_count` are the zones and the places directly below and
+in the zone, not in all its descendants. `ancestors`, the country first and without the zone itself,
+are given by a search and by `GET /areas/{id}`, not by the list of the zones below one.
 
 ### `AreaRef`
 
