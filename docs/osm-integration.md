@@ -107,7 +107,7 @@ sleep), and via ferratas, which the club only uses now and then, last. Sinkholes
 
 ## 3. Licence: what the ODbL asks
 
-To be confirmed by the board (this is a reading, not legal advice):
+This is a reading of the licence, not legal advice:
 
 - **Attribution**: "© OpenStreetMap contributors" wherever the data is shown. The map says it
   while the layer is on, and its credit links to the copyright page.
@@ -203,7 +203,6 @@ marked as gone by the next one.
 
 **Decisions that are the club's:**
 
-- **The licence reading**, to be confirmed by the board (3).
 - **Locations that should be private.** Some cave locations are left out of public maps on
   purpose, to protect the cave or the visitors. Today everybody who signs in sees everything (it is
   in `roadmap.md`, as "hide the location of some places"), and anything copied from the club into
