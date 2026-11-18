@@ -63,6 +63,9 @@ func (s *Service) Locate(ctx context.Context, lat, lon float64) (*Area, error) {
 	}
 	candidates := []struct{ kind, code string }{
 		{"Municipio", found.MunicipalityCode},
+		// The geocoder says Gibraltar, Greenland or Bermuda by their ISO code, like a country, but they are
+		// territories below the state that administers them.
+		{TerritoryKind, found.CountryCode},
 		{"", found.CountryCode},
 	}
 	if city, ok := AutonomousCityCodes[found.MunicipalityCode]; ok {

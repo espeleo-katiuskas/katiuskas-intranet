@@ -223,11 +223,15 @@ func TestSeed(t *testing.T) {
 		}
 		return n
 	}
-	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL`); n != 195 {
+	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND kind = 'País'`); n != 195 {
 		t.Errorf("expected the 195 states of the UN (193 members and 2 observers), got %d", n)
 	}
-	// The territories of ISO 3166-1 that are not states are not roots, and the observers are.
-	for _, code := range []string{"GI", "HK", "PR", "GL", "TW", "EH", "AQ", "FO", "AX", "XK"} {
+	// The three that no state administers (or not undisputed) are roots too, but territories, not countries.
+	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND kind = 'Territorio' AND code IN ('AQ', 'EH', 'TW')`); n != 3 {
+		t.Errorf("Antarctica, Western Sahara and Taiwan should be territories with no zone above: %d", n)
+	}
+	// The other territories of ISO 3166-1 that are not states are not roots, and the observers are.
+	for _, code := range []string{"GI", "HK", "PR", "GL", "FO", "AX", "XK"} {
 		if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND code = $1`, code); n != 0 {
 			t.Errorf("%s is not a state of the UN and should not be a country", code)
 		}
@@ -237,8 +241,8 @@ func TestSeed(t *testing.T) {
 			t.Errorf("%s should be a country", code)
 		}
 	}
-	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND (kind <> 'País' OR code !~ '^[A-Z]{2}$')`); n != 0 {
-		t.Errorf("%d roots are not a country with an ISO code", n)
+	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND (kind NOT IN ('País', 'Territorio') OR code !~ '^[A-Z]{2}$')`); n != 0 {
+		t.Errorf("%d roots are not a country or a territory with an ISO code", n)
 	}
 	if n := count(`SELECT count(*) FROM areas WHERE parent_id = $1 AND kind IN ('Comunidad autónoma', 'Ciudad autónoma')`, e.spain); n != 19 {
 		t.Errorf("expected the 19 communities and cities of Spain, got %d", n)
@@ -359,8 +363,8 @@ func TestPermissions(t *testing.T) {
 func TestListAndSearch(t *testing.T) {
 	e := newEnv(t)
 	roots := decode[[]areas.Area](t, e.json("GET", "/api/v1/areas", e.member.token, nil))
-	if len(roots) != 195 || roots[0].ParentID != nil || roots[0].ChildCount != 0 {
-		t.Fatalf("expected the 195 states of the UN: %d", len(roots))
+	if len(roots) != 198 || roots[0].ParentID != nil || roots[0].ChildCount != 0 {
+		t.Fatalf("expected the 195 states of the UN and the 3 territories with no state: %d", len(roots))
 	}
 	for i := 1; i < len(roots); i++ {
 		if areas.Normalize(roots[i-1].Name) > areas.Normalize(roots[i].Name) {
@@ -504,6 +508,47 @@ func TestRename(t *testing.T) {
 	errorCode(t, e.json("PUT", "/api/v1/areas/987654321", e.admin.token, map[string]any{"name": "X"}), 404, "not_found")
 	// A country can be renamed.
 	status(t, e.json("PUT", fmt.Sprintf("/api/v1/areas/%d", e.portugal), e.admin.token, map[string]any{"name": "República Portuguesa"}), http.StatusOK)
+}
+
+// The territories that have an ISO 3166-1 code and are not states are zones of kind "Territorio" below the
+// state that administers them (or, if there is none, with no zone above), with the ISO code, and the
+// geocoder's country code finds them.
+func TestTerritories(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for code, state := range map[string]string{"GI": "GB", "BM": "GB", "GL": "DK", "FO": "DK", "HK": "CN", "PR": "US", "RE": "FR", "AX": "FI", "SJ": "NO", "CK": "NZ"} {
+		var n int
+		if err := e.tx.QueryRow(ctx, `SELECT count(*) FROM areas t JOIN areas s ON s.id = t.parent_id
+			WHERE t.kind = 'Territorio' AND t.code = $1 AND s.parent_id IS NULL AND s.code = $2`, code, state).Scan(&n); err != nil || n != 1 {
+			t.Errorf("%s should be a territory of %s: %d %v", code, state, n, err)
+		}
+	}
+	var total int
+	if err := e.tx.QueryRow(ctx, `SELECT count(*) FROM areas WHERE kind = 'Territorio' AND parent_id IS NOT NULL`).Scan(&total); err != nil || total != 51 {
+		t.Errorf("51 territories below a state expected: %d %v", total, err)
+	}
+	// The three that nobody administers, or whose administrator is disputed, have no zone above them, and
+	// the geocoder's country code finds them like any other.
+	for code, name := range map[string]string{"AQ": "Antártida", "EH": "Sáhara Occidental", "TW": "Taiwán"} {
+		e.boundaries.answer = areas.Containing{CountryCode: code}
+		got := decode[struct {
+			Area *areas.Area `json:"area"`
+		}](t, e.json("GET", "/api/v1/areas/locate?lat=1&lon=1", e.member.token, nil))
+		if got.Area == nil || got.Area.Name != name || got.Area.Kind != areas.TerritoryKind || got.Area.ParentID != nil {
+			t.Errorf("%s is a territory with no zone above: %+v", code, got.Area)
+		}
+	}
+
+	e.boundaries.answer = areas.Containing{CountryCode: "GI"}
+	rec := e.json("GET", "/api/v1/areas/locate?lat=36.14&lon=-5.35", e.member.token, nil)
+	status(t, rec, http.StatusOK)
+	got := decode[struct {
+		Area *areas.Area `json:"area"`
+	}](t, rec)
+	if got.Area == nil || got.Area.Name != "Gibraltar" || got.Area.Kind != areas.TerritoryKind ||
+		len(got.Area.Ancestors) != 1 || got.Area.Ancestors[0].Name != "Reino Unido" {
+		t.Errorf("Gibraltar is a territory of the United Kingdom: %+v", got.Area)
+	}
 }
 
 // A zone is deleted only if nothing is below it and no place is in it, a country included.

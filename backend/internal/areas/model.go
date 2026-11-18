@@ -53,6 +53,10 @@ type Ref struct {
 	Name string `json:"name"`
 }
 
+// TerritoryKind is the kind of a territory that ISO 3166-1 has a code for but that is not a state (Gibraltar,
+// Greenland, Puerto Rico…): it is below the state that administers it and its code is the ISO one.
+const TerritoryKind = "Territorio"
+
 // CountryKind is the kind a zone that is in no other one has when none is given.
 const CountryKind = "País"
 
