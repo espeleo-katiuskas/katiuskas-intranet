@@ -32,8 +32,9 @@ KIND_COUNTRY = "País"
 # (https://www.un.org/en/about-us/member-states, November 2026) and its two observers, the Holy See (VA)
 # and the State of Palestine (PS). The rest of ISO 3166-1 — 54 entries — are dependent territories and
 # special areas, not countries (Gibraltar, Hong Kong, Puerto Rico, Greenland, Antarctica, Western Sahara…)
-# and Taiwan, which is not a member of the UN: they are left out. A place in one of them goes in a zone
-# added below the state that administers it.
+# and Taiwan, which is not a member of the UN: they are left out of this seed. Migration 00077 adds 51 of
+# them below the state that administers each, and 00078 adds Antarctica, Western Sahara and Taiwan as
+# roots of kind "Territorio".
 UN_STATES = """
     AD AE AF AG AL AM AO AR AT AU AZ BA BB BD BE BF BG BH BI BJ BN BO BR BS BT BW BY BZ CA CD CF
     CG CH CI CL CM CN CO CR CU CV CY CZ DE DJ DK DM DO DZ EC EE EG ER ES ET FI FJ FM FR GA GB GD

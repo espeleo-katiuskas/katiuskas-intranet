@@ -998,9 +998,11 @@ OpenStreetMap.
 The tree of zones that says where a place is: the 195 states of the United Nations (its 193 members
 and its two observers, all seeded) and, below each, whatever its administrative divisions are. For
 Spain they are seeded too: the autonomous communities, the provinces and the municipalities of the
-INE. A territory that is not a state (Gibraltar, for one) is added by a member below the state that
-administers it. Nothing in the API knows the levels: each zone has a `kind`, a text that names its
-level ("Provincia"), and a place points at the most specific zone it is in. Any member reads the
+INE. A territory that is not a state (Gibraltar, Bermuda, Greenland…) is seeded too, with kind
+"Territorio" and its ISO code, below the state that administers it; Antarctica, Western Sahara and
+Taiwan, which no state administers or whose administrator is disputed, are zones of that kind with
+no zone above them. Nothing in the API knows the levels: each zone has a `kind`, a text that names
+its level ("Provincia"), and a place points at the most specific zone it is in. Any member reads the
 zones and adds one below another when it is missing; renaming, merging and deleting them is for
 admin alone.
 

@@ -1088,8 +1088,10 @@ divisions are (in Spain an autonomous community, a province and a municipality; 
 parish). Nothing in the code knows the levels: `kind` is the text that names each one, and a place
 points at the most specific zone it is in, so its country, province… are its ancestors. The roots
 are the states of the United Nations, all of them seeded (migration `00062`, with Spain down to its
-municipalities); anybody adds a zone below another (a territory that is not a state goes below the
-one that administers it), and an admin renames, merges and deletes them.
+municipalities, and the territories of ISO 3166-1 that are not states below the state that
+administers them, migration `00077`; and Antarctica, Western Sahara and Taiwan, which no state
+administers or whose administrator is disputed, as roots of kind "Territorio", migration `00078`);
+anybody adds a zone below another, and an admin renames, merges and deletes them.
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -1128,10 +1130,11 @@ Constraints:
 - index `idx_areas_parent_id` on `(parent_id)`, and `idx_areas_norm_name` on `norm_name` (for the
   search)
 
-Rules outside the database: only a country is a root (the API never creates one), the name is at
-most 200 characters and the kind 60, a zone is only deleted when nothing is below it and no place is
-in it (a country too), two zones are merged only below the same one (two countries are), and the
-first zone below another one needs its `kind` said (the rest take the one their siblings have).
+Rules outside the database: only a country (or one of the three territories with no state) is a root
+(the API never creates one), the name is at most 200 characters and the kind 60, a zone is only
+deleted when nothing is below it and no place is in it (a country too), two zones are merged only
+below the same one (two countries are), and the first zone below another one needs its `kind` said
+(the rest take the one their siblings have).
 
 ### `place_types`
 
@@ -2040,6 +2043,11 @@ Besides the schema, the migrations leave this data:
   (1 January 2025), in migration `00062`; and migration `00074` takes out the province and the
   municipality that the INE lists for Ceuta and Melilla, which are autonomous cities with nothing
   below them, so that they are directly below the country: 50 provinces and 8,130 municipalities.
+  Migration `00077` adds 51 territories that ISO 3166-1 has a code for and that are not states
+  (Gibraltar, Bermuda, Greenland, Hong Kong, Puerto Rico…), as zones of kind "Territorio" below the
+  state that administers them, with their ISO code. Migration `00078` adds the three that no state
+  administers (undisputed): Antarctica (AQ), Western Sahara (EH) and Taiwan (TW), as roots of kind
+  "Territorio" (not "País", which would say they are states).
 - `place_geologies`: Caliza, Yeso, Hielo, Lava, Dolomía, Mármol, Sal, Arenisca, Cuarcita,
   Conglomerado and Granito.
 - `place_types`: Cavidad (cave) and Cañón (canyon), fixed, and Vía ferrata, Refugio and Otro
@@ -2166,3 +2174,7 @@ at the end; that database has to be recreated when a new migration appears.
   municipal boundaries of a load that the club has no zone for
 - `00076_areas_created_by.sql`: `areas.created_by`, who added a zone through the API (empty for the
   seeded ones)
+- `00077_territories.sql`: the 51 territories of ISO 3166-1 that are not states, each below the
+  state that administers it, with kind "Territorio" and their ISO code
+- `00078_territories_without_a_state.sql`: Antarctica, Western Sahara and Taiwan as roots of kind
+  "Territorio", with their ISO code

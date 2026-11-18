@@ -878,7 +878,7 @@ place keeps who created it and who changed it last (the place or any of its poin
   known to be in (a municipality, a province or just the country), so its province, community and
   country are the zones it is in. The zones are the 195 states of the United Nations and, for Spain,
   its communities, provinces and municipalities, all seeded (a territory that is not a state, like
-  Gibraltar, is added below the state that administers it); nothing in the code knows the levels,
+  Gibraltar, is seeded below the state that administers it); nothing in the code knows the levels,
   which are the text `kind` of each zone, so any country fits. Any member adds a zone that is
   missing below another, except in Spain, whose zones are seeded (only admin adds there); only
   admin renames, merges (a zone that was added twice) and deletes them.
