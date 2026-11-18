@@ -106,7 +106,10 @@ minutes (`RETRY_AFTER`), so a broken commit does not rebuild at every request; a
 `--force` tries immediately. The script says what it does in the unit's journal (`journalctl -u
 katiuskas-intranet-deploy`, however the run was started).
 
-**Setting it up** (once, on the club's host, as root):
+**Setting it up** (once, on the club's host, as root). The units of the two APIs that it
+restarts, `katiuskas-intranet-stable.service` and `katiuskas-intranet-testing.service`, are in
+`deploy/systemd/` too and are installed first, as the deployment guide says (step 4), each once its
+directory and its `api.env` exist. The rest:
 
 ```sh
 # The host builds, so it needs git and Go (the toolchain is not downloaded: it has to be at

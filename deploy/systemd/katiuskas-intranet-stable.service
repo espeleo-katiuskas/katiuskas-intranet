@@ -1,0 +1,27 @@
+# The API of the production environment, as it runs on the club's host: one process of
+# bin/katiuskas-api, with the settings of api.env, listening on the HTTP_ADDR that file says
+# (only Caddy talks to it). The files it runs (bin/, web/, db/migrations/) are put in place by
+# scripts/deploy.sh, which restarts this unit after each update, so nothing here changes with a
+# deployment. What it prints is in this unit's journal (journalctl -u katiuskas-intranet-stable).
+# See docs/deployment.md (step 4) for api.env and docs/environments.md for how the two
+# environments differ.
+#
+# The API shuts down in an orderly way on SIGTERM (what systemd sends to stop it): the requests
+# in flight finish and what it keeps in memory is stored. systemd's default TimeoutStopSec
+# (90 s) leaves room for it.
+[Unit]
+Description=Katiuskas Intranet API (production)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=intranet
+Group=intranet
+WorkingDirectory=/opt/katiuskas-intranet-stable
+EnvironmentFile=/opt/katiuskas-intranet-stable/api.env
+ExecStart=/opt/katiuskas-intranet-stable/bin/katiuskas-api
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

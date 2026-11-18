@@ -234,6 +234,18 @@ sudo systemctl enable --now katiuskas-api
 sudo systemctl status katiuskas-api
 ```
 
+On the club's host the two units are in the repository, with the paths and names of
+[`environments.md`](environments.md) already in them
+([`katiuskas-intranet-stable.service`](../deploy/systemd/katiuskas-intranet-stable.service) and
+[`katiuskas-intranet-testing.service`](../deploy/systemd/katiuskas-intranet-testing.service)):
+
+```sh
+sudo install -m 0644 deploy/systemd/katiuskas-intranet-stable.service \
+  deploy/systemd/katiuskas-intranet-testing.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now katiuskas-intranet-stable katiuskas-intranet-testing
+```
+
 `enable` makes it start by itself when the machine reboots; `Restart=on-failure` makes it restart by
 itself if the process dies.
 
