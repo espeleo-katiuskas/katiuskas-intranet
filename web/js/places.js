@@ -78,6 +78,7 @@ function renderPlace(place) {
       <td>${stateBadge(place.state)}</td>
       <td>${escapeHtml(place.where)}</td>
       <td>${measuresHtml(place) || '—'}</td>
+      <td>${place.activity_count || '—'}</td>
     </tr>`;
 }
 

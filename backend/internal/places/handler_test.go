@@ -579,7 +579,8 @@ func TestAreaOfAPlace(t *testing.T) {
 	}
 
 	// In a community with no province, or in a country that has neither, the text says all there is.
-	for name, want := range map[string]string{"Comunidad de Madrid": "Comunidad de Madrid, España", "Ceuta": "Ceuta, España"} {
+	for _, c := range []struct{ name, want string }{{"Comunidad de Madrid", "Comunidad de Madrid, España"}, {"Ceuta", "Ceuta, España"}} {
+		name, want := c.name, c.want
 		var zone int64
 		if err := e.tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE name = $1 AND kind IN ('Comunidad autónoma', 'Ciudad autónoma')`, name).Scan(&zone); err != nil {
 			t.Fatal(err)
@@ -920,6 +921,43 @@ func TestFiles(t *testing.T) {
 	status(t, e.json("DELETE", placePath(p, ""), e.admin.token, nil), http.StatusNoContent)
 	if _, err := e.storage.Open(p.ID, kept.ID); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("the bytes of a deleted place must be gone, got %v", err)
+	}
+}
+
+// The listing and the place say in how many activities the place is one of the places they go to, not
+// counting the cancelled ones.
+func TestActivityCountOfAPlace(t *testing.T) {
+	e := newEnv(t)
+	busy := e.newPlace(e.cavidad, "Cueva visitada", nil)
+	e.notifier.wait(t)
+	quiet := e.newPlace(e.cavidad, "Cueva tranquila", nil)
+	e.notifier.wait(t)
+	for i := 0; i < 2; i++ {
+		activity := testutil.InsertActivity(t, e.tx)
+		if _, err := e.tx.Exec(context.Background(), `INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, activity, busy.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A cancelled activity that goes there does not count.
+	cancelled := testutil.InsertActivity(t, e.tx)
+	for _, sql := range []string{
+		`INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`,
+		`UPDATE activities SET cancelled = true WHERE id = $1`,
+	} {
+		args := []any{cancelled, busy.ID}[:strings.Count(sql, "$")]
+		if _, err := e.tx.Exec(context.Background(), sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	counts := map[int64]int{}
+	for _, item := range decode[[]places.ListItem](t, e.json("GET", "/api/v1/places", e.member.token, nil)) {
+		counts[item.ID] = item.ActivityCount
+	}
+	if counts[busy.ID] != 2 || counts[quiet.ID] != 0 {
+		t.Errorf("two activities for the first, none for the second: %v", counts)
+	}
+	if got := decode[places.Place](t, e.json("GET", placePath(busy, ""), e.member.token, nil)); got.ActivityCount != 2 {
+		t.Errorf("the place says it too: %d", got.ActivityCount)
 	}
 }
 

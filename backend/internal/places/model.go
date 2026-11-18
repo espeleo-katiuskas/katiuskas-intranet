@@ -177,6 +177,9 @@ type ListItem struct {
 	// GeologyID and Geology (its name) say what a cave is formed in, if it is known.
 	GeologyID *int64  `json:"geology_id,omitempty"`
 	Geology   *string `json:"geology,omitempty"`
+	// ActivityCount is in how many activities that are not cancelled the place is one of the places they go to
+	// (activity_places).
+	ActivityCount int `json:"activity_count"`
 	// OsmChanged says that the OpenStreetMap element the place is has changed since it was linked or last
 	// looked at (Place.OsmChanges says what); absent when it has not, or the place is not one.
 	OsmChanged bool `json:"osm_changed,omitempty"`

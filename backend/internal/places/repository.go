@@ -45,7 +45,9 @@ func violates(err error, constraint string) bool {
 const listColumns = `
 	p.id, p.type_id, t.name, p.kind, p.name, p.alt_names, COALESCE(p.state, ''), p.subtype_id, st.name, p.system_id, sy.name,
 	p.area_id, w.ids, w.where_text, w.names_text,
-	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name`
+	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name,
+	(SELECT count(*) FROM activity_places ap JOIN activities ac ON ac.id = ap.activity_id
+		WHERE ap.place_id = p.id AND NOT ac.cancelled)`
 
 // listFrom is a place with its type and, through the tree of zones, the ids and the names of the zone it
 // is in and of the ones it is in, from the most specific to the country (depth 0 is the zone itself). The
@@ -75,7 +77,7 @@ func (it *ListItem) scanTargets() []any {
 	return []any{
 		&it.ID, &it.TypeID, &it.TypeName, &it.Kind, &it.Name, &it.AltNames, &it.State, &it.SubtypeID,
 		&it.Subtype, &it.SystemID, &it.System, &it.AreaID, &it.AreaIDs, &it.Where, &it.AreaNames, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
-		&it.Geology,
+		&it.Geology, &it.ActivityCount,
 	}
 }
 

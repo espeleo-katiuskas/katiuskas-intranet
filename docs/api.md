@@ -2115,6 +2115,7 @@ are given by a search and by `GET /areas/{id}`, not by the list of the zones bel
 | `horizontal_length_m` | integer |
 | `geology_id` | integer |
 | `geology` | text |
+| `activity_count` | integer, in how many activities that are not cancelled the place is one of the places they go to |
 | `osm_changed` | true if the OpenStreetMap element the place is has changed since it was linked or last reviewed; left out otherwise |
 
 ### `Place`

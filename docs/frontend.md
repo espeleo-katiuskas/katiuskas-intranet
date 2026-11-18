@@ -195,35 +195,38 @@ place on a phone) of name — a link, with its other names under it —, type (a
 "Sima"; `placeTypeLabel`), state as a badge (Abierta, Hace falta permiso, Turística (de pago) or
 Cerrada: how the place can be visited, each with a line that explains it, `STATE_HELP` in
 `places-common.js`, under the field of the form and next to the badge on the page; a place whose
-type has no state shows none), where it is (`where`: the zone, the province, the community and the
-country, so "Madrid" finds the places of the province too) and the measures of a cave in short ("8m
-↓ · 1500m ⇄": depth and horizontal length, each with its meaning as a tooltip; `measuresHtml`), with
-a search that looks in the name, the other names, the type, the state and where it is (accents and
-case ignored, every word has to appear, the geology of a cave included) and three selects, by type,
-by subtype and by state, of which the subtype is there only when the type chosen is Cavidad and the
-state only when it is "Todos" or a type that has one (a filter that is hidden is also cleared, so
-that it never filters unseen); the type of a row has the geology of a cave under it. "Lista" and
-"Mapa" switch the table for a map of the same places, with the same filters (see "The map of the
-places" below); `/lugares?vista=mapa` opens it, `&lugar=<id>` also opens the popup of that place and
-`&sistema=<id>` starts the view on the cavities of that system. Any member gets "+ Nuevo lugar",
-which opens the dialog of `place-dialog.js` and goes to the page of the place once it is saved;
-admin gets "Tipos y geologías", a dialog with three tables to add, rename and delete the general
-types (Cavidad and Cañón show "Fijo" and cannot be touched; each says "Con estado" or "Sin estado",
-and a new one has the box "Con estado", which cannot be changed afterwards), the subtypes of the
-cavities and the geologies of the caves (none of these two is fixed; one that has places cannot be
-deleted), all with the same code (`bindCatalogue` in `places.js`), and "Zonas" (see below).
-`lugar.html`/`place.js` is one place: the data (other names, one row per zone from the country down
-— "País España", "Comunidad autónoma Comunidad de Madrid", "Provincia Madrid", "Municipio
-Valdemanco": the name of the level is the `kind` of the zone —, the main coordinate as "41.52016,
--3.63606 · Google Maps · OpenStreetMap" (the degrees and a link to each map; the UTM is only in the
-form, where it is read and shown; `coordinatesHtml`, also used for each point and in the page of a
-system), its altitude above sea level, the geology of a cave, the depth and the horizontal length),
-then "Cómo llegar", "Descripción" and, for a cave or a canyon, "Ficha técnica" — all three through
-`renderRichText` —, and "Otros puntos", a table of the other points with "Editar" and "Quitar" on
-each, "Fotos y documentos" (the files of the place, each with a title, its name, size and who
-attached it, "Descargar" and, for who attached it, admin and board, "Borrar"; an image is shown
-under it; a form attaches a new one), and who added the place and who changed it last. Any member
-has "Editar lugar" and "Añadir punto"; admin and board also "Borrar lugar" (`data-roles`).
+type has no state shows none), where it is (`where`: the zone, the province and the country; the
+search looks in `area_names`, which has the community too, so "Madrid" finds the places of the
+province and of the community), the measures of a cave in short ("8m ↓ · 1500m ⇄": depth and
+horizontal length, each with its meaning as a tooltip; `measuresHtml`) and in how many activities,
+not counting the cancelled ones, the place is one of those they go to (`activity_count`, a number,
+"—" when there is none), with a search that looks in the name, the other names, the type, the state
+and where it is (accents and case ignored, every word has to appear, the geology of a cave included)
+and three selects, by type, by subtype and by state, of which the subtype is there only when the
+type chosen is Cavidad and the state only when it is "Todos" or a type that has one (a filter that
+is hidden is also cleared, so that it never filters unseen); the type of a row has the geology of a
+cave under it. "Lista" and "Mapa" switch the table for a map of the same places, with the same
+filters (see "The map of the places" below); `/lugares?vista=mapa` opens it, `&lugar=<id>` also
+opens the popup of that place and `&sistema=<id>` starts the view on the cavities of that system.
+Any member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the page of
+the place once it is saved; admin gets "Tipos y geologías", a dialog with three tables to add,
+rename and delete the general types (Cavidad and Cañón show "Fijo" and cannot be touched; each says
+"Con estado" or "Sin estado", and a new one has the box "Con estado", which cannot be changed
+afterwards), the subtypes of the cavities and the geologies of the caves (none of these two is
+fixed; one that has places cannot be deleted), all with the same code (`bindCatalogue` in
+`places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: the data (other names,
+one row per zone from the country down — "País España", "Comunidad autónoma Comunidad de Madrid",
+"Provincia Madrid", "Municipio Valdemanco": the name of the level is the `kind` of the zone —, the
+main coordinate as "41.52016, -3.63606 · Google Maps · OpenStreetMap" (the degrees and a link to
+each map; the UTM is only in the form, where it is read and shown; `coordinatesHtml`, also used for
+each point and in the page of a system), its altitude above sea level, the geology of a cave, the
+depth and the horizontal length), then "Cómo llegar", "Descripción" and, for a cave or a canyon,
+"Ficha técnica" — all three through `renderRichText` —, and "Otros puntos", a table of the other
+points with "Editar" and "Quitar" on each, "Fotos y documentos" (the files of the place, each with a
+title, its name, size and who attached it, "Descargar" and, for who attached it, admin and board,
+"Borrar"; an image is shown under it; a form attaches a new one), and who added the place and who
+changed it last. Any member has "Editar lugar" and "Añadir punto"; admin and board also "Borrar
+lugar" (`data-roles`).
 
 The two dialogs, of a place and of a point, are built the first time they are needed by
 `place-dialog.js` (`openPlaceDialog`, `openPointDialog`) and shared by both pages, so there is one
