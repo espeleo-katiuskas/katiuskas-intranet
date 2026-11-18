@@ -18,6 +18,17 @@ this order:
   search by name, "Añadir al catálogo", the link of a place to its element and the notice of what
   changed there. What is left (a few small things, and the decisions about private locations and
   about contributing back to OpenStreetMap) is in section 5 of `osm-integration.md`.
+- **A diff mode for the municipalities' seed**: `scripts/generate-areas-seed.py` only writes the
+  whole seed, so the list of municipalities (migration 00062) has no way to be brought up to date.
+  The mirror's load already says when it is behind (`/admin` shows the INE codes of the municipal
+  boundaries the club has no zone for). The script would get a mode that compares the INE's list
+  with the zones of the club and writes a draft migration (new municipalities, renames) plus a
+  report of what needs a human decision (mergers, municipalities that disappear or change code).
+  It should ignore Ceuta and Melilla (autonomous cities, migration 00074), and share the reading of
+  the INE's data with the full mode (for instance in `scripts/areas_seed.py`). To be run by hand
+  about once a year, whether `/admin` warns or not: the warning only catches a code that is new in
+  OpenStreetMap, not a municipality that disappears in a merger (its zone stays, empty) or one that
+  is renamed, and those are only seen by comparing with the INE's list.
 - **Coordinates for the zones**: `lat` and `lon` (optional) on `areas`, filled once from an open
   source (the IGN's *Nomenclátor Geográfico de Municipios y Entidades de Población* for Spain,
   GeoNames for countries and provinces), matching the names of the seed (migration 00062), which
