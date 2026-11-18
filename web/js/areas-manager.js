@@ -87,7 +87,11 @@ function build() {
     // A zone (a country too) is deleted only when nothing is in it.
     deleteButton.disabled = zone.child_count > 0 || zone.place_count > 0;
     deleteButton.title =
-      zone.child_count > 0 ? 'Tiene otras zonas dentro' : zone.place_count > 0 ? 'Tiene lugares' : '';
+      zone.child_count > 0
+        ? 'Tiene otras zonas dentro'
+        : zone.place_count > 0
+          ? 'Tiene lugares'
+          : '';
     // Where it is now; changing it and sending the form moves the zone (with all that is below it).
     const here = zone.id;
     const parent = zone.parent_id ? await apiFetch(`/areas/${zone.parent_id}`) : null;

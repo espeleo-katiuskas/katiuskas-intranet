@@ -1,4 +1,4 @@
-import { apiFetch, escapeHtml, showError } from './api.js';
+import { apiFetch, currentUser, escapeHtml, hasAnyRole, showError } from './api.js';
 import { openAreaDialog } from './area-dialog.js';
 import { areaChain, areaPickerField, bindAreaPicker } from './area-picker.js';
 import { formatDecimal, formatUtm, parseCoordinates } from './coordinates.js';
@@ -235,7 +235,12 @@ function ensurePlaceDialog() {
   });
   // A zone that is not there is added, and chosen.
   document.getElementById('pd-area-add').addEventListener('click', () => {
-    openAreaDialog({ parent: areaPicker.area, onSaved: (area) => areaPicker.setArea(area) });
+    // Only an admin can add a country (a zone in no other one).
+    openAreaDialog({
+      parent: areaPicker.area,
+      allowRoot: hasAnyRole(currentUser(), ['admin']),
+      onSaved: (area) => areaPicker.setArea(area),
+    });
   });
   dialog.addEventListener('close', () => {
     // initModal resets the form on close: bring the rest back in line with it.

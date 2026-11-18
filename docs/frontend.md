@@ -263,7 +263,8 @@ the measures, the altitude and the geology. If the zone is not in the list, "¿N
 zona" opens `area-dialog.js`: the zone it goes in ("Dentro de", chosen with the same field, the one
 already chosen in the place's form if there is), its name and its kind, which is left blank to take
 that of the zones already below (the dialog says which) and is required for the first one below
-another; once added it is the chosen zone. Anybody can; to add a country, rename, move, delete or
+another; once added it is the chosen zone. Anybody can; an admin may also leave "Dentro de" empty to
+add a country (the form passes `allowRoot` to the dialog for an admin). To rename, move, delete or
 add inside a zone, admin has "Zonas" on `/lugares` (`areas-manager.js`): "Añadir una zona" opens the
 same dialog to add a zone anywhere, with "Dentro de" optional (`allowRoot`; left empty it adds a
 country; text there that is not a choice is refused, never taken for "none"). Its search field says
@@ -271,9 +272,9 @@ country; text there that is not a choice is refused, never taken for "none"). It
 and how many zones and places are in it, with its name and kind to change, "Mover dentro de" (the
 zone it is in now, to be changed for another, or emptied to make it a country; after a confirmation
 that says that all it has goes with it), "Añadir una zona dentro" and "Borrar zona", which is
-disabled for a zone with something in it (and says why). There is no way to merge two
-zones here, on purpose: it moves everything in one to the other and cannot be undone, so it is only
-done through the API (`POST /areas/{id}/merge`).
+disabled for a zone with something in it (and says why). There is no way to merge two zones here, on
+purpose: it moves everything in one to the other and cannot be undone, so it is only done through
+the API (`POST /areas/{id}/merge`).
 
 **Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
 (see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the
