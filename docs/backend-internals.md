@@ -1538,47 +1538,47 @@ the send of a bot-flow magic-link DM.
   from another device until then. So every link DM is deleted when its link and code stop
   working, or earlier at the person's sign-in (link or code, from whichever device), and a
   newer link DM — from either flow — deletes the previous one.
-- `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces
-  every resource package's own mutation notifications are built from. `NotifyAsync` (a
-  no-op for a `nil` notifier, i.e. Telegram not configured) is the fire-and-forget
-  goroutine/timeout dance every Telegram send in this app already used, pulled out once so
-  nobody duplicates it. `DiffFields(before, after, fields...)` reflects over a *named*
-  subset of a struct's fields — never every field on it, since a derived/computed one (a
-  computed role list, a membership date recalculated elsewhere) must never show up as a
-  spurious "change" just because it was recomputed at a slightly different moment than
-  "before" — comparing the pair and returning one "field: old → new" line per field that
-  actually differs (a nil pointer formats as `(vacío)`, a date as a plain `YYYY-MM-DD`),
-  *and* renders differently once formatted — a nil pointer and one pointing at a zero
-  value (an empty string, a zero `time.Time`) are still genuinely different values, but
-  both display as `(vacío)`, so a field that merely swapped between those two produces no
-  line: the point of the message is what a human reading it would actually notice changed,
-  not every byte that did. Every resource package with a mutating route (`users`, `roles`,
-  `tokens`, `memberships`, `licenses`, `activities`, `material`, `board`,
-  `activityresources`, `distributions`, `accounting`) takes an `httpapi.MutationNotifier`
-  in its own `NewHandler` — wired to `telegramSender` directly from `cmd/api/main.go`, not
-  gated behind a "don't spam every single request" check the way the predecessor of this
-  whole thing needed, since one message per meaningful action isn't noisy the way one per
-  every mutating request (a routine token touch included) was — and sends its own specific
-  message once a create/update/delete actually succeeds: who did it (`actorLogin`,
-  resolved from the session's own id through that package's existing `UserLookup`, falling
-  back to `user#<id>` rather than failing the whole request if the lookup itself errors)
-  and what changed. A diffing `update` handler fetches the record via `Service.Get`
-  *before* applying the patch and diffs it against the result using a package-level list
-  of field names (`auditableFields`; `accounting` has `accountAuditableFields` and
-  `transactionAuditableFields`; `memberships` names its fields inline) that exactly
-  matches that endpoint's own `UpdateInput` — so nothing that endpoint can't actually
-  touch can appear as a spurious change; `roles` and `material` have no diffed update at
-  all, and `tokens` reports an expiry change by hand. An edit whose diff comes back empty
-  (every field resent unchanged) sends nothing, rather than an "edited" message with
-  nothing in it. A `delete` handler fetches the target the same way, purely so it can
-  still be named once it's gone. This whole mechanism replaced an earlier
-  `httpapi.NotifyMutatingCalls` middleware that sent a blanket "[API] `<method>` `<path>`
-  -> `<status>`" for literally every write regardless of what it actually changed — every
-  business-data route it covered now has a strictly more informative replacement.
-  `authapi`'s session-lifecycle routes (magic-link request, logout, impersonate/exit) were
-  never business-data mutations and send nothing now; only a successful sign-in
-  (`notifyLogin` above), a failed attempt (`notifyAccessProblem` above) and the start of
-  an impersonation (`tokens`: "🎭 ... ha impersonado a ...") are reported.
+- `httpapi.NotifyAsync`/`DiffFields` (`internal/httpapi/audit.go`) are the shared pieces every
+  resource package's own mutation notifications are built from. `NotifyAsync` (a no-op for a `nil`
+  notifier, i.e. Telegram not configured) is the fire-and-forget goroutine/timeout dance every
+  Telegram send in this app already used, pulled out once so nobody duplicates it. It also writes
+  the text to the system log (`slog.Info("notice", "text", …)`, so `journalctl -u
+  katiuskas-intranet-stable` has who changed what), with or without Telegram; the sign-in and
+  access-problem notices of `authapi` go through it too, and the bot's notices about shared contacts
+  log the same way. `DiffFields(before, after, fields...)` reflects over a *named* subset of a
+  struct's fields — never every field on it, since a derived/computed one (a computed role list, a
+  membership date recalculated elsewhere) must never show up as a spurious "change" just because it
+  was recomputed at a slightly different moment than "before" — comparing the pair and returning one
+  "field: old → new" line per field that actually differs (a nil pointer formats as `(vacío)`, a
+  date as a plain `YYYY-MM-DD`), *and* renders differently once formatted — a nil pointer and one
+  pointing at a zero value (an empty string, a zero `time.Time`) are still genuinely different
+  values, but both display as `(vacío)`, so a field that merely swapped between those two produces
+  no line: the point of the message is what a human reading it would actually notice changed, not
+  every byte that did. Every resource package with a mutating route (`users`, `roles`, `tokens`,
+  `memberships`, `licenses`, `activities`, `material`, `board`, `activityresources`,
+  `distributions`, `accounting`) takes an `httpapi.MutationNotifier` in its own `NewHandler` — wired
+  to `telegramSender` directly from `cmd/api/main.go`, not gated behind a "don't spam every single
+  request" check the way the predecessor of this whole thing needed, since one message per
+  meaningful action isn't noisy the way one per every mutating request (a routine token touch
+  included) was — and sends its own specific message once a create/update/delete actually succeeds:
+  who did it (`actorLogin`, resolved from the session's own id through that package's existing
+  `UserLookup`, falling back to `user#<id>` rather than failing the whole request if the lookup
+  itself errors) and what changed. A diffing `update` handler fetches the record via `Service.Get`
+  *before* applying the patch and diffs it against the result using a package-level list of field
+  names (`auditableFields`; `accounting` has `accountAuditableFields` and
+  `transactionAuditableFields`; `memberships` names its fields inline) that exactly matches that
+  endpoint's own `UpdateInput` — so nothing that endpoint can't actually touch can appear as a
+  spurious change; `roles` and `material` have no diffed update at all, and `tokens` reports an
+  expiry change by hand. An edit whose diff comes back empty (every field resent unchanged) sends
+  nothing, rather than an "edited" message with nothing in it. A `delete` handler fetches the target
+  the same way, purely so it can still be named once it's gone. This whole mechanism replaced an
+  earlier `httpapi.NotifyMutatingCalls` middleware that sent a blanket "[API] `<method>` `<path>` ->
+  `<status>`" for literally every write regardless of what it actually changed — every business-data
+  route it covered now has a strictly more informative replacement. `authapi`'s session-lifecycle
+  routes (magic-link request, logout, impersonate/exit) were never business-data mutations and send
+  nothing now; only a successful sign-in (`notifyLogin` above), a failed attempt
+  (`notifyAccessProblem` above) and the start of an impersonation (`tokens`: "🎭 ... ha impersonado a
+  ...") are reported.
 - `internal/telegrambot.Bot`, the one thing here that *receives* from Telegram rather than
   only sending: `Run` long-polls `Client.GetUpdates` (chosen over a webhook — no public
   HTTPS endpoint to expose or coordinate with a reverse proxy, works the same behind NAT

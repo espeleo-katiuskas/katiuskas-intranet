@@ -270,13 +270,7 @@ func logSafe(s string) string {
 // does for a successful sign-in, in the background so the request never
 // waits on Telegram.
 func (h *Handler) notifyAccessProblem(text string) {
-	httpapi.Go(func() {
-		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := h.notifier.Send(sendCtx, text); err != nil {
-			slog.Error("notify access problem to telegram", "error", err)
-		}
-	})
+	httpapi.NotifyAsync(h.notifier, text)
 }
 
 // IssueMagicLinkForTelegramUser replies to a message from someone whose
@@ -785,13 +779,7 @@ func (h *Handler) notifyLogin(ctx context.Context, userID int64, ip string) {
 		login = fmt.Sprintf("user #%d", userID)
 	}
 	text := fmt.Sprintf("🔑 Login: %s (%s)", login, ip)
-	httpapi.Go(func() {
-		sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := h.notifier.Send(sendCtx, text); err != nil {
-			slog.Error("notify login to telegram", "error", err)
-		}
-	})
+	httpapi.NotifyAsync(h.notifier, text)
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {

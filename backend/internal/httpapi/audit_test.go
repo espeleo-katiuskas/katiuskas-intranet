@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -56,6 +59,19 @@ func TestNotifyAsyncSendsToNotifier(t *testing.T) {
 	NotifyAsync(notifier, "hola")
 	if got := notifier.waitForMessage(t); got != "hola" {
 		t.Errorf("expected %q, got %q", "hola", got)
+	}
+}
+
+// A notice goes to the system log even with no Telegram configured: it is not only for the chat.
+func TestNotifyAsyncWritesToTheLog(t *testing.T) {
+	var out bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	NotifyAsync(nil, "alguien ha cambiado algo")
+	if got := out.String(); !strings.Contains(got, "level=INFO") || !strings.Contains(got, "alguien ha cambiado algo") {
+		t.Errorf("the notice should be logged at INFO, got %q", got)
 	}
 }
 

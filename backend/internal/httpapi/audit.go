@@ -25,12 +25,16 @@ type MutationNotifier interface {
 // bounded timeout and a context detached from the request (which may
 // already be gone by the time the send completes) — the same
 // fire-and-forget shape every Telegram notification in this app uses.
-// notifier may be nil (Telegram not configured), in which case this is
-// a no-op. Every package-specific mutation notification in this app (a
+// The text is also written to the system log (journalctl), at INFO
+// level, whether or not Telegram is configured: the notices say who
+// changed what and when, which should not live only in a chat.
+// notifier may be nil (Telegram not configured), in which case nothing
+// is sent. Every package-specific mutation notification in this app (a
 // person created, a membership edited, a loan returned...) goes
 // through this instead of duplicating the goroutine/timeout dance at
 // each call site.
 func NotifyAsync(notifier MutationNotifier, text string) {
+	slog.Info("notice", "text", text)
 	if notifier == nil {
 		return
 	}

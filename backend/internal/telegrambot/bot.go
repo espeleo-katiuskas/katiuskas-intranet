@@ -574,6 +574,7 @@ func (b *Bot) notifyChannel(ctx context.Context, msg *telegram.Message, phone st
 		text = fmt.Sprintf("📇 %s ha compartido su contacto (%s) por Telegram: no coincide con ningún socio.",
 			senderName(msg), phone)
 	}
+	slog.Info("notice", "text", text)
 	if err := b.logNotifier.Send(ctx, text); err != nil {
 		slog.Error("telegram bot: notify channel", "error", err)
 	}
@@ -587,6 +588,7 @@ func (b *Bot) notifyChannel(ctx context.Context, msg *telegram.Message, phone st
 func (b *Bot) notifyChannelRejectedForeignContact(ctx context.Context, msg *telegram.Message) {
 	text := fmt.Sprintf("⚠️ %s ha intentado vincular un contacto que no es el suyo (%s) por Telegram: vinculación rechazada.",
 		senderName(msg), msg.Contact.PhoneNumber)
+	slog.Info("notice", "text", text)
 	if err := b.logNotifier.Send(ctx, text); err != nil {
 		slog.Error("telegram bot: notify channel", "error", err)
 	}
