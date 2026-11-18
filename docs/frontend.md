@@ -401,14 +401,15 @@ when it opens and back when it closes). It says whether the place is an element 
 from OpenStreetMap save at once, so they close the dialog (its form would show the place as it was)
 and reload the page. "Vincular con OpenStreetMap" opens a dialog (`js/osm-link.js`, built with
 `buildDialog` of `place-dialog.js`) with the elements near the place that are not yet a place, from
-`GET /osm/nearby`: one row for each, with its name, what it is, its type and id, how far it is and,
-if it looks like the place's name, "mismo nombre" or "nombre parecido" (those come first, then the
-nearest), and a button to link it. A cave or a canyon is looked for among the caves or the canyons,
-and any other place among the huts and the via ferratas; a select widens the circle from 500 m to 1
-or 2 km, and a newer search drops the answer of an older one. Choosing one calls `PUT
-/places/{id}/links/osm` and reloads the page; a linked place says "Vincular con otro elemento" and
-has "Desvincular", which asks first and calls `DELETE`. The element that a place is no longer
-appears on the map of `/lugares` as a candidate, and does again when the link is taken away.
+`GET /osm/nearby`: one row for each, with its name, what it is, where it is (municipality and
+province, if known), its type and id, how far it is and, if it looks like the place's name, "mismo
+nombre" or "nombre parecido" (those come first, then the nearest), and a button to link it. A cave
+or a canyon is looked for among the caves or the canyons, and any other place among the huts and the
+via ferratas; a select widens the circle from 500 m to 1 or 2 km, and a newer search drops the
+answer of an older one. Choosing one calls `PUT /places/{id}/links/osm` and reloads the page; a
+linked place says "Vincular con otro elemento" and has "Desvincular", which asks first and calls
+`DELETE`. The element that a place is no longer appears on the map of `/lugares` as a candidate, and
+does again when the link is taken away.
 
 A linked place also shows **what OpenStreetMap says of its element** under that line, in the dialog
 (`osmDataHtml` in `osm-link.js`, from `GET /osm/elements/{type}/{id}`, asked once for each element

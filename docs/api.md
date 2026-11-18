@@ -2232,6 +2232,7 @@ An `OsmPoint` and:
 
 | Field | Type |
 |---|---|
+| `where` | text, the municipality and the province of the element ("Rasines, Cantabria"); left out if it is in no known zone |
 | `distance_m` | integer, metres from the point asked for |
 | `name_match` | exact/similar, left out if the name does not look like the one asked |
 

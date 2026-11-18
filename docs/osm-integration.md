@@ -188,8 +188,7 @@ marked as gone by the next one.
   closed polygon in the extract of Spain (for instance a box of its own for each autonomous city).
 - The point of a canyon (the upstream end, or the entrance the club knows) and the scale of its
   rating.
-- The list of candidates for linking does not say in which municipality each is, and the map of a
-  place does not draw the outline of its OSM element.
+- The map of a place does not draw the outline of its OSM element.
 - Other countries: loading them is adding extracts, but their elements have no zone until their
   zones are in the catalogue and there is a rule for them.
 - Using the daily diffs of Geofabrik instead of the whole extract, if the load is ever run more

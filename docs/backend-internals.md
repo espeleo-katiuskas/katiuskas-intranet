@@ -1381,12 +1381,13 @@ changes but `updated_by` and `updated_at`, and the same two constraints as when 
 would match both), which the tests found. To choose the element, `GET /osm/nearby`
 (`Service.Nearby`) gives the ones within a radius (500 m by default, 2 km at most) that are not yet
 a place: it takes the box around the circle from `InBounds`, measures the distance of each
-(haversine) and ranks them, the ones whose name looks like the place's first. Names are compared
-with `areas.Normalize` (case, accents and punctuation do not count): `exact` when they are the same,
-`similar` when one holds the other or they share a word of five letters or more that is not a
-generic one ("cueva", "sima", "barranco", "refugio"…, which every one of them has). Nothing is
-linked by itself: the person chooses, and a name that does not look like it is still offered if it
-is near.
+(haversine) and ranks them, the ones whose name looks like the place's first; for the (at most 30)
+that it gives it asks `Repository.Wheres` where each is, as `Point.Where` does in a search. Names
+are compared with `areas.Normalize` (case, accents and punctuation do not count): `exact` when they
+are the same, `similar` when one holds the other or they share a word of five letters or more that
+is not a generic one ("cueva", "sima", "barranco", "refugio"…, which every one of them has). Nothing
+is linked by itself: the person chooses, and a name that does not look like it is still offered if
+it is near.
 
 **What changed in the element of a place.** A load of the mirror changes `osm_elements`, never a
 place, so each place that is an element keeps what it has seen of it: `places.osm_seen`, the tags

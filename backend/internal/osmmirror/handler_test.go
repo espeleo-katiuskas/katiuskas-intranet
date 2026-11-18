@@ -171,9 +171,21 @@ func TestGetElement(t *testing.T) {
 // same name, then a similar one), then the nearest, only inside the circle and of the categories asked for.
 func TestNearby(t *testing.T) {
 	get, token, repo := serve(t)
+	// Element 1 is in a zone; the others in none.
+	zones, err := repo.MunicipalityIDs(context.Background())
+	if err != nil || len(zones) == 0 {
+		t.Fatalf("municipalities: %v %v", zones, err)
+	}
+	var zone int64
+	for _, id := range zones {
+		zone = id
+		break
+	}
+	inZone := at(cave(1, "Cueva del Agua"), 40.0010, -3.0) // ~111 m
+	inZone.AreaID = zone
 	// 0.001 degrees of latitude are about 111 metres.
 	if _, err := repo.Apply(context.Background(), "spain", []osmmirror.Element{
-		at(cave(1, "Cueva del Agua"), 40.0010, -3.0),   // ~111 m
+		inZone,
 		at(cave(2, "Sima Grande"), 40.0020, -3.0),      // ~222 m
 		at(cave(3, "Cueva Del Águila"), 40.0030, -3.0), // ~334 m: another cave
 		at(cave(4, "Cueva del agua"), 40.0040, -3.0),   // ~445 m: the same name as 1, ignoring case
@@ -211,6 +223,20 @@ func TestNearby(t *testing.T) {
 	}
 	if a.Elements[1].DistanceM < 105 || a.Elements[1].DistanceM > 117 {
 		t.Errorf("about 111 metres expected: %d", a.Elements[1].DistanceM)
+	}
+	// Each candidate says where it is: element 1 the municipality and the province, the rest nothing.
+	detail, err := repo.Get(context.Background(), "node", 1)
+	if err != nil || detail.Where == "" {
+		t.Fatalf("element 1 is in a zone: %q %v", detail.Where, err)
+	}
+	for _, c := range a.Elements {
+		want := ""
+		if c.ID == 1 {
+			want = detail.Where
+		}
+		if c.Where != want {
+			t.Errorf("element %d: where %q, expected %q", c.ID, c.Where, want)
+		}
 	}
 
 	// With a name: the exact matches first (1 and 4, the nearest of them first), then the rest by distance

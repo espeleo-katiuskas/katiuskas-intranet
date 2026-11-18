@@ -356,6 +356,37 @@ func (r *Repository) InBounds(ctx context.Context, b Bounds, categories []string
 	return points, false, nil
 }
 
+// Wheres says where each of the elements is, as Point.Where does ("Rasines, Cantabria"); an element in no
+// known zone, or one that is not in the mirror, is left out of the map. It is for a handful of elements, not for
+// the many that a map holds.
+func (r *Repository) Wheres(ctx context.Context, keys []Key) (map[Key]string, error) {
+	types, ids := make([]string, len(keys)), make([]int64, len(keys))
+	for i, k := range keys {
+		types[i], ids[i] = k.Type, k.ID
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT e.osm_type, e.osm_id, coalesce(array_to_string(z.names, ', '), '')
+		FROM osm_elements e`+whereJoin+`
+		WHERE (e.osm_type, e.osm_id) IN (SELECT * FROM unnest($1::text[], $2::bigint[]))
+	`, types, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[Key]string{}
+	for rows.Next() {
+		var k Key
+		var where string
+		if err := rows.Scan(&k.Type, &k.ID, &where); err != nil {
+			return nil, err
+		}
+		if where != "" {
+			out[k] = where
+		}
+	}
+	return out, rows.Err()
+}
+
 // Get is one element with all its data, marked as gone or not.
 func (r *Repository) Get(ctx context.Context, typ string, id int64) (Detail, error) {
 	var d Detail

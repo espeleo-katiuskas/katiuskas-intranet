@@ -28,6 +28,7 @@ function candidateHtml(c) {
   const name = c.name ? escapeHtml(c.name) : '<em>Sin nombre</em>';
   const details = [
     CATEGORY_LABELS[c.category] ?? c.category,
+    c.where,
     `${NODE_NAMES[c.type] ?? c.type} ${c.id}`,
     distanceText(c.distance_m),
     MATCH_LABELS[c.name_match],

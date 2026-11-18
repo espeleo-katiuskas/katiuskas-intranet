@@ -127,7 +127,7 @@ func DistanceM(lat1, lon1, lat2, lon2 float64) float64 {
 
 // Nearby is the elements within radius metres of a point (DefaultRadiusM if it is 0), of the categories
 // asked for (all if none), that are not yet a place: those whose name looks like `name` first, then the
-// nearest, at most MaxNearby. It is what a person looks at to say which element a place of the catalogue is.
+// nearest, at most MaxNearby, each with where it is. It is what a person looks at to say which element a place of the catalogue is.
 func (s *Service) Nearby(ctx context.Context, lat, lon float64, radius int, name string, categories []string) ([]Candidate, error) {
 	ok := func(v, limit float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && math.Abs(v) <= limit }
 	if !ok(lat, 90) || !ok(lon, 180) {
@@ -167,6 +167,18 @@ func (s *Service) Nearby(ctx context.Context, lat, lon float64, radius int, name
 	})
 	if len(out) > MaxNearby {
 		out = out[:MaxNearby]
+	}
+	// Where each one is, asked only for those that are given.
+	keys := make([]Key, len(out))
+	for i, c := range out {
+		keys[i] = Key{c.Type, c.ID}
+	}
+	wheres, err := s.repo.Wheres(ctx, keys)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Where = wheres[keys[i]]
 	}
 	return out, nil
 }
