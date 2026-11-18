@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/clubtime"
 )
 
 type Service struct {
@@ -168,6 +170,13 @@ func (s *Service) typeOf(ctx context.Context, in Input) (Type, Input, error) {
 }
 
 func (s *Service) ListPlaces(ctx context.Context) ([]ListItem, error) { return s.repo.ListPlaces(ctx) }
+
+// VisitedBy is the places a person has been to, the most recently visited first: those of the activities
+// they organized or took part in that have started (today, in the club's time zone, counts) and were not
+// cancelled, each with how many such activities went there and when the last one ended.
+func (s *Service) VisitedBy(ctx context.Context, userID int64) ([]VisitedPlace, error) {
+	return s.repo.VisitedBy(ctx, userID, clubtime.Today())
+}
 
 func (s *Service) GetPlace(ctx context.Context, id int64) (Place, error) {
 	return s.repo.GetPlace(ctx, id)

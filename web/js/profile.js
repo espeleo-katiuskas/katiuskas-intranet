@@ -4,6 +4,7 @@ import { initSessionsPanel } from './sessions-panel.js';
 import { initUserFilesBrowser } from './user-files.js';
 import { initLicenseFiles } from './license-files.js';
 import { trackDirtyFields, markFieldsClean } from './form-dirty.js';
+import { initPersonHistory } from './person-history.js';
 import { loadTimelineData, renderTimelineRow } from './timeline.js';
 
 const user = await initPage();
@@ -169,6 +170,7 @@ editForm.addEventListener('submit', async (event) => {
 loadProfile();
 if (user) {
   initSessionsPanel({ login: user.login, own: true, impersonating: Boolean(user.impersonatedBy) });
+  initPersonHistory(user.login, { own: true });
   initLicenseFiles(user.login, { hideWhenEmpty: true });
   initUserFilesBrowser(user.login, { hideWhenEmpty: true });
 }

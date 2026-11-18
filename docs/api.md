@@ -445,6 +445,12 @@ Directiva).
 - **GET** `/users/{login}/activities` — *Any baseline role*. Activity history of a person (as
   organizer or participant).
   - returns: 200 `[Activity]`
+- **GET** `/users/{login}/places` — *Any baseline role*. The places a person has been to: those of
+  the activities they organized or took part in that have started (today counts) and are not
+  cancelled, each with how many such activities went there and when the last one ended, the most
+  recently visited first.
+  - returns: 200 `[VisitedPlace]`
+  - errors: 404 `not_found`
 - **GET** `/holidays` — *Any baseline role*. Club holidays that the calendar marks.
   - query: `year`
   - returns: 200 `[Holiday]`
@@ -2107,6 +2113,17 @@ are given by a search and by `GET /areas/{id}`, not by the list of the zones bel
 | `id` | integer |
 | `name` | text |
 | `place_count` | integer |
+
+### `VisitedPlace`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `type_name` | text, what it is: the subtype of a cavity, else its type |
+| `name` | text |
+| `where` | text, as in `Place` |
+| `visits` | integer, in how many activities (started, not cancelled) the person took part and that went there |
+| `last_visit` | date, the end date of the latest of them |
 
 ### `PlaceListItem`
 

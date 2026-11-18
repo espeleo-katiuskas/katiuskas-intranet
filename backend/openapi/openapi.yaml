@@ -2022,6 +2022,27 @@ paths:
                 items: { $ref: "#/components/schemas/Activity" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /users/{login}/places:
+    get:
+      summary: List the places a person has been to
+      description: >
+        Any baseline role, like the history of activities that it comes from. The places of the
+        activities that this person organized or took part in that have started (today counts, in the
+        club's time zone) and are not cancelled, each with how many such activities went there and
+        when the last one ended, the most recently visited first.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: login, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The places this person has visited
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VisitedPlace" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /transactions/{id}/files:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }
@@ -7038,6 +7059,16 @@ components:
         technical_sheet: { type: string, nullable: true, description: "What has to be installed to go through it. Only for a cavity or a canyon." }
         osm_type: { type: string, enum: [node, way, relation], nullable: true, description: "With osm_id, the element of the OpenStreetMap mirror the place is (GET /osm/elements). Only creating reads it; an edit leaves it as it was." }
         osm_id: { type: integer, format: int64, nullable: true }
+
+    VisitedPlace:
+      type: object
+      properties:
+        id: { type: integer }
+        type_name: { type: string, description: "What it is: the subtype of a cavity (Sima), else its type." }
+        name: { type: string }
+        where: { type: string, description: "As in Place: the zone and the ones it is in, without the autonomous community when there is a province." }
+        visits: { type: integer, description: "In how many activities, started and not cancelled, the person took part and that went to the place." }
+        last_visit: { type: string, format: date-time, description: "The end date of the latest of them (midnight UTC)." }
 
     PlaceListItem:
       type: object

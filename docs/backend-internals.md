@@ -1005,6 +1005,14 @@ zone, the community too, which the search of `/lugares` looks in, so that "Madri
 in the province, in a municipality of it and in the community; and, in the place only, `area_path`,
 the same with the `kind` of each. The edit notice diffs `Where`.
 
+**Places visited.** `GET /users/{login}/places` (`Handler.visitedBy`, `Repository.VisitedBy`, which
+reuses `listFrom` for the text of where it is) gives the places of the activities that a person
+organized or took part in (`activities.leader_id` or `activity_participants`, the same as
+`GET /users/{login}/activities`) that are not cancelled and have started (`start_date` on or before
+today in the club's time zone, `clubtime.Today`), each with how many such activities went there and
+the latest end date, the most recently visited first. The login is resolved with the handler's
+`UserLookup.UserIDForLogin`. It is open to any baseline role, as the history of activities is.
+
 **The listing.** `GET /places` is unpaginated, like `GET /users`, and gives `ListItem`, the fields
 of a table and its filters, without the long texts or the points: the frontend filters and searches
 it in the browser, which is fine for the hundreds or few thousands of places expected. A map of all

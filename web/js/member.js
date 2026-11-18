@@ -6,9 +6,6 @@ import {
   startImpersonation,
   roleLabel,
   positionLabels,
-  typeLabels,
-  activityState,
-  activityStateLabels,
   showFeedback,
   showError,
   isNotFound,
@@ -22,6 +19,7 @@ import { initSessionsPanel } from './sessions-panel.js';
 import { initUserFilesBrowser } from './user-files.js';
 import { initLicenseFiles } from './license-files.js';
 import { trackDirtyFields, markFieldsClean } from './form-dirty.js';
+import { initPersonHistory } from './person-history.js';
 import { loadTimelineData, renderTimelineRow } from './timeline.js';
 
 const viewer = await initPage({ requireAnyRole: ['admin', 'board'] });
@@ -1068,33 +1066,6 @@ if (impersonateButton) {
   }
 }
 
-function renderActivityRow(activity) {
-  const role = activity.leader_login === memberLogin ? 'Organizador' : 'Participante';
-  return `
-    <tr>
-      <td>${formatDate(activity.start_date)}</td>
-      <td>${formatDate(activity.end_date)}</td>
-      <td><a href="/actividad?id=${activity.id}">${escapeHtml(activity.title)}</a></td>
-      <td>${typeLabels[activity.type] ?? activity.type}</td>
-      <td><span class="badge status-${activityState(activity)}">${activityStateLabels[activityState(activity)]}</span></td>
-      <td>${role}</td>
-    </tr>
-  `;
-}
-
-async function loadActivities() {
-  const tableBody = document.getElementById('activities-table-body');
-  try {
-    const activities = await apiFetch(`/users/${memberLogin}/activities`);
-    tableBody.innerHTML = activities.length
-      ? activities.map(renderActivityRow).join('')
-      : '<tr><td colspan="6">Todavía no ha participado en ninguna actividad.</td></tr>';
-  } catch {
-    tableBody.innerHTML =
-      '<tr><td colspan="6">No se pudo cargar el historial de actividades.</td></tr>';
-  }
-}
-
 // Only loan/rental/sale ever have a recipient, so this person's own
 // movement history (GET /users/{login}/material/movements) never contains an
 // acquisition, loss, abandonment or retirement — no labels needed here
@@ -1240,7 +1211,7 @@ const rolesLoaded = loadRolesCatalog();
 loadLicenseTypesCatalog();
 loadMember(rolesLoaded);
 loadTimeline();
-loadActivities();
+initPersonHistory(memberLogin);
 loadMovements();
 initLicenseFiles(memberLogin);
 initUserFilesBrowser(memberLogin);

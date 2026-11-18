@@ -81,6 +81,36 @@ func (it *ListItem) scanTargets() []any {
 	}
 }
 
+// VisitedBy is the places that the activities a person organized or took part in went to, among those that
+// started on or before `today` ("2026-11-18") and were not cancelled, the most recently visited first.
+func (r *Repository) VisitedBy(ctx context.Context, userID int64, today string) ([]VisitedPlace, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT p.id, COALESCE(st.name, t.name), p.name, COALESCE(w.where_text, ''), v.visits, v.last_visit`+listFrom+`
+		JOIN (
+			SELECT ap.place_id, count(DISTINCT a.id) AS visits, max(a.end_date) AS last_visit
+			FROM activities a
+			JOIN activity_places ap ON ap.activity_id = a.id
+			LEFT JOIN activity_participants pa ON pa.activity_id = a.id
+			WHERE (a.leader_id = $1 OR pa.user_id = $1) AND NOT a.cancelled AND a.start_date <= $2::date
+			GROUP BY ap.place_id
+		) v ON v.place_id = p.id
+		ORDER BY v.last_visit DESC, lower(p.name), p.id
+	`, userID, today)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []VisitedPlace{}
+	for rows.Next() {
+		var v VisitedPlace
+		if err := rows.Scan(&v.ID, &v.TypeName, &v.Name, &v.Where, &v.Visits, &v.LastVisit); err != nil {
+			return nil, err
+		}
+		list = append(list, v)
+	}
+	return list, rows.Err()
+}
+
 // ListPlaces is every place, by name: the data the table and the filters need.
 func (r *Repository) ListPlaces(ctx context.Context) ([]ListItem, error) {
 	rows, err := r.pool.Query(ctx, `

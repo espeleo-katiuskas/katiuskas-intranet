@@ -799,6 +799,12 @@ the token and goes to `/login`. `/socio` has the same panel as "Sesiones" for an
 section carries `data-roles="admin"`, as the API gives anybody's sessions to nobody else): the
 sessions of the person whose page it is, with the same columns, sorting and "Cerrar" buttons (an
 admin can end anybody's), worded for a third person, and on their own page, the admin's own.
+`perfil.html`/`socio.html` both have, after the history as a member, two tables that tell what the
+person has done in the club (`js/person-history.js`, `initPersonHistory(login, { own })`):
+"Actividades realizadas" (`GET /users/{login}/activities`: start and end, title as a link, type,
+state and whether they organized it or took part) and "Lugares visitados" (`GET
+/users/{login}/places`: the place as a link, what it is, where, how many times and the date of the
+last one); only the words of the empty message change between somebody else's page and "Mi perfil".
 `perfil.html`/`socio.html` each also render a "Licencias federativas" section — a year `<select>`,
 mirroring `dashboard.js`'s own Actas asambleas, plus a grid of small clickable thumbnails rather
 than a plain list of text links — instead of pointing at that person's `licencias/` subdirectory

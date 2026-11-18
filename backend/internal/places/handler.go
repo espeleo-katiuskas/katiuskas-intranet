@@ -16,6 +16,7 @@ import (
 // UserLookup translates a person's numeric id into their login: the API names people by login only.
 type UserLookup interface {
 	LoginForUserID(ctx context.Context, id int64) (string, error)
+	UserIDForLogin(ctx context.Context, login string) (int64, error)
 }
 
 type Handler struct {
@@ -52,6 +53,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /api/v1/places/subtypes/{id}", a.Protect(h.deleteSubtype, "admin"))
 
 	mux.Handle("GET /api/v1/places", a.Protect(h.list))
+	mux.Handle("GET /api/v1/users/{login}/places", a.Protect(h.visitedBy))
 	mux.Handle("POST /api/v1/places", a.Protect(h.create))
 	mux.Handle("GET /api/v1/places/{id}", a.Protect(h.get))
 	mux.Handle("PUT /api/v1/places/{id}", a.Protect(h.update))
@@ -164,6 +166,22 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// visitedBy gives the places a person has been to: those of the activities they took part in that have
+// started and are not cancelled.
+func (h *Handler) visitedBy(w http.ResponseWriter, r *http.Request) {
+	userID, err := h.users.UserIDForLogin(r.Context(), r.PathValue("login"))
+	if err != nil {
+		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+		return
+	}
+	list, err := h.service.VisitedBy(r.Context(), userID)
+	if err != nil {
+		writeError(w, err, "could not list the places visited")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 // ----- types -----

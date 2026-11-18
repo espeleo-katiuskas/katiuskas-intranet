@@ -961,6 +961,72 @@ func TestActivityCountOfAPlace(t *testing.T) {
 	}
 }
 
+// The places a person has been to: those of the activities they organized or took part in that have started
+// and are not cancelled, with how many went and when the last one ended, the latest first.
+func TestPlacesVisitedByAPerson(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	visited := e.newPlace(e.cavidad, "Sima visitada", nil)
+	e.notifier.wait(t)
+	twice := e.newPlace(e.cavidad, "Cueva visitada dos veces", nil)
+	e.notifier.wait(t)
+	cancelled := e.newPlace(e.cavidad, "Cueva de la cancelada", nil)
+	e.notifier.wait(t)
+	future := e.newPlace(e.cavidad, "Cueva futura", nil)
+	e.notifier.wait(t)
+	others := e.newPlace(e.cavidad, "Cueva de otros", nil)
+	e.notifier.wait(t)
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := e.tx.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An activity going to a place; with the member as a participant (or not) and in the state wanted.
+	activity := func(place int64, member bool, update string) int64 {
+		t.Helper()
+		id := testutil.InsertActivity(t, e.tx)
+		exec(`INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, id, place)
+		if member {
+			exec(`INSERT INTO activity_participants (activity_id, user_id, added_by) VALUES ($1, $2, $2)`, id, e.member.user.ID)
+		}
+		if update != "" {
+			exec(`UPDATE activities SET `+update+` WHERE id = $1`, id)
+		}
+		return id
+	}
+	activity(visited.ID, true, "start_date = current_date - 30, end_date = current_date - 29")
+	activity(twice.ID, true, "start_date = current_date - 10, end_date = current_date - 9")
+	// An activity that the member organized (not as a participant) counts too, and the latest end date is kept.
+	led := activity(twice.ID, false, "start_date = current_date - 3, end_date = current_date - 2")
+	exec(`UPDATE activities SET leader_id = $2 WHERE id = $1`, led, e.member.user.ID)
+	activity(cancelled.ID, true, "cancelled = true")
+	activity(future.ID, true, "start_date = current_date + 10, end_date = current_date + 11")
+	activity(others.ID, false, "")
+
+	path := "/api/v1/users/" + e.member.user.Login + "/places"
+	got := decode[[]places.VisitedPlace](t, e.json("GET", path, e.board.token, nil))
+	if len(got) != 2 {
+		t.Fatalf("only the two places that the member went to, not the cancelled, the future or another's: %+v", got)
+	}
+	if got[0].ID != twice.ID || got[0].Visits != 2 || got[1].ID != visited.ID || got[1].Visits != 1 {
+		t.Errorf("the latest first, with how many times: %+v", got)
+	}
+	if got[0].TypeName != "Cueva" || got[0].Where != "Valdemanco, Madrid, España" ||
+		got[0].LastVisit.Format("2006-01-02") != time.Now().AddDate(0, 0, -2).Format("2006-01-02") {
+		t.Errorf("what it is, where and when the last one ended: %+v", got[0])
+	}
+	// Somebody who has been nowhere gets an empty list, and a login that is nobody's is a 404.
+	empty := decode[[]places.VisitedPlace](t, e.json("GET", "/api/v1/users/"+e.board.user.Login+"/places", e.member.token, nil))
+	if len(empty) != 0 {
+		t.Errorf("no places: %+v", empty)
+	}
+	errorCode(t, e.json("GET", "/api/v1/users/nadie.de.aqui/places", e.member.token, nil), 404, "not_found")
+	if rec := e.json("GET", path, "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a session is needed, got %d", rec.Code)
+	}
+}
+
 // A place that activities went to is not deleted: their history stays.
 func TestPlaceWithActivitiesIsNotDeleted(t *testing.T) {
 	e := newEnv(t)
