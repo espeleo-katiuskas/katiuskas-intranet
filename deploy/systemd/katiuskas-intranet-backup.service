@@ -4,7 +4,7 @@
 # install it.
 #
 # It runs as the owner of the installation, which can read production's api.env (the database
-# password) and the three directories of files, and writes only to BACKUP_DIR.
+# password) and the directories of files, and writes only to BACKUP_DIR.
 [Unit]
 Description=Katiuskas intranet: back up production's database and files
 After=postgresql.service

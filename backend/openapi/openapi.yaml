@@ -142,7 +142,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  message: { type: string, description: A fixed, generic confirmation text. }
+                  message: { type: string, description: "A fixed, generic confirmation text." }
         "400":
           description: invalid_body (malformed JSON) or missing_fields (email and phone are both required).
         "403":
@@ -359,7 +359,7 @@ paths:
                 properties:
                   roles: { type: array, items: { type: string } }
                   seconds_left: { type: integer }
-        "400": { description: invalid_body, invalid_roles (empty), unknown_role or no_baseline_role. }
+        "400": { description: "invalid_body, invalid_roles (empty), unknown_role or no_baseline_role." }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { description: The person is not an admin. }
         "409": { description: impersonating — an impersonation session can not act with other roles. }
@@ -492,7 +492,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
-        "403": { description: Not admin/board, and not viewing your own record. }
+        "403": { description: "Not admin/board, and not viewing your own record." }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       summary: Update a user's personal data
@@ -661,7 +661,7 @@ paths:
         "400": { description: invalid_id — roleID isn't numeric. }
         "403":
           description: Only admin can revoke a role.
-        "404": { description: not_found — no such person or role, or that person doesn't hold this role. }
+        "404": { description: "not_found — no such person or role, or that person doesn't hold this role." }
         "409":
           description: >
             self_admin_removal (the caller is trying to revoke their own
@@ -760,7 +760,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Token" }
-        "400": { description: invalid_status (not active or all), invalid_sort or invalid_order. }
+        "400": { description: "invalid_status (not active or all), invalid_sort or invalid_order." }
         "403": { description: Requires admin. }
 
   /users/{login}/tokens:
@@ -862,8 +862,8 @@ paths:
                 expires_at: { type: string, format: date-time }
       responses:
         "204": { description: Updated }
-        "400": { description: invalid_body (malformed, revoked false, or expires_at not a date), missing_fields (neither revoked nor expires_at) or invalid_id (tokenID isn't numeric). }
-        "403": { description: Not that person nor admin (or an impersonation session), or expires_at from somebody who is not admin. }
+        "400": { description: "invalid_body (malformed, revoked false, or expires_at not a date), missing_fields (neither revoked nor expires_at) or invalid_id (tokenID isn't numeric)." }
+        "403": { description: "Not that person nor admin (or an impersonation session), or expires_at from somebody who is not admin." }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /users/{login}/memberships:
@@ -881,7 +881,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Membership" }
-        "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "403": { description: "Someone other than that person, admin, or board tried to view it." }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Start a new membership period
@@ -927,7 +927,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Due" }
-        "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "403": { description: "Someone other than that person, admin, or board tried to view it." }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Record a due ("cuota") payment
@@ -1004,7 +1004,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/License" }
-        "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "403": { description: "Someone other than that person, admin, or board tried to view it." }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Assign a federative license ("licencia federativa")
@@ -1182,7 +1182,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Membership" }
-        "400": { description: invalid_id, invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
+        "400": { description: "invalid_id, invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD)." }
         "403": { description: Only admin can correct a membership period. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1224,7 +1224,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/BoardMember" }
-        "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "403": { description: "Someone other than that person, admin, or board tried to view it." }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Start a new board term
@@ -1254,7 +1254,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
-        "400": { description: invalid_body (malformed JSON), invalid_date (start_date missing or not YYYY-MM-DD, end_date not YYYY-MM-DD or before start_date) or invalid_position (position isn't one of the BoardPosition values). }
+        "400": { description: "invalid_body (malformed JSON), invalid_date (start_date missing or not YYYY-MM-DD, end_date not YYYY-MM-DD or before start_date) or invalid_position (position isn't one of the BoardPosition values)." }
         "403": { description: Only admin can start a board term. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1325,7 +1325,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BoardMember" }
-        "400": { description: invalid_id, invalid_body, invalid_position (position isn't one of the BoardPosition values), or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
+        "400": { description: "invalid_id, invalid_body, invalid_position (position isn't one of the BoardPosition values), or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD)." }
         "403": { description: Only admin can correct a board term. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1366,7 +1366,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Leave" }
-        "403": { description: Someone other than that person, admin, or board tried to view it. }
+        "403": { description: "Someone other than that person, admin, or board tried to view it." }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       summary: Record a temporary leave ("baja temporal")
@@ -1398,7 +1398,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Leave" }
-        "400": { description: invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
+        "400": { description: "invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD)." }
         "403": { description: Only admin can record a temporary leave. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1454,7 +1454,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Leave" }
-        "400": { description: invalid_id, invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD). }
+        "400": { description: "invalid_id, invalid_body, or invalid_date (start_date missing, or start_date/end_date not YYYY-MM-DD)." }
         "403": { description: Only admin can correct a temporary leave. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
@@ -1601,9 +1601,9 @@ paths:
       responses:
         "204": { description: Deleted }
         "400": { description: invalid_id. }
-        "403": { description: Only the organizer, board, or admin can delete this activity. }
+        "403": { description: "Only the organizer, board, or admin can delete this activity." }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: activity_in_use — it still has participants, resources or material movements. }
+        "409": { description: "activity_in_use — it still has participants, resources or material movements." }
 
   /activities/{id}/participants:
     get:
@@ -1652,7 +1652,7 @@ paths:
             a public activity, or anyone other than the organizer/board/
             admin tried to add a participant (self included) to a private
             one.
-        "404": { description: not_found — no such activity, or the given login doesn't belong to anyone. }
+        "404": { description: "not_found — no such activity, or the given login doesn't belong to anyone." }
         "409":
           description: >
             not_a_member — the person being added isn't a member now; or activity_full — the
@@ -1789,10 +1789,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Guest" }
-        "400": { description: invalid_id, invalid_body (also a blank name) or invited_by_required. }
-        "403": { description: Not signed up to the activity (and not organizer, admin or board), or naming somebody else without being any of those. }
-        "404": { description: not_found — the activity, or the login in invited_by. }
-        "409": { description: inviter_not_signed_up, duplicate_guest (the same person already invited that name) or activity_full (the limit of people, members and guests together, is reached). }
+        "400": { description: "invalid_id, invalid_body (also a blank name) or invited_by_required." }
+        "403": { description: "Not signed up to the activity (and not organizer, admin or board), or naming somebody else without being any of those." }
+        "404": { description: "not_found — the activity, or the login in invited_by." }
+        "409": { description: "inviter_not_signed_up, duplicate_guest (the same person already invited that name) or activity_full (the limit of people, members and guests together, is reached)." }
 
   /activities/{id}/guests/{guestID}:
     delete:
@@ -1805,7 +1805,7 @@ paths:
       responses:
         "204": { description: Removed }
         "400": { description: invalid_id. }
-        "403": { description: Neither whoever invited them, nor the organizer, admin or board. }
+        "403": { description: "Neither whoever invited them, nor the organizer, admin or board." }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /activities/{id}/resources:
@@ -1871,7 +1871,7 @@ paths:
             invalid_type, title_required, description_required (type=text
             with no description), file_required (type=file with no
             file part), or place_not_in_activity.
-        "403": { description: Neither admin/board, the organizer, nor a participant. }
+        "403": { description: "Neither admin/board, the organizer, nor a participant." }
         "404": { description: Activity not found. }
         "413": { description: file_too_large — over the 25 MiB limit. }
 
@@ -1910,7 +1910,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/ActivityResource" }
         "400": { description: invalid_id or invalid_body. }
-        "403": { description: Neither admin/board, the organizer, nor a participant. }
+        "403": { description: "Neither admin/board, the organizer, nor a participant." }
         "404": { description: Activity not found. }
         "409": { description: reorder_mismatch — resource_ids doesn't match this activity's current resources exactly. }
 
@@ -1958,7 +1958,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ActivityResource" }
-        "400": { description: invalid_id, invalid_body, description_not_allowed (description given for a type=file resource), or invalid_fields (the fields given don't match the resource's type). }
+        "400": { description: "invalid_id, invalid_body, description_not_allowed (description given for a type=file resource), or invalid_fields (the fields given don't match the resource's type)." }
         "403": { description: Neither this resource's own author nor admin/board. }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -2038,7 +2038,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/TransactionFile" }
         "400": { description: invalid_id. }
-        "403": { description: Requires admin, board or money. }
+        "403": { description: "Requires admin, board or money." }
         "404": { description: transaction_not_found. }
     post:
       summary: Attach a file to a transaction
@@ -2062,7 +2062,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TransactionFile" }
-        "400": { description: invalid_id, invalid_body or file_required (missing or empty). }
+        "400": { description: "invalid_id, invalid_body or file_required (missing or empty)." }
         "403": { description: Requires admin or money. }
         "404": { description: transaction_not_found. }
         "413": { description: file_too_large. }
@@ -2081,7 +2081,7 @@ paths:
       responses:
         "200": { description: The file }
         "400": { description: invalid_id. }
-        "403": { description: Requires admin, board or money. }
+        "403": { description: "Requires admin, board or money." }
         "404": { description: not_found (also if the file belongs to another transaction). }
 
   /transactions/{id}/files/{fileId}:
@@ -2115,8 +2115,8 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/TransactionFileListing" }
-        "400": { description: invalid_year, invalid_limit or invalid_offset. }
-        "403": { description: Requires admin, board or money. }
+        "400": { description: "invalid_year, invalid_limit or invalid_offset." }
+        "403": { description: "Requires admin, board or money." }
 
   /budgets:
     get:
@@ -2169,7 +2169,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Budget" }
-        "400": { description: invalid_body, invalid_year, invalid_item, duplicate_item, item_without_accounts, unknown_account, account_not_budgetable, account_type_mismatch or duplicate_account. }
+        "400": { description: "invalid_body, invalid_year, invalid_item, duplicate_item, item_without_accounts, unknown_account, account_not_budgetable, account_type_mismatch or duplicate_account." }
         "403": { description: Requires admin or money. }
         "409": { description: accounts_missing (the message names them) or unbalanced (the message carries both totals). }
     delete:
@@ -2212,7 +2212,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ClubInfoItem" }
-        "400": { description: invalid_body, invalid_label, invalid_value or invalid_copy (a copy_label with no copy_value, or a text too long). }
+        "400": { description: "invalid_body, invalid_label, invalid_value or invalid_copy (a copy_label with no copy_value, or a text too long)." }
         "403": { description: Requires admin. }
 
   /club-info/order:
@@ -2262,7 +2262,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ClubInfoItem" }
-        "400": { description: invalid_id, invalid_body, invalid_label, invalid_value or invalid_copy. }
+        "400": { description: "invalid_id, invalid_body, invalid_label, invalid_value or invalid_copy." }
         "403": { description: Requires admin. }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
@@ -2316,7 +2316,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Holiday" }
-        "400": { description: invalid_body, invalid_date (not YYYY-MM-DD), or invalid_name (empty). }
+        "400": { description: "invalid_body, invalid_date (not YYYY-MM-DD), or invalid_name (empty)." }
         "409": { description: duplicate_holiday — that date already has one. }
 
   /holidays/{id}:
@@ -2568,7 +2568,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Place" }
-        "400": { description: "invalid_body, place_name_required, place_type_required, unknown_place_type, place_area_required, unknown_area, invalid_place_state, invalid_coordinates, invalid_altitude, unknown_geology, invalid_place_measure, unknown_osm_element (not in the mirror, or only the type or only the id) or invalid_place_fields (a depth, a horizontal length or a geology on a place that is not a cave, a technical sheet on one that is neither a cave nor a canyon)." }
+        "400": { description: "invalid_body, place_name_required, place_type_required, unknown_place_type, place_area_required, unknown_area, invalid_place_state, invalid_coordinates, invalid_altitude, unknown_geology, invalid_place_measure, unknown_subtype, place_subtype_required (a cavity needs one), invalid_alt_names, unknown_system, unknown_osm_element (not in the mirror, or only the type or only the id) or invalid_place_fields (a depth, a horizontal length or a geology on a place that is not a cave, a technical sheet on one that is neither a cave nor a canyon)." }
         "409": { description: "osm_element_in_use — another place already is that OpenStreetMap element." }
 
   /places/{id}:
@@ -3806,7 +3806,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Distribution" }
-        "400": { description: invalid_name, invalid_audience, invalid_visibility, cutoff_required, invalid_date (cutoff_date isn't YYYY-MM-DD), invalid_price, invalid_max_extra, invalid_options, invalid_articles or articles_conflict. }
+        "400": { description: "invalid_name, invalid_audience, invalid_visibility, cutoff_required, invalid_date (cutoff_date isn't YYYY-MM-DD), invalid_price, invalid_max_extra, invalid_options, invalid_articles or articles_conflict." }
         "403": { description: Neither admin nor board. }
 
   /distributions/{id}:
@@ -3872,11 +3872,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Distribution" }
-        "400": { description: Same as creating, plus invalid_status. }
-        "409": { description: invalid_status_transition, has_units, has_settled_units or cap_below_requested. }
+        "400": { description: "Same as creating, plus invalid_status." }
+        "409": { description: "invalid_status_transition, has_units, has_settled_units or cap_below_requested." }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: invalid_status_transition (not one step), or has_units (replacing the options after somebody asked). }
+        "409": { description: "invalid_status_transition (not one step), or has_units (replacing the options after somebody asked)." }
     delete:
       summary: Delete a distribution
       description: >
@@ -3926,7 +3926,7 @@ paths:
                     login: { type: string }
                     first_name: { type: string }
                     last_name: { type: string }
-        "403": { description: for=pickup without admin, board or material. }
+        "403": { description: "for=pickup without admin, board or material." }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /distributions/{id}/units:
@@ -4000,8 +4000,8 @@ paths:
               properties:
                 beneficiary_login: { type: string, description: Defaults to the caller. }
                 is_extra: { type: boolean, default: false }
-                article_id: { type: integer, description: Only in a distribution with articles, and then required. }
-                quantity: { type: integer, description: How many of the article; only in a distribution with articles, and then required. }
+                article_id: { type: integer, description: "Only in a distribution with articles, and then required." }
+                quantity: { type: integer, description: "How many of the article; only in a distribution with articles, and then required." }
                 choices:
                   type: object
                   additionalProperties: { type: string }
@@ -4012,9 +4012,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DistributionUnit" }
-        "400": { description: invalid_choices, article_required, unknown_article or invalid_quantity. }
-        "404": { description: The distribution (or a draft, for a member) or the beneficiary doesn't exist. }
-        "409": { description: not_open, not_eligible, already_registered, extras_not_allowed, too_many_extras, article_exhausted or article_person_limit. }
+        "400": { description: "invalid_choices, article_required, unknown_article or invalid_quantity." }
+        "404": { description: "The distribution (or a draft, for a member) or the beneficiary doesn't exist." }
+        "409": { description: "not_open, not_eligible, already_registered, extras_not_allowed, too_many_extras, article_exhausted or article_person_limit." }
 
   /distributions/{id}/units/{unitID}/identifiers/assign:
     post:
@@ -4038,7 +4038,7 @@ paths:
               schema: { $ref: "#/components/schemas/DistributionUnit" }
         "400": { description: article_not_numbered. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_deliverable, not_enough_numbers or identifier_taken. }
+        "409": { description: "not_deliverable, not_enough_numbers or identifier_taken." }
 
   /distributions/{id}/articles/{articleID}/numbers:
     get:
@@ -4194,7 +4194,7 @@ paths:
               type: object
               properties:
                 choices: { type: object, additionalProperties: { type: string } }
-                quantity: { type: integer, description: For a row of an article, instead of choices. }
+                quantity: { type: integer, description: "For a row of an article, instead of choices." }
       responses:
         "200":
           description: The updated unit
@@ -4202,9 +4202,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/DistributionUnit" }
         "400": { description: invalid_choices or invalid_quantity. }
-        "403": { description: Neither the person it is for, whoever entered it, nor admin/board/material. }
+        "403": { description: "Neither the person it is for, whoever entered it, nor admin/board/material." }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_open, unit_locked, quantity_below_paid, article_exhausted or article_person_limit. }
+        "409": { description: "not_open, unit_locked, quantity_below_paid, article_exhausted or article_person_limit." }
     delete:
       summary: Remove a unit
       description: >
@@ -4219,9 +4219,9 @@ paths:
         - { name: unitID, in: path, required: true, schema: { type: integer } }
       responses:
         "204": { description: Removed }
-        "403": { description: Neither the person it is for, whoever entered it, nor admin/board/material. }
+        "403": { description: "Neither the person it is for, whoever entered it, nor admin/board/material." }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_open, unit_locked, automatic_unit or unit_paid. }
+        "409": { description: "not_open, unit_locked, automatic_unit or unit_paid." }
 
   /distributions/{id}/order:
     get:
@@ -4243,7 +4243,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DistributionOrder" }
-        "403": { description: Not admin, board or material. }
+        "403": { description: "Not admin, board or material." }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /distributions/{id}/pickups:
@@ -4288,15 +4288,15 @@ paths:
                     properties:
                       unit_id: { type: integer }
                       quantity: { type: integer, description: How many units of the row; all that are left when omitted. }
-                      identifiers: { type: array, items: { type: string }, description: Which numbers go, for an article with numbers; their count is the quantity. }
+                      identifiers: { type: array, items: { type: string }, description: "Which numbers go, for an article with numbers; their count is the quantity." }
                 picked_up_by_login: { type: string }
-                assign_numbers: { type: boolean, description: Give the next free numbers first to the units of articles with described numbers that lack some, in the order listed. }
+                assign_numbers: { type: boolean, description: "Give the next free numbers first to the units of articles with described numbers that lack some, in the order listed." }
       responses:
         "204": { description: Recorded }
         "400": { description: no_units. }
-        "403": { description: Not admin, board or material. }
+        "403": { description: "Not admin, board or material." }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_deliverable, invalid_collector, already_picked_up or identifiers_missing (a row of an article with numbers needs all of them first). }
+        "409": { description: "not_deliverable, invalid_collector, already_picked_up or identifiers_missing (a row of an article with numbers needs all of them first)." }
 
   /distributions/{id}/units/{unitID}/pickup:
     delete:
@@ -4317,7 +4317,7 @@ paths:
         - { name: identifiers, in: query, required: false, schema: { type: string }, description: Comma-separated numbers. }
       responses:
         "204": { description: Undone }
-        "403": { description: Not admin, board or material. }
+        "403": { description: "Not admin, board or material." }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /distributions/{id}/units/{unitID}/return:
@@ -4351,7 +4351,7 @@ paths:
       responses:
         "204": { description: Returned }
         "400": { description: invalid_quantity or invalid_identifiers. }
-        "403": { description: Not admin, board or material. }
+        "403": { description: "Not admin, board or material." }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: not_deliverable or quantity_below_paid. }
 
@@ -4393,10 +4393,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DistributionUnit" }
-        "400": { description: account_required, unknown_account, account_not_asset, invalid_quantity, invalid_identifiers or article_required. }
+        "400": { description: "account_required, unknown_account, account_not_asset, invalid_quantity, invalid_identifiers or article_required." }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: not_eligible, not_deliverable, article_exhausted, article_person_limit, not_enough_numbers, identifier_taken or identifiers_missing. }
+        "409": { description: "not_eligible, not_deliverable, article_exhausted, article_person_limit, not_enough_numbers, identifier_taken or identifiers_missing." }
 
   /distributions/{id}/payments:
     get:
@@ -4481,13 +4481,13 @@ paths:
                     properties:
                       unit_id: { type: integer }
                       quantity: { type: integer, description: How many units of the row; all that are pending when left out. }
-                      identifiers: { type: array, items: { type: string }, description: Which numbers are paid, in an article with numbers; ranges allowed where they are described. }
+                      identifiers: { type: array, items: { type: string }, description: "Which numbers are paid, in an article with numbers; ranges allowed where they are described." }
       responses:
         "204": { description: Marked }
-        "400": { description: no_units, account_required, unknown_account or account_not_asset. }
+        "400": { description: "no_units, account_required, unknown_account or account_not_asset." }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: already_paid, no_distribution_account or account_has_children (the account paid in, or the one the payments go to, groups other accounts). }
+        "409": { description: "already_paid, no_distribution_account or account_has_children (the account paid in, or the one the payments go to, groups other accounts)." }
 
   /distributions/{id}/units/{unitID}/payment/reversal:
     post:
@@ -4516,7 +4516,7 @@ paths:
                 identifiers: { type: array, items: { type: string }, description: Numbers (ranges allowed where described). }
       responses:
         "204": { description: Taken off }
-        "400": { description: account_required, unknown_account, account_not_asset, invalid_quantity, identifier_not_assigned or invalid_body. }
+        "400": { description: "account_required, unknown_account, account_not_asset, invalid_quantity, identifier_not_assigned or invalid_body." }
         "403": { description: Neither admin nor board. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: no_distribution_account or identifier_not_paid. }
@@ -4692,7 +4692,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
         "400": { description: "invalid_id, invalid_body, unknown_type, kind_change, color_too_long, invalid_item_fields, model_without_brand, invalid_item_code (a code made only of digits), item_description_required, missing_attribute or invalid_attribute." }
-        "403": { description: Requires admin, board or material. }
+        "403": { description: "Requires admin, board or material." }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_item_code — another item already has that code; or duplicate_material — another item is exactly the same. }
     delete:
@@ -4779,7 +4779,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/MaterialType" }
-        "400": { description: invalid_body (the list is not exactly the types, once each). }
+        "400": { description: "invalid_body (the list is not exactly the types, once each)." }
         "403": { description: Requires admin. }
 
   /material/types/{id}:
@@ -4855,7 +4855,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MaterialAttribute" }
-        "400": { description: invalid_id or invalid_body (a blank name, a data_type that is neither text nor enum, options for a text attribute). }
+        "400": { description: "invalid_id or invalid_body (a blank name, a data_type that is neither text nor enum, options for a text attribute)." }
         "403": { description: Requires admin. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_attribute — the type has one with that name; duplicate_option — repeated options; fixed_type — Cuerda and Saca have no attributes. }
@@ -4954,7 +4954,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MaterialAttributeOption" }
-        "400": { description: invalid_id or invalid_body (a blank label, or the attribute is not an enum one). }
+        "400": { description: "invalid_id or invalid_body (a blank label, or the attribute is not an enum one)." }
         "403": { description: Requires admin. }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: duplicate_option — the attribute has one with that label. }
@@ -5138,7 +5138,10 @@ paths:
             what this item still has outstanding for this activity),
             recipient_not_member (a loan or a rental for somebody who
             is not a member now) or recipient_not_member_or_former (a
-            sale for somebody who is neither a member nor a former one).
+            sale for somebody who is neither a member nor a former one),
+            account_has_children (the account paid into groups other accounts) or
+            no_material_account (a sale or rental that costs something, and no income account
+            is marked for the sales or the rentals of material).
 
   /material/movements/{id}:
     delete:
@@ -5367,7 +5370,7 @@ paths:
         "400":
           description: invalid_body, missing_fields (name is empty), invalid_type (not asset, income or expense), or unknown_parent_account (parent_id names no existing account)
         "403": { description: Requires admin or the money role. }
-        "409": { description: duplicate_code — another account already has this code — or parent_has_entries — the parent already has transactions (an account has children or transactions, never both). }
+        "409": { description: "duplicate_code — another account already has this code — or parent_has_entries — the parent already has transactions (an account has children or transactions, never both)." }
 
   /accounts/{id}:
     get:
@@ -5419,10 +5422,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
-        "400": { description: invalid_id, invalid_body, missing_fields (name is empty), or unknown_parent_account. }
+        "400": { description: "invalid_id, invalid_body, missing_fields (name is empty), or unknown_parent_account." }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: duplicate_code, circular_parent (parent_id is this account itself, or one of its own descendants), or parent_has_entries (the new parent already has transactions). }
+        "409": { description: "duplicate_code, circular_parent (parent_id is this account itself, or one of its own descendants), or parent_has_entries (the new parent already has transactions)." }
     delete:
       summary: Delete an account
       description: >
@@ -5465,7 +5468,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 }, description: Page size; a value outside 1-100 falls back to 50. }
-        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: How many entries to skip, newest first; a negative value falls back to 0. }
+        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: "How many entries to skip, newest first; a negative value falls back to 0." }
         - { name: from, in: query, schema: { type: string, format: date }, description: "Only what occurred on or after this day (YYYY-MM-DD)." }
         - { name: to, in: query, schema: { type: string, format: date }, description: "Only what occurred on or before this day (YYYY-MM-DD)." }
         - { name: q, in: query, schema: { type: string }, description: "Words (separated by spaces) that must all appear in the description, in any order, ignoring case and accents." }
@@ -5477,7 +5480,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AccountEntry" }
-        "400": { description: invalid_id, invalid_date (from or to isn't YYYY-MM-DD) or invalid_date_range (to is before from). }
+        "400": { description: "invalid_id, invalid_date (from or to isn't YYYY-MM-DD) or invalid_date_range (to is before from)." }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /accounts/{id}/move:
@@ -5513,7 +5516,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Account" }
-        "400": { description: invalid_id, invalid_body, or invalid_direction (direction wasn't "up" or "down"). }
+        "400": { description: "invalid_id, invalid_body, or invalid_direction (direction wasn't \"up\" or \"down\")." }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -5524,7 +5527,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 }, description: Page size; a value outside 1-100 falls back to 50. }
-        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: How many entries to skip, newest first; a negative value falls back to 0. }
+        - { name: offset, in: query, schema: { type: integer, default: 0 }, description: "How many entries to skip, newest first; a negative value falls back to 0." }
         - { name: from, in: query, schema: { type: string, format: date }, description: "Only what occurred on or after this day (YYYY-MM-DD)." }
         - { name: to, in: query, schema: { type: string, format: date }, description: "Only what occurred on or before this day (YYYY-MM-DD)." }
         - { name: q, in: query, schema: { type: string }, description: "Words (separated by spaces) that must all appear in the description, in any order, ignoring case and accents." }
@@ -5569,9 +5572,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Transaction" }
-        "400": { description: invalid_body (malformed JSON, or occurred_at isn't RFC 3339), missing_fields (description is empty), too_few_entries, invalid_amount (a zero-amount entry), duplicate_account (the same account on two entries), or unknown_account. }
+        "400": { description: "invalid_body (malformed JSON, or occurred_at isn't RFC 3339), missing_fields (description is empty), too_few_entries, invalid_amount (a zero-amount entry), duplicate_account (the same account on two entries), or unknown_account." }
         "403": { description: Requires admin or the money role. }
-        "409": { description: unbalanced — entries don't sum to zero — or account_has_children — an entry is on an account that has child accounts (an account has children or transactions, never both). }
+        "409": { description: "unbalanced — entries don't sum to zero — or account_has_children — an entry is on an account that has child accounts (an account has children or transactions, never both)." }
 
   /transactions/{id}:
     get:
@@ -5636,10 +5639,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Transaction" }
-        "400": { description: invalid_id, invalid_body, missing_fields, too_few_entries, invalid_amount, duplicate_account, or unknown_account — same as POST. }
+        "400": { description: "invalid_id, invalid_body, missing_fields, too_few_entries, invalid_amount, duplicate_account, or unknown_account — same as POST." }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: unbalanced, or account_has_children (an entry is on an account that has child accounts). }
+        "409": { description: "unbalanced, or account_has_children (an entry is on an account that has child accounts)." }
     delete:
       summary: Delete a transaction (and its entries)
       description: >
@@ -5659,7 +5662,7 @@ paths:
         "400": { description: invalid_id — id isn't numeric. }
         "403": { description: Requires admin or the money role. }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: transaction_has_licenses — a license still names this transaction as its payment — transaction_has_distribution_payments — its payments in a distribution can no longer be undone — transaction_has_material_movement — a sale or rental of material recorded it, delete the movement instead — or transaction_has_files — files are still attached to it. }
+        "409": { description: "transaction_has_licenses — a license still names this transaction as its payment — transaction_has_distribution_payments — its payments in a distribution can no longer be undone — transaction_has_material_movement — a sale or rental of material recorded it, delete the movement instead — or transaction_has_files — files are still attached to it." }
 
 components:
   securitySchemes:
@@ -5714,7 +5717,7 @@ components:
           type: object
           properties:
             version: { type: string, description: What the binary was built as (-ldflags); absent for a plain go build. }
-            vcs_revision: { type: string, description: The commit Go recorded in the binary, when it was built from a git checkout. }
+            vcs_revision: { type: string, description: "The commit Go recorded in the binary, when it was built from a git checkout." }
             vcs_time: { type: string }
             vcs_modified: { type: boolean, description: The checkout had uncommitted changes. Absent when false. }
             go_version: { type: string }
@@ -5724,12 +5727,12 @@ components:
           properties:
             ok: { type: boolean }
             latency_ms: { type: integer }
-            error: { type: string, description: Why it doesn't answer, when ok is false. }
+            error: { type: string, description: "Why it doesn't answer, when ok is false." }
             migration_version: { type: integer, description: Latest goose migration applied; absent when it can't be read. }
         mail:
           type: object
           properties:
-            smtp_configured: { type: boolean, description: When false, sign-in emails are only written to the server log. }
+            smtp_configured: { type: boolean, description: "When false, sign-in emails are only written to the server log." }
         telegram:
           type: object
           properties:
@@ -6419,17 +6422,17 @@ components:
               price: { type: number, description: One unit. }
               max_total: { type: integer, description: How many there are in all; absent = no limit. }
               max_per_person: { type: integer, description: How many one person may have; absent = no limit. }
-              has_identifiers: { type: boolean, description: Each unit has its own number, written down when it is handed out. }
+              has_identifiers: { type: boolean, description: "Each unit has its own number, written down when it is handed out." }
               identifier_fields:
                 type: array
                 items: { $ref: "#/components/schemas/IdentifierField" }
-              identifier_total: { type: integer, description: How many items exist, when the numbers are described. }
+              identifier_total: { type: integer, description: "How many items exist, when the numbers are described." }
               identifiers_assigned: { type: integer, description: How many numbers have been given. }
-              requested: { type: integer, description: How many have been asked for so far; with max_total, what is left is the difference. }
+              requested: { type: integer, description: "How many have been asked for so far; with max_total, what is left is the difference." }
         created_by_login: { type: string }
         created_at: { type: string, format: date-time }
         unit_count: { type: integer, description: In units — a row of an article counts as its quantity. }
-        picked_up_count: { type: integer, description: In units, like unit_count. }
+        picked_up_count: { type: integer, description: "In units, like unit_count." }
         eligible:
           type: boolean
           description: Whether the caller may have it. Only on GET /distributions and GET /distributions/{id}.
@@ -6451,7 +6454,7 @@ components:
             "all" on creation and stays as it is on update.
         closes_at: { type: string, format: date-time }
         cutoff_date: { type: string, format: date }
-        account_id: { type: integer, nullable: true, description: The account its payments are recorded in; null = the default one. 400 unknown_account if it doesn't exist, account_not_income if it isn't of type income. }
+        account_id: { type: integer, nullable: true, description: "The account its payments are recorded in; null = the default one. 400 unknown_account if it doesn't exist, account_not_income if it isn't of type income." }
         price: { type: number, default: 0 }
         extra_price: { type: number }
         max_extra: { type: integer }
@@ -6502,7 +6505,7 @@ components:
         is_extra: { type: boolean }
         article_id: { type: integer, description: Only for a row of an article. }
         article_name: { type: string }
-        identifiers: { type: array, items: { type: string }, description: The numbers of the items, for a row of an article with has_identifiers. }
+        identifiers: { type: array, items: { type: string }, description: "The numbers of the items, for a row of an article with has_identifiers." }
         quantity: { type: integer, description: How many units the row stands for; always 1 outside articles. }
         paid_quantity: { type: integer, description: How many of them have been paid (0 to quantity); paid_at is when the last payment was marked. }
         choices: { type: object, additionalProperties: { type: string } }
@@ -6513,7 +6516,7 @@ components:
         delivered_identifiers: { type: array, items: { type: string }, description: The identifiers already handed out; the others are assigned but still to go. }
         paid_identifiers: { type: array, items: { type: string }, description: The identifiers already paid (in an article with numbers it is the items that are paid). }
         picked_up_at: { type: string, format: date-time }
-        pickup_recorded_by_login: { type: string, description: Who wrote the collection down (admin, board or material). }
+        pickup_recorded_by_login: { type: string, description: "Who wrote the collection down (admin, board or material)." }
         picked_up_by_login: { type: string, description: Who it was handed to; not necessarily the beneficiary. }
 
     DistributionPayment:
@@ -6527,12 +6530,12 @@ components:
         occurred_at: { type: string, format: date-time }
         recorded_by_login: { type: string, description: Who wrote the payment down. }
         recorded_by_name: { type: string }
-        paid_by_login: { type: string, description: Whose order it was for, the person who paid. }
+        paid_by_login: { type: string, description: "Whose order it was for, the person who paid." }
         paid_by_name: { type: string }
-        description: { type: string, description: What was paid for, the article or the distribution. }
-        quantity: { type: integer, description: Units, negative when a payment was taken off. }
-        amount: { type: number, description: Money, with the sign of quantity. }
-        identifiers: { type: array, items: { type: string }, description: The numbers it was about, in an article with numbers. }
+        description: { type: string, description: "What was paid for, the article or the distribution." }
+        quantity: { type: integer, description: "Units, negative when a payment was taken off." }
+        amount: { type: number, description: "Money, with the sign of quantity." }
+        identifiers: { type: array, items: { type: string }, description: "The numbers it was about, in an article with numbers." }
         total_after: { type: number, description: What the distribution had collected up to and including this entry. }
 
     DistributionOrder:
@@ -6597,7 +6600,7 @@ components:
         name: { type: string }
         amount: { type: number, description: Budgeted. }
         actual: { type: number, description: What the item's accounts really received (income) or spent (expenses) in the year. }
-        percent: { type: number, nullable: true, description: actual / amount, null when the amount is zero. }
+        percent: { type: number, nullable: true, description: "actual / amount, null when the amount is zero." }
         accounts: { type: array, items: { $ref: "#/components/schemas/BudgetAccount" } }
 
     BudgetPart:
@@ -6695,7 +6698,7 @@ components:
         title: { type: string }
         description: { type: string, nullable: true, description: type=text only. }
         file_name: { type: string, nullable: true, description: type=file only — the original uploaded filename. }
-        file_size: { type: integer, nullable: true, description: type=file only, in bytes. }
+        file_size: { type: integer, nullable: true, description: "type=file only, in bytes." }
         content_type: { type: string, nullable: true, description: type=file only. }
         place_id: { type: integer, description: "The place the entry is about, when it is about one." }
         place_name: { type: string, description: "Its name, with place_id." }
@@ -6763,7 +6766,7 @@ components:
         attribute_id: { type: integer }
         name: { type: string, description: Response only. }
         option_id: { type: integer, description: Enum attributes. }
-        value: { type: string, description: Text attributes (in a response, also the label of an enum's option). }
+        value: { type: string, description: "Text attributes (in a response, also the label of an enum's option)." }
 
     Item:
       type: object
@@ -7386,7 +7389,7 @@ components:
         appears in the context of one already-known account.
       properties:
         transaction_id: { type: integer }
-        account_id: { type: integer, description: The account the entry is posted to (the account itself, or one of its descendants in the ledger of one that groups others). }
+        account_id: { type: integer, description: "The account the entry is posted to (the account itself, or one of its descendants in the ledger of one that groups others)." }
         account_name: { type: string }
         occurred_at: { type: string, format: date-time }
         description: { type: string }
@@ -7398,7 +7401,7 @@ components:
           type: number
           format: double
           description: This account's own running balance immediately after this entry, computed in occurred_at order.
-        file_count: { type: integer, description: How many files (tickets, invoices) are attached to the transaction. }
+        file_count: { type: integer, description: "How many files (tickets, invoices) are attached to the transaction." }
 
     Entry:
       type: object
@@ -7429,4 +7432,4 @@ components:
         entries:
           type: array
           items: { $ref: "#/components/schemas/Entry" }
-        file_count: { type: integer, description: How many files (tickets, invoices) are attached. }
+        file_count: { type: integer, description: "How many files (tickets, invoices) are attached." }

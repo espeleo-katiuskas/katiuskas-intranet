@@ -1175,7 +1175,7 @@ nothing until they are entered from `/admin`.
 **Admin status** (`internal/adminstatus`): `GET /admin/status` (admin-only, read-only)
 says how the running process is doing and how it is set up, so nobody has to log into the
 server to find out. `cmd/api` hands it an `Info` (the start time, the timeouts, whether
-SMTP and Telegram are configured and the bot running, the three storage roots), and on
+SMTP and Telegram are configured and the bot running, the six storage roots), and on
 each request it adds what can change: what Go recorded in the binary
 (`debug.ReadBuildInfo`) — the main module's version (`Main.Version`: a tag, or a
 pseudo-version with the commit and `+dirty`, when built from a git checkout;
@@ -1192,7 +1192,7 @@ whether each storage directory exists. A database that doesn't answer is reporte
 body, not as an error status. It never includes a secret: no tokens, passwords or
 connection strings.
 
-It also says how full the disks are (`disks`: one entry per filesystem that holds some of the three
+It also says how full the disks are (`disks`: one entry per filesystem that holds some of the
 storage directories that exist, with the percentage `df` shows, taken from `statfs`) and what is
 wrong right now (`problems`, sentences in Spanish): the database not answering, a storage directory
 that does not exist, a disk at `DISK_ALERT_PERCENT` (90 by default, 0 turns that check off) or more,
@@ -1583,19 +1583,20 @@ the send of a bot-flow magic-link DM.
   notifier, i.e. Telegram not configured) is the fire-and-forget goroutine/timeout dance every
   Telegram send in this app already used, pulled out once so nobody duplicates it. It also writes
   the text to the system log (`slog.Info("notice", "text", …)`, so `journalctl -u
-  katiuskas-intranet-stable` has who changed what), with or without Telegram; the sign-in and
-  access-problem notices of `authapi` go through it too, and the bot's notices about shared contacts
-  log the same way. `DiffFields(before, after, fields...)` reflects over a *named* subset of a
-  struct's fields — never every field on it, since a derived/computed one (a computed role list, a
-  membership date recalculated elsewhere) must never show up as a spurious "change" just because it
-  was recomputed at a slightly different moment than "before" — comparing the pair and returning one
-  "field: old → new" line per field that actually differs (a nil pointer formats as `(vacío)`, a
-  date as a plain `YYYY-MM-DD`), *and* renders differently once formatted — a nil pointer and one
-  pointing at a zero value (an empty string, a zero `time.Time`) are still genuinely different
-  values, but both display as `(vacío)`, so a field that merely swapped between those two produces
-  no line: the point of the message is what a human reading it would actually notice changed, not
-  every byte that did. Every resource package with a mutating route (`users`, `roles`, `tokens`,
-  `memberships`, `licenses`, `activities`, `material`, `board`, `activityresources`,
+  katiuskas-intranet-stable` has who changed what), with or without Telegram (a notifier that logs
+  the text itself, `telegram.NoopSender`, says so with `LogsText()` and is not logged twice); the
+  sign-in and access-problem notices of `authapi` go through it too, and the bot's notices about
+  shared contacts log the same way. `DiffFields(before, after, fields...)` reflects over a *named*
+  subset of a struct's fields — never every field on it, since a derived/computed one (a computed
+  role list, a membership date recalculated elsewhere) must never show up as a spurious "change"
+  just because it was recomputed at a slightly different moment than "before" — comparing the pair
+  and returning one "field: old → new" line per field that actually differs (a nil pointer formats
+  as `(vacío)`, a date as a plain `YYYY-MM-DD`), *and* renders differently once formatted — a nil
+  pointer and one pointing at a zero value (an empty string, a zero `time.Time`) are still genuinely
+  different values, but both display as `(vacío)`, so a field that merely swapped between those two
+  produces no line: the point of the message is what a human reading it would actually notice
+  changed, not every byte that did. Every resource package with a mutating route (`users`, `roles`,
+  `tokens`, `memberships`, `licenses`, `activities`, `material`, `board`, `activityresources`,
   `distributions`, `accounting`) takes an `httpapi.MutationNotifier` in its own `NewHandler` — wired
   to `telegramSender` directly from `cmd/api/main.go`, not gated behind a "don't spam every single
   request" check the way the predecessor of this whole thing needed, since one message per

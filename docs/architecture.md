@@ -36,11 +36,12 @@ web/ (HTML + JS, Spanish)  →  backend/ (REST API in Go, /api/v1)  →  Postgre
 ```
 
 A single Go service concentrates the business logic and the data access. No client touches
-PostgreSQL directly, which makes it possible to add a mobile app or a terminal client later
-without duplicating business rules: they share the contract described in
-`backend/openapi/openapi.yaml` (summarized in [`api.md`](api.md)). The data is in
-PostgreSQL ([`database.md`](database.md)), except for three file trees on disk (the document
-archive, each person's files and those of the activities' memoria).
+PostgreSQL directly, which makes it possible to add a mobile app or a terminal client later without
+duplicating business rules: they share the contract described in `backend/openapi/openapi.yaml`
+(summarized in [`api.md`](api.md)). The data is in PostgreSQL ([`database.md`](database.md)), except
+for the file trees on disk: the document archive and each person's files, which are only read, and
+the ones the API writes (the files of the activities' memoria, of the transactions, of the library
+and of the places).
 
 ## Permissions
 
@@ -1426,9 +1427,9 @@ trimmed by `.dockerignore`.
 | --- | --- |
 | Error-level logs | Every record of error level or above, in addition to being logged normally. |
 | Login | One notice for each login (`authapi.Handler.notifyLogin`). |
-| Failed access | When someone types on `/login` details that do not work, so that an admin can see it (`authapi.Handler.notifyAccessProblem`): "⚠️ Acceso fallido" if no person has that email and that phone (what was typed is shown, trimmed and on one line) or if the person has no role that gives access (their login), and "⚠️ Código de acceso rechazado" if the code is wrong or has expired (the login) or is typed with details nobody has. Whoever types it is told too (404 `unknown_details`), and a request that works does not notify. |
+| Failed access | When someone types on `/login` details that do not work, so that an admin can see it (`authapi.Handler.notifyAccessProblem`): "⚠️ Acceso fallido" if no person has that email and that phone (what was typed is shown, trimmed and on one line) or if the person has no role that gives access (their login), and "⚠️ Código de acceso rechazado" if the code is wrong or has expired (the login) or is typed with details nobody has. Whoever types it is told too (404 `unknown_details` for details nobody has, 403 `no_access` for a person with no role that gives access), and a request that works does not notify. |
 | Magic link by DM | The same link (and, depending on the case, the code; see "Permissions") by DM to whoever has their account linked (`authapi.Handler.notifyMagicLinkViaTelegram`). |
-| Mutations | A message of its own for each action that creates, edits or deletes something: person, role, membership, license, activity, material, board position, resource of an activity's memoria, token, account or transaction. |
+| Mutations | A message of its own for each action that creates, edits or deletes something: person, role, membership, license, activity, material, board position, resource of an activity's memoria, token, account, transaction, library item, place, zone, distribution… (every resource). |
 | Startup | `cmd/api/main.go` sends "🚀 API started" right before starting the server, with the version and the date and time of the last commit (in the server's time zone) if they are known — "🚀 API started (version v0.3.6, commit del 17-10-2026 12:00)"; only one of the two, or neither, if that is all there is — (`startupMessage`, from `adminstatus.ReadBuild`: the same information Go records in the binary and `/admin` shows). It is the synchronous exception (same 10 s limit): a single call at startup competes with no request, so blocking on it costs nothing noticeable. |
 | Bot | `internal/telegrambot.Bot`, the only one that also *receives* messages, by long polling and not by webhook (see "Telegram bot"). |
 
@@ -1442,6 +1443,11 @@ are built with `httpapi.NotifyAsync` and `DiffFields` (`internal/httpapi/audit.g
 - Each package with write routes receives its own `httpapi.MutationNotifier` from
   `cmd/api/main.go`. The notices are per significant action, not per request, so a mere touch of
   `last_used_at` on a token notifies nothing.
+
+Every notice sent with `NotifyAsync` (the mutation ones, the sign-in and the failed-access ones) is
+also written to the system log, at INFO level with the message "notice" and the text (so
+`journalctl -u katiuskas-intranet-stable` says who changed what and when), whether or not Telegram
+is configured: it should not live only in a chat.
 
 Without `TELEGRAM_BOT_TOKEN`/`TELEGRAM_LOG_CHAT_ID` configured:
 

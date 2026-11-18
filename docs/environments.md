@@ -593,7 +593,8 @@ The extracts are kept in `/var/lib/katiuskas-intranet-osm` (the unit's `StateDir
 about 1.6 GB: it is not in the backup (it is a copy of public data that the next run downloads
 again). The log of the loads is the table `osm_sync_runs`. By hand, as `intranet`, in a clone or on
 a laptop: `DATABASE_URL=… OSM_CACHE_DIR=/tmp/osm osmsync` (or `-source name=file.osm.pbf` for a file
-already downloaded, and `-force` to load one that is not newer than the last load).
+already downloaded, and `-force` to load one that is not newer than the last load). `OSMIUM_BIN`
+says where `osmium` is if it is not in the path of the service.
 
 ## Alerts when something fails
 

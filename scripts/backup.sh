@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 #
 # Backs up an environment's data into a directory of its own: the database (a custom-format
-# pg_dump, restorable with pg_restore) and the four directories of files (the club's documents,
-# the per-person files, the activities' memoria files and the documents attached to transactions:
-# everything the API reads or writes outside the database). Meant to be run once a day on the
-# club's host by katiuskas-intranet-backup.timer (docs/environments.md, "Backups"), for
-# production: testing's data is a copy of production's, and the first three directories are shared.
+# pg_dump, restorable with pg_restore) and the six directories of files (the club's documents,
+# the per-person files, the activities' memoria files, the documents attached to transactions and
+# the files of the library and of the places: everything the API reads or writes outside the
+# database). Meant to be run once a day on the club's host by katiuskas-intranet-backup.timer
+# (docs/environments.md, "Backups"), for production: testing's data is a copy of production's, and
+# the first two directories are shared.
 #
 # Usage:
 #   BACKUP_DIR=<where to keep the backups> scripts/backup.sh <env-file>

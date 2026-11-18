@@ -183,7 +183,7 @@ PLACE_FILES_ROOT=/opt/katiuskas-intranet/data/place-files
 #TELEGRAM_BOT_USERNAME=
 # With Telegram configured, the API also warns there when the database stops
 # answering, a directory goes missing or a disk is almost full. This is how
-# full (in percent) a disk holding the three directories above may be before
+# full (in percent) a disk holding the directories above may be before
 # that; 90 if left out, 0 turns that one warning off.
 #DISK_ALERT_PERCENT=90
 # Also warns when the data of the OpenStreetMap mirror (the weekly load, see environments.md) is

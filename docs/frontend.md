@@ -268,17 +268,19 @@ zone is not in the list, "¿No está? Añade una zona" opens `area-dialog.js`: t
 ("Dentro de", chosen with the same field, the one already chosen in the place's form if there is),
 its name and its kind, which is left blank to take that of the zones already below (the dialog says
 which) and is required for the first one below another; once added it is the chosen zone. Anybody
-can; an admin may also leave "Dentro de" empty to add a country (the form passes `allowRoot` to the
-dialog for an admin). To rename, move, delete or add inside a zone, admin has "Zonas" on `/lugares`
-(`areas-manager.js`): "Añadir una zona" opens the same dialog to add a zone anywhere, with "Dentro
-de" optional (`allowRoot`; left empty it adds a country; text there that is not a choice is refused,
-never taken for "none"). Its search field says "Elige una zona para modificarla". It finds a zone
-with the same field and shows its chain, its kind and how many zones and places are in it, with its
-name and kind to change, "Mover dentro de" (the zone it is in now, to be changed for another, or
-emptied to make it a country; after a confirmation that says that all it has goes with it), "Añadir
-una zona dentro" and "Borrar zona", which is disabled for a zone with something in it (and says
-why). There is no way to merge two zones here, on purpose: it moves everything in one to the other
-and cannot be undone, so it is only done through the API (`POST /areas/{id}/merge`).
+can, except in Spain, whose zones are seeded (the API answers 403 `area_spain_admin_only`, with its
+text in `error-texts.js`: only an admin adds there); an admin may also leave "Dentro de" empty to
+add a country (the form passes `allowRoot` to the dialog for an admin). To rename, move, delete or
+add inside a zone, admin has "Zonas" on `/lugares` (`areas-manager.js`): "Añadir una zona" opens the
+same dialog to add a zone anywhere, with "Dentro de" optional (`allowRoot`; left empty it adds a
+country; text there that is not a choice is refused, never taken for "none"). Its search field says
+"Elige una zona para modificarla". It finds a zone with the same field and shows its chain, its kind
+and how many zones and places are in it, with its name and kind to change, "Mover dentro de" (the
+zone it is in now, to be changed for another, or emptied to make it a country; after a confirmation
+that says that all it has goes with it), "Añadir una zona dentro" and "Borrar zona", which is
+disabled for a zone with something in it (and says why). There is no way to merge two zones here, on
+purpose: it moves everything in one to the other and cannot be undone, so it is only done through
+the API (`POST /areas/{id}/merge`).
 
 **Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
 (see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the
@@ -680,7 +682,10 @@ form doesn't get for free, since there's no `close` event here to hang it from. 
 version disables every field instead (not just the identity ones `profile.js` restricts) for anyone
 who isn't a real admin — board can still see a person's full data this way, just not submit any
 change to it, the same read-only-but-visible treatment `profile.js` already gives a plain member's
-own name/DNI/birth date/gender.
+own name/DNI/birth date/gender. Since those forms stay on the page, the fields that hold something
+other than what was last loaded are tinted (`js/form-dirty.js`: `trackDirtyFields` once per form,
+`markFieldsClean` after each population, which keeps the loaded value in `data-baseline`), so that
+the person sees what they have touched before saving.
 
 The impersonation banner (`renderImpersonationBanner`) shows "Tiempo restante: 42 min; después
 volverás a tu sesión" and counts it down (minutes, then seconds in the last one), from

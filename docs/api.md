@@ -286,7 +286,7 @@ Directiva).
 - **PUT** `/memberships/{id}` — *Admin*. Corrects the dates of a period or closes it.
   - body: `start_date*`, `end_date`, `end_reason`
   - returns: 200 `Membership`
-  - errors: 400 `invalid_id`; 409 `overlapping_period`, `outside_membership_period`
+  - errors: 400 `invalid_id`, `invalid_date`; 409 `overlapping_period`, `outside_membership_period`
 - **DELETE** `/memberships/{id}` — *Admin*. Deletes a period.
   - returns: 204
 - **GET** `/users/{login}/dues` — *The person themselves, admin or board*. Registered annual dues,
@@ -328,11 +328,12 @@ Directiva).
   membership period.
   - body: `start_date*`, `end_date`, `reason`
   - returns: 201 `Leave`
-  - errors: 400 `invalid_body`; 409 `outside_membership_period`, `overlapping_period`
+  - errors: 400 `invalid_body`, `invalid_date`; 409 `outside_membership_period`,
+    `overlapping_period`
 - **PUT** `/leaves/{id}` — *Admin*. Corrects a temporary leave.
   - body: `start_date*`, `end_date`, `reason`
   - returns: 200 `Leave`
-  - errors: 400 `invalid_id`; 409 `outside_membership_period`, `overlapping_period`
+  - errors: 400 `invalid_id`, `invalid_date`; 409 `outside_membership_period`, `overlapping_period`
 - **DELETE** `/leaves/{id}` — *Admin*. Deletes a temporary leave.
   - returns: 204
 - **GET** `/board-members` — *Any baseline role*. Current board (Junta Directiva), with position and
@@ -347,11 +348,11 @@ Directiva).
 - **POST** `/users/{login}/board-members` — *Admin*. Opens a board position.
   - body: `position*`, `start_date*`, `end_date` (omit for an open term; never before `start_date`)
   - returns: 201 `BoardMember`
-  - errors: 400 `invalid_body`, `invalid_date`; 409 `overlapping_period`
+  - errors: 400 `invalid_body`, `invalid_date`, `invalid_position`; 409 `overlapping_period`
 - **PUT** `/board-members/{id}` — *Admin*. Corrects the position or the dates, or closes it.
   - body: `position*`, `start_date*`, `end_date`
   - returns: 200 `BoardMember`
-  - errors: 400 `invalid_id`; 409 `overlapping_period`
+  - errors: 400 `invalid_id`, `invalid_position`, `invalid_date`; 409 `overlapping_period`
 - **DELETE** `/board-members/{id}` — *Admin*. Deletes a board position.
   - returns: 204
 
@@ -385,8 +386,9 @@ Directiva).
     stays)
   - returns: 200 `Activity`
   - errors: 400 `invalid_id`, `invalid_body`, `invalid_date`, `invalid_date_range`, `invalid_type`,
-    `invalid_visibility`, `invalid_max_participants`; 403 `forbidden`; 404 `not_found`; 409
-    `max_below_attendance` (a limit lower than the people going), `duplicate_activity`
+    `invalid_visibility`, `invalid_max_participants`, `invalid_status`; 403 `forbidden`; 404
+    `not_found`; 409 `max_below_attendance` (a limit lower than the people going),
+    `duplicate_activity`
 - **DELETE** `/activities/{id}` — *Organizer, admin or board*. Deletes an activity, but only one
   with nothing attached: with participants, resources or material movements it is refused until
   those are removed. To take it out of sight without deleting it, cancel it with `PATCH`.
@@ -449,7 +451,7 @@ Directiva).
 - **POST** `/holidays` — *Admin or board*. Adds a holiday.
   - body: `date*`, `name*`
   - returns: 201 `Holiday`
-  - errors: 400 `invalid_body`; 409 `duplicate_holiday`
+  - errors: 400 `invalid_body`, `invalid_date`, `invalid_name`; 409 `duplicate_holiday`
 - **DELETE** `/holidays/{id}` — *Admin or board*. Deletes a holiday.
   - returns: 204
   - errors: 400 `invalid_id`
@@ -481,7 +483,8 @@ files (up to 25 MiB).
   description or the place it is about (`null` takes it off; left out, it stays).
   - body: `title`, `description`, `place_id`
   - returns: 200 `ActivityResource`
-  - errors: 400 `invalid_id`, `invalid_body`, `place_not_in_activity`
+  - errors: 400 `invalid_id`, `invalid_body`, `place_not_in_activity`, `description_not_allowed`,
+    `invalid_fields`
 - **DELETE** `/activities/{id}/resources/{resourceID}` — *Its author, admin or board*. Deletes the
   resource and its file.
   - returns: 204
@@ -690,6 +693,7 @@ can do, board can do.
   - errors: 400 `invalid_id`; 404 `not_found`; 409 `item_has_loans`
 - **GET** `/library/items/{id}/comments` — *Any baseline role*. The comments, oldest first.
   - returns: 200 `[LibraryComment]`
+  - errors: 400 `invalid_id`
 - **POST** `/library/items/{id}/comments` — *Any baseline role*. Adds a comment (at most 2000
   characters).
   - body: `body*`
@@ -702,6 +706,7 @@ can do, board can do.
 - **GET** `/library/items/{id}/resources` — *Any baseline role*. The files of the item that are not
   its cover (photos, documents, topographies, scans), oldest first.
   - returns: 200 `[LibraryResource]`
+  - errors: 400 `invalid_id`
 - **POST** `/library/items/{id}/resources` — *Any baseline role*. Attaches a file,
   `multipart/form-data` with `file` (10 MiB at most) and an optional `title`. The type is decided
   from the bytes.
@@ -835,7 +840,7 @@ known, in metres above sea level.
   - errors: 400 `invalid_body`, `place_name_required`, `place_type_required`, `unknown_place_type`,
     `place_area_required`, `unknown_area`, `invalid_place_state`, `invalid_coordinates`,
     `invalid_altitude`, `unknown_geology`, `place_subtype_required` (a cavity with no subtype),
-    `unknown_subtype`, `invalid_alt_names`,
+    `unknown_subtype`, `invalid_alt_names`, `unknown_system` (a `system_id` that is not there),
     `invalid_place_measure` (negative, or above 20000 m of depth or 2000000 m of length),
     `invalid_place_fields` (a subtype, a measure or a geology of a place that is not a cavity, a
     technical sheet of one that is neither a cavity nor a canyon, or a state of a type that has
@@ -955,6 +960,7 @@ Read-only access to the local mirror of OpenStreetMap (`docs/osm-integration.md`
 canyons, mines, huts and via ferratas that `cmd/osmsync` loads from Geofabrik's extracts. Any
 baseline role reads; nothing here changes the mirror, and nothing in these requests goes to
 OpenStreetMap.
+  - errors: 400 `invalid_id`
 
 - **GET** `/osm/elements` — *Any baseline role*. The elements inside a box, for a map: those not
   marked as gone, the club's own activity first (caves, canyons and mines, then huts and via
@@ -1084,8 +1090,9 @@ changes it.
   - body: `name*`, `description`, `audience`, `visibility`, `closes_at`, `cutoff_date`,
     `account_id`, `price`, `extra_price`, `max_extra`, `options`, `articles`, `status`
   - returns: 201 `Distribution`
-  - errors: 400 `invalid_name`, `invalid_visibility`; 403 `forbidden` (board setting a `visibility`
-    other than `all`)
+  - errors: 400 `invalid_name`, `invalid_visibility`, `invalid_audience`, `cutoff_required`,
+    `invalid_date`, `invalid_price`, `invalid_max_extra`, `invalid_options`, `invalid_articles`,
+    `articles_conflict`; 403 `forbidden` (board setting a `visibility` other than `all`)
 - **GET** `/distributions/{id}` — *Any baseline role*. One distribution (a draft is 404 for everyone
   but admin and board, and so is one the caller's role is below its `visibility`).
   - returns: 200 `Distribution`
@@ -1097,7 +1104,7 @@ changes it.
   - body: `name*`, `description`, `audience`, `visibility`, `closes_at`, `cutoff_date`,
     `account_id`, `price`, `extra_price`, `max_extra`, `options`, `articles`, `status`
   - returns: 200 `Distribution`
-  - errors: 409 `invalid_status_transition`
+  - errors: 400 `invalid_status`; 409 `invalid_status_transition`, `has_units`
 - **DELETE** `/distributions/{id}` — *Admin*. Deletes the distribution with its orders, unless one
   of them is paid or collected.
   - returns: 204
@@ -1114,18 +1121,21 @@ changes it.
   before its deadline; admin, board and material at any time but in a draft.
   - body: `beneficiary_login`, `is_extra`, `article_id`, `quantity`, `choices`
   - returns: 201 `DistributionUnit`
-  - errors: 400 `invalid_choices`; 409 `not_open`
+  - errors: 400 `invalid_choices`, `article_required`, `unknown_article`, `invalid_quantity`; 409
+    `not_open`, `not_eligible`, `already_registered`, `extras_not_allowed`, `too_many_extras`,
+    `article_exhausted`, `article_person_limit`
 - **PATCH** `/distributions/{id}/units/{unitID}` — *The person it is for, whoever entered it, admin,
   board or material*. Changes the choices (`choices`, replacing them all) or the quantity
   (`quantity`, in an article's row); one of the two has to be sent.
   - body: `choices`, `quantity`
   - returns: 200 `DistributionUnit`
-  - errors: 400 `invalid_choices`, `invalid_quantity`, `missing_fields`; 409 `not_open`
+  - errors: 400 `invalid_choices`, `invalid_quantity`, `missing_fields`; 409 `not_open`,
+    `unit_locked`, `quantity_below_paid`, `article_exhausted`, `article_person_limit`
 - **DELETE** `/distributions/{id}/units/{unitID}` — *The person it is for, whoever entered it,
   admin, board or material*. Removes an order (not the automatic one of a distribution for
   everybody, nor one with something paid).
   - returns: 204
-  - errors: 409 `not_open`
+  - errors: 409 `not_open`, `unit_locked`, `automatic_unit`, `unit_paid`
 - **GET** `/distributions/{id}/order` — *Admin, board or material*. What has to be ordered: units
   summed by combination of options.
   - returns: 200 `DistributionOrder`
@@ -1151,12 +1161,14 @@ changes it.
 - **POST** `/distributions/{id}/units/{unitID}/identifiers/assign` — *Admin, board or material*.
   Gives an order the next free numbers.
   - returns: 200 `DistributionUnit`
-  - errors: 400 `article_not_numbered`; 409 `not_deliverable`
+  - errors: 400 `article_not_numbered`; 409 `not_deliverable`, `not_enough_numbers`,
+    `identifier_taken`
 - **POST** `/distributions/{id}/pickups` — *Admin, board or material*. Records collections, in a
   batch and all or nothing.
   - body: `unit_ids`, `deliveries`, `picked_up_by_login*`, `assign_numbers`
   - returns: 204
-  - errors: 400 `no_units`; 409 `not_deliverable`
+  - errors: 400 `no_units`; 409 `not_deliverable`, `invalid_collector`, `already_picked_up`,
+    `identifiers_missing`
 - **DELETE** `/distributions/{id}/units/{unitID}/pickup` — *Admin, board or material*. Undoes a
   collection.
   - query: `quantity`, `identifiers`
@@ -1176,7 +1188,8 @@ changes it.
   nothing, and records them in Accounting.
   - body: `account_id`, `unit_ids`, `payments`
   - returns: 204
-  - errors: 400 `no_units`; 409 `already_paid`
+  - errors: 400 `no_units`, `account_required`, `unknown_account`, `account_not_asset`; 409
+    `already_paid`, `no_distribution_account`, `account_has_children`
 - **POST** `/distributions/{id}/sales` — *Admin or board*. A sale over the counter, for a
   distribution with articles that is no longer a draft: enters the order of the person, gives it
   its numbers, collects the money and hands it over, in one go. Only whoever may have the
@@ -1186,15 +1199,17 @@ changes it.
   - body: `beneficiary_login*`, `article_id*`, `quantity*`, `identifiers`, `paid`, `account_id`
     (required when `paid` and the article costs something), `delivered`
   - returns: 201 `DistributionUnit`
-  - errors: 400 `account_required`, `unknown_account`, `invalid_identifiers`; 404 `not_found`;
-    409 `not_eligible`, `not_deliverable`, `article_exhausted`, `not_enough_numbers`,
-    `identifier_taken`, `identifiers_missing`
+  - errors: 400 `account_required`, `unknown_account`, `invalid_identifiers`, `account_not_asset`,
+    `invalid_quantity`, `article_required`; 404 `not_found`; 409 `not_eligible`, `not_deliverable`,
+    `article_exhausted`, `not_enough_numbers`, `identifier_taken`, `identifiers_missing`,
+    `article_person_limit`
 - **POST** `/distributions/{id}/units/{unitID}/payment/reversal` — *Admin or board*. Takes off a
   payment: nothing is deleted, the reverse is recorded (a payment of the other sign in the log of
   payments and a reverse transaction in the accounting).
   - body: `account_id`, `quantity`, `identifiers`
   - returns: 204
-  - errors: 400 `account_required`; 409 `no_distribution_account`
+  - errors: 400 `account_required`, `unknown_account`, `account_not_asset`, `invalid_quantity`,
+    `identifier_not_assigned`; 409 `no_distribution_account`, `identifier_not_paid`
 
 ## Document archive and per-person files
 
@@ -1248,8 +1263,9 @@ case and accents).
   - body: `name*`, `code`, `parent_id`, `type`, `allows_dues`, `allows_licenses`,
     `distribution_default`, `material_rental`, `material_sale`, `hidden`
   - returns: 200 `Account`
-  - errors: 400 `invalid_id`; 409 `duplicate_code`, `not_income_for_distributions`,
-    `not_income_for_material`
+  - errors: 400 `invalid_id`, `missing_fields`, `unknown_parent_account`; 409 `duplicate_code`,
+    `not_income_for_distributions`, `not_income_for_material`, `circular_parent`,
+    `parent_has_entries`
 - **DELETE** `/accounts/{id}` — *Admin or money*. Deletes an account with no children and no
   entries.
   - returns: 204
@@ -1258,12 +1274,12 @@ case and accents).
   next (`down`) sibling. Returns the whole chart.
   - body: `direction*`
   - returns: 200 `[Account]`
-  - errors: 400 `invalid_id`
+  - errors: 400 `invalid_id`, `invalid_direction`
 - **GET** `/accounts/{id}/transactions` — *Any baseline role*. Ledger of the account, with running
   balance. For an account that groups others, the entries of all its descendants.
   - query: `limit`, `offset`, `from`, `to`, `q`
   - returns: 200 `[AccountEntry]`
-  - errors: 400 `invalid_id`
+  - errors: 400 `invalid_id`, `invalid_date`, `invalid_date_range`
 - **GET** `/transactions` — *Any baseline role*. Transactions, most recent first.
   - query: `limit`, `offset`, `from`, `to`, `q`
   - returns: 200 `[Transaction]`
@@ -1272,7 +1288,8 @@ case and accents).
   to zero.
   - body: `description*`, `occurred_at*`, `entries*`
   - returns: 201 `Transaction`
-  - errors: 400 `invalid_body`; 409 `unbalanced`, `account_has_children`
+  - errors: 400 `invalid_body`, `missing_fields`, `too_few_entries`, `invalid_amount`,
+    `duplicate_account`, `unknown_account`; 409 `unbalanced`, `account_has_children`
 - **GET** `/transactions/{id}` — *Any baseline role*. One transaction; admin and board also see the
   dues and licenses it paid.
   - returns: 200 `JSON`
@@ -1280,7 +1297,8 @@ case and accents).
 - **PUT** `/transactions/{id}` — *Admin or money*. Replaces description, date and entries.
   - body: `description*`, `occurred_at*`, `entries*`
   - returns: 200 `Transaction`
-  - errors: 400 `invalid_id`; 409 `unbalanced`
+  - errors: 400 `invalid_id`, `missing_fields`, `too_few_entries`, `invalid_amount`,
+    `duplicate_account`, `unknown_account`; 409 `unbalanced`, `account_has_children`
 - **DELETE** `/transactions/{id}` — *Admin or money*. Deletes the transaction; if it was the payment
   of a distribution, it undoes it.
   - returns: 204
@@ -2108,6 +2126,7 @@ are given by a search and by `GET /areas/{id}`, not by the list of the zones bel
 | `area_id` | integer |
 | `area_ids` | `[integer]` |
 | `where` | text |
+| `area_names` | text |
 | `lat` | number |
 | `lon` | number |
 | `altitude_m` | integer |
