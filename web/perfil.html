@@ -13,133 +13,133 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <h1 id="profile-name">Mi perfil</h1>
-  <p class="subtitle" id="profile-email"></p>
+      <h1 id="profile-name">Mi perfil</h1>
+      <p class="subtitle" id="profile-email"></p>
 
-  <p id="feedback" class="success-message" hidden></p>
+      <p id="feedback" class="success-message" hidden></p>
 
-  <div class="panel">
-    <h3>Mis datos</h3>
-    <p class="hint">Mantén tus datos al día: el club los usa para el registro de socios y, si hace falta, en caso de emergencia.</p>
-    <p class="hint" id="restricted-fields-hint" hidden>
-      Si necesitas modificar nombre, apellidos, DNI, género o fecha de nacimiento,
-      contacta con la Junta Directiva.
-    </p>
-    <form id="edit-profile-form" autocomplete="off">
-      <div class="field-grid">
-        <div class="field">
-          <label for="ep-first-name">Nombre</label>
-          <input id="ep-first-name" name="first_name" type="text" autocomplete="off" required>
-        </div>
-        <div class="field">
-          <label for="ep-last-name">Apellidos</label>
-          <input id="ep-last-name" name="last_name" type="text" autocomplete="off" required>
-        </div>
-        <div class="field">
-          <label for="ep-email">Email</label>
-          <input id="ep-email" name="email" type="text" autocomplete="off" placeholder="correo@ejemplo.com otro@ejemplo.com">
-        </div>
-        <div class="field">
-          <label for="ep-phone">Teléfono</label>
-          <input id="ep-phone" name="phone" type="tel" autocomplete="off" placeholder="600111222 622333444 (sin espacios dentro de cada uno)">
-        </div>
-        <div class="field">
-          <label for="ep-national-id">DNI</label>
-          <input id="ep-national-id" name="national_id" type="text" autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="ep-birth-date">Fecha de nacimiento</label>
-          <input id="ep-birth-date" name="birth_date" type="date" autocomplete="off" required>
-        </div>
-        <div class="field">
-          <label for="ep-gender">Género</label>
-          <select id="ep-gender" name="gender" autocomplete="off">
-            <option value="">Sin especificar</option>
-            <option value="male">Masculino</option>
-            <option value="female">Femenino</option>
-          </select>
-        </div>
-        <div class="field span-2">
-          <label for="ep-address">Dirección</label>
-          <input id="ep-address" name="address" type="text" autocomplete="off" readonly>
-        </div>
-        <div class="field">
-          <label for="ep-postal-code">Código postal</label>
-          <input id="ep-postal-code" name="postal_code" type="text" autocomplete="off" readonly>
-        </div>
-        <div class="field">
-          <label for="ep-city">Ciudad</label>
-          <input id="ep-city" name="city" type="text" autocomplete="off" readonly>
-        </div>
-        <div class="field">
-          <label for="ep-province">Provincia</label>
-          <input id="ep-province" name="province" type="text" autocomplete="off" readonly>
-        </div>
-        <div class="field span-2">
-          <label for="ep-emergency-contact">Contacto de emergencia</label>
-          <textarea id="ep-emergency-contact" name="emergency_contact" autocomplete="off" placeholder="Nombre, teléfono, correo... uno o varios contactos"></textarea>
+      <div class="panel">
+        <h3>Mis datos</h3>
+        <p class="hint">Mantén tus datos al día: el club los usa para el registro de socios y, si hace falta, en caso de emergencia.</p>
+        <p class="hint" id="restricted-fields-hint" hidden>
+          Si necesitas modificar nombre, apellidos, DNI, género o fecha de nacimiento,
+          contacta con la Junta Directiva.
+        </p>
+        <form id="edit-profile-form" autocomplete="off">
+          <div class="field-grid">
+            <div class="field">
+              <label for="ep-first-name">Nombre</label>
+              <input id="ep-first-name" name="first_name" type="text" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label for="ep-last-name">Apellidos</label>
+              <input id="ep-last-name" name="last_name" type="text" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label for="ep-email">Email</label>
+              <input id="ep-email" name="email" type="text" autocomplete="off" placeholder="correo@ejemplo.com otro@ejemplo.com">
+            </div>
+            <div class="field">
+              <label for="ep-phone">Teléfono</label>
+              <input id="ep-phone" name="phone" type="tel" autocomplete="off" placeholder="600111222 622333444 (sin espacios dentro de cada uno)">
+            </div>
+            <div class="field">
+              <label for="ep-national-id">DNI</label>
+              <input id="ep-national-id" name="national_id" type="text" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="ep-birth-date">Fecha de nacimiento</label>
+              <input id="ep-birth-date" name="birth_date" type="date" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label for="ep-gender">Género</label>
+              <select id="ep-gender" name="gender" autocomplete="off">
+                <option value="">Sin especificar</option>
+                <option value="male">Masculino</option>
+                <option value="female">Femenino</option>
+              </select>
+            </div>
+            <div class="field span-2">
+              <label for="ep-address">Dirección</label>
+              <input id="ep-address" name="address" type="text" autocomplete="off" readonly>
+            </div>
+            <div class="field">
+              <label for="ep-postal-code">Código postal</label>
+              <input id="ep-postal-code" name="postal_code" type="text" autocomplete="off" readonly>
+            </div>
+            <div class="field">
+              <label for="ep-city">Ciudad</label>
+              <input id="ep-city" name="city" type="text" autocomplete="off" readonly>
+            </div>
+            <div class="field">
+              <label for="ep-province">Provincia</label>
+              <input id="ep-province" name="province" type="text" autocomplete="off" readonly>
+            </div>
+            <div class="field span-2">
+              <label for="ep-emergency-contact">Contacto de emergencia</label>
+              <textarea id="ep-emergency-contact" name="emergency_contact" autocomplete="off" placeholder="Nombre, teléfono, correo... uno o varios contactos"></textarea>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar cambios</button>
+            <button type="button" class="btn btn-secondary" id="cancel-edit-profile">Cancelar</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="license-files-section" hidden>
+        <h2>Licencias federativas</h2>
+        <div class="info-card">
+          <label for="license-files-year">Año</label>
+          <select id="license-files-year" class="year-select"></select>
+          <ul class="license-thumbnail-grid" id="license-files-list"></ul>
         </div>
       </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar cambios</button>
-        <button type="button" class="btn btn-secondary" id="cancel-edit-profile">Cancelar</button>
+
+      <div id="memberships-section" hidden>
+        <h2>Historial como socio</h2>
+        <div class="detail-list" id="timeline-list"></div>
       </div>
-    </form>
-  </div>
 
-  <div id="license-files-section" hidden>
-    <h2>Licencias federativas</h2>
-    <div class="info-card">
-      <label for="license-files-year">Año</label>
-      <select id="license-files-year" class="year-select"></select>
-      <ul class="license-thumbnail-grid" id="license-files-list"></ul>
-    </div>
-  </div>
-
-  <div id="memberships-section" hidden>
-    <h2>Historial como socio</h2>
-    <div class="detail-list" id="timeline-list"></div>
-  </div>
-
-  <div id="sessions-section">
-    <h2>Mis sesiones</h2>
-    <p class="subtitle">Los dispositivos en los que tienes la sesión abierta. Si no reconoces alguno, ciérralo: tendrá que volver a pedir un enlace para entrar.</p>
-    <p class="hint" id="sessions-impersonating" hidden>Estás impersonando a esta persona: puedes ver sus sesiones, pero no cerrarlas. Para cerrarlas, sal antes de la impersonación.</p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr id="sessions-head"><th>Navegador</th><th data-sort-key="last_used">Último uso<span class="sort-arrow" aria-hidden="true"></span></th><th>Desde</th><th data-sort-key="created">Abierta<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="expires">Caduca<span class="sort-arrow" aria-hidden="true"></span></th><th></th></tr>
-        </thead>
-        <tbody id="sessions-list"><tr><td colspan="6">Cargando…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div id="uf-section" hidden>
-    <h2>Mis ficheros</h2>
-    <nav id="uf-breadcrumbs" class="breadcrumbs"></nav>
-    <div id="uf-directory-view">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Nombre</th><th>Tamaño</th><th>Modificado</th></tr>
-          </thead>
-          <tbody id="uf-entries-list"></tbody>
-        </table>
-      </div>
-    </div>
-    <div id="uf-file-view" hidden>
-      <div class="section-header">
-        <h3 id="uf-file-name"></h3>
-        <div class="panel-actions">
-          <button id="uf-file-download" type="button" class="btn btn-secondary btn-small">Descargar</button>
-          <button id="uf-file-back" type="button" class="btn btn-secondary btn-small">Volver a la carpeta</button>
+      <div id="sessions-section">
+        <h2>Mis sesiones</h2>
+        <p class="subtitle">Los dispositivos en los que tienes la sesión abierta. Si no reconoces alguno, ciérralo: tendrá que volver a pedir un enlace para entrar.</p>
+        <p class="hint" id="sessions-impersonating" hidden>Estás impersonando a esta persona: puedes ver sus sesiones, pero no cerrarlas. Para cerrarlas, sal antes de la impersonación.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr id="sessions-head"><th>Navegador</th><th data-sort-key="last_used">Último uso<span class="sort-arrow" aria-hidden="true"></span></th><th>Desde</th><th data-sort-key="created">Abierta<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="expires">Caduca<span class="sort-arrow" aria-hidden="true"></span></th><th></th></tr>
+            </thead>
+            <tbody id="sessions-list"><tr><td colspan="6">Cargando…</td></tr></tbody>
+          </table>
         </div>
       </div>
-      <p class="subtitle" id="uf-file-meta"></p>
-      <div id="uf-file-preview"></div>
-    </div>
-  </div>
+
+      <div id="uf-section" hidden>
+        <h2>Mis ficheros</h2>
+        <nav id="uf-breadcrumbs" class="breadcrumbs"></nav>
+        <div id="uf-directory-view">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Nombre</th><th>Tamaño</th><th>Modificado</th></tr>
+              </thead>
+              <tbody id="uf-entries-list"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="uf-file-view" hidden>
+          <div class="section-header">
+            <h3 id="uf-file-name"></h3>
+            <div class="panel-actions">
+              <button id="uf-file-download" type="button" class="btn btn-secondary btn-small">Descargar</button>
+              <button id="uf-file-back" type="button" class="btn btn-secondary btn-small">Volver a la carpeta</button>
+            </div>
+          </div>
+          <p class="subtitle" id="uf-file-meta"></p>
+          <div id="uf-file-preview"></div>
+        </div>
+      </div>
     </main>
   </div>
 </div>

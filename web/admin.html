@@ -13,267 +13,267 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <div class="section-header">
-    <div>
-      <h1>Admin</h1>
-      <p class="subtitle">Lo que solo les interesa a los administradores.</p>
-    </div>
-  </div>
-
-  <nav class="section-index" aria-label="Secciones de la página">
-    <a href="#section-status">Estado del sistema</a>
-    <a href="#section-activity">Actividad</a>
-    <a href="#section-roles">Roles</a>
-    <a href="#section-sessions">Sesiones</a>
-    <a href="#section-holidays">Festivos</a>
-    <a href="#section-club-info">Datos de interés</a>
-    <a href="#section-material-types">Tipos de material</a>
-  </nav>
-
-  <p id="feedback" class="success-message" hidden></p>
-
-  <div class="section-header status-header">
-    <div>
-      <h2 id="section-status">Estado del sistema</h2>
-      <p class="subtitle">Qué versión hay desplegada, si la base de datos responde y cómo está configurado, sin entrar en el servidor.</p>
-    </div>
-    <button id="refresh-status" type="button" class="btn btn-secondary btn-small">Actualizar</button>
-  </div>
-  <div id="status-container" class="status-groups">Cargando…</div>
-
-  <div class="section-header">
-    <div>
-      <h2 id="section-activity">Actividad</h2>
-      <p class="subtitle">Cuántas personas han usado la intranet cada día del último año: una casilla por día, más oscura cuantas más personas. Pulsa un día para ver quiénes fueron. Los días son los de Madrid; entrar como otra persona no cuenta como actividad suya.</p>
-    </div>
-  </div>
-  <div id="activity-container" class="activity">Cargando…</div>
-
-  <div class="section-header">
-    <div>
-      <h2 id="section-roles">Roles</h2>
-      <p class="subtitle">Qué personas tiene cada rol, y a quién se lo das o se lo quitas. Los roles automáticos (socio, junta, antiguo socio) se asignan solos según el historial.</p>
-    </div>
-    <button id="toggle-new-role" type="button" class="btn btn-secondary btn-small">+ Nuevo rol</button>
-  </div>
-  <div class="table-wrap">
-    <table class="stack-on-phone">
-      <thead>
-        <tr><th>Nombre</th><th>Descripción</th><th>Personas</th><th></th><th></th></tr>
-      </thead>
-      <tbody id="roles-table-body"></tbody>
-    </table>
-  </div>
-  <dialog id="new-role-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Nuevo rol</h3>
-    <p class="hint">
-      Los roles del sistema (admin, junta, socio) son los únicos que dan permisos
-      en la aplicación. Un rol nuevo sirve como etiqueta organizativa para el club
-      (por ejemplo, "material" o "instructor").
-    </p>
-    <form id="new-role-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="nr-name">Nombre</label>
-          <input id="nr-name" name="name" type="text" required>
-        </div>
-        <div class="field span-2">
-          <label for="nr-description">Descripción <span class="optional">(opcional)</span></label>
-          <input id="nr-description" name="description" type="text">
+      <div class="section-header">
+        <div>
+          <h1>Admin</h1>
+          <p class="subtitle">Lo que solo les interesa a los administradores.</p>
         </div>
       </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Crear rol</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
 
-  <div class="section-header">
-    <div>
-      <h2 id="section-sessions">Sesiones</h2>
-      <p class="subtitle">Quién tiene la sesión abierta, desde cuándo y desde dónde. Revocar una sesión la cierra en el acto.</p>
-    </div>
-  </div>
-  <p class="filter-bar">
-    <label class="checkbox-label" for="sessions-show-all"><input id="sessions-show-all" type="checkbox"> Incluir las caducadas y las revocadas</label>
-  </p>
-  <div class="table-wrap">
-    <table class="stack-on-phone">
-      <thead>
-        <tr id="sessions-head"><th data-sort-key="person">Persona<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="last_used">Último uso<span class="sort-arrow" aria-hidden="true"></span></th><th>Desde</th><th>Navegador</th><th data-sort-key="created">Creada<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="expires">Caduca<span class="sort-arrow" aria-hidden="true"></span></th><th>Estado</th><th></th></tr>
-      </thead>
-      <tbody id="sessions-table-body"></tbody>
-    </table>
-  </div>
-  <p class="load-more"><button type="button" id="sessions-load-more" class="btn btn-secondary" hidden>Ver más</button></p>
-  <dialog id="session-expiry-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Cambiar la caducidad</h3>
-    <p class="hint" id="session-expiry-hint"></p>
-    <form id="session-expiry-form">
-      <div class="field">
-        <label for="session-expiry-input">Caduca el</label>
-        <input id="session-expiry-input" type="datetime-local" required>
-      </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
+      <nav class="section-index" aria-label="Secciones de la página">
+        <a href="#section-status">Estado del sistema</a>
+        <a href="#section-activity">Actividad</a>
+        <a href="#section-roles">Roles</a>
+        <a href="#section-sessions">Sesiones</a>
+        <a href="#section-holidays">Festivos</a>
+        <a href="#section-club-info">Datos de interés</a>
+        <a href="#section-material-types">Tipos de material</a>
+      </nav>
 
-  <div class="section-header">
-    <div>
-      <h2 id="section-holidays">Festivos</h2>
-      <p class="subtitle">Los días que el calendario de actividades marca como festivos, año por año.</p>
-    </div>
-    <button id="toggle-new-holiday" type="button" class="btn btn-secondary btn-small">+ Nuevo festivo</button>
-  </div>
-  <p class="filter-bar">
-    <button id="holidays-prev" type="button" class="btn btn-secondary btn-small" aria-label="Año anterior">‹</button>
-    <strong id="holidays-year"></strong>
-    <button id="holidays-next" type="button" class="btn btn-secondary btn-small" aria-label="Año siguiente">›</button>
-    <button id="holidays-copy" type="button" class="btn btn-secondary btn-small">Copiar del año anterior</button>
-  </p>
-  <div class="table-wrap">
-    <table class="stack-on-phone">
-      <thead>
-        <tr><th>Fecha</th><th>Nombre</th><th></th></tr>
-      </thead>
-      <tbody id="holidays-table-body"></tbody>
-    </table>
-  </div>
-  <dialog id="new-holiday-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Nuevo festivo</h3>
-    <form id="new-holiday-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="nh-date">Fecha</label>
-          <input id="nh-date" name="date" type="date" required>
-        </div>
-        <div class="field">
-          <label for="nh-name">Nombre</label>
-          <input id="nh-name" name="name" type="text" required>
-        </div>
-      </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Añadir festivo</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
+      <p id="feedback" class="success-message" hidden></p>
 
-  <div class="section-header">
-    <div>
-      <h2 id="section-club-info">Datos de interés</h2>
-      <p class="subtitle">Lo que se ve en la portada: nombre del club, NIF, dirección, cuentas, teléfono de Bizum… Se guardan en la base de datos, no en el código.</p>
-    </div>
-    <button id="toggle-new-club-info" type="button" class="btn btn-secondary btn-small">+ Nuevo dato</button>
-  </div>
-  <div class="table-wrap">
-    <table class="stack-on-phone">
-      <thead>
-        <tr><th>Dato</th><th>Valor</th><th>Botón de copiar</th><th></th></tr>
-      </thead>
-      <tbody id="club-info-table-body"></tbody>
-    </table>
-  </div>
-  <dialog id="club-info-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3 id="club-info-dialog-title">Nuevo dato</h3>
-    <form id="club-info-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="ci-label">Dato</label>
-          <input id="ci-label" name="label" type="text" maxlength="100" required placeholder="Teléfono para Bizum">
+      <div class="section-header status-header">
+        <div>
+          <h2 id="section-status">Estado del sistema</h2>
+          <p class="subtitle">Qué versión hay desplegada, si la base de datos responde y cómo está configurado, sin entrar en el servidor.</p>
         </div>
-        <div class="field span-2">
-          <label for="ci-value">Valor</label>
-          <input id="ci-value" name="value" type="text" maxlength="500" required>
-        </div>
-        <div class="field">
-          <label for="ci-copy-value">Texto que copia el botón <span class="optional">(opcional)</span></label>
-          <input id="ci-copy-value" name="copy_value" type="text" maxlength="500">
-        </div>
-        <div class="field">
-          <label for="ci-copy-label">Texto del botón <span class="optional">(opcional)</span></label>
-          <input id="ci-copy-label" name="copy_label" type="text" maxlength="100" placeholder="Copiar">
-        </div>
+        <button id="refresh-status" type="button" class="btn btn-secondary btn-small">Actualizar</button>
       </div>
-      <p class="hint">Si pones un texto para copiar, aparece un botón junto al valor que lo copia (por ejemplo el IBAN sin espacios). Sin él, solo se ve el valor.</p>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
+      <div id="status-container" class="status-groups">Cargando…</div>
 
-  <div class="section-header">
-    <div>
-      <h2 id="section-material-types">Tipos de material</h2>
-      <p class="subtitle">Cada material tiene uno. «Cuerda» y «Saca» son fijos (llevan sus propios datos); los demás se cambian libremente, pero un tipo que tiene material no se puede borrar. Cada tipo puede tener atributos (color, forma, tipo de cierre…) y decide si la descripción de su material es obligatoria.</p>
-    </div>
-    <button id="toggle-new-material-type" type="button" class="btn btn-secondary btn-small">+ Nuevo tipo</button>
-  </div>
-  <div class="table-wrap">
-    <table class="stack-on-phone">
-      <thead>
-        <tr><th>Tipo</th><th>Descripción</th><th>Atributos</th><th></th></tr>
-      </thead>
-      <tbody id="material-types-table-body"></tbody>
-    </table>
-  </div>
-  <dialog id="material-type-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3 id="material-type-dialog-title">Nuevo tipo</h3>
-    <form id="material-type-form">
-      <div class="field">
-        <label for="mt-name">Nombre</label>
-        <input id="mt-name" name="name" type="text" maxlength="100" required>
+      <div class="section-header">
+        <div>
+          <h2 id="section-activity">Actividad</h2>
+          <p class="subtitle">Cuántas personas han usado la intranet cada día del último año: una casilla por día, más oscura cuantas más personas. Pulsa un día para ver quiénes fueron. Los días son los de Madrid; entrar como otra persona no cuenta como actividad suya.</p>
+        </div>
       </div>
-      <div class="field">
-        <label class="checkbox-label" for="mt-description-required"><input id="mt-description-required" name="description_required" type="checkbox" checked> La descripción es obligatoria</label>
+      <div id="activity-container" class="activity">Cargando…</div>
+
+      <div class="section-header">
+        <div>
+          <h2 id="section-roles">Roles</h2>
+          <p class="subtitle">Qué personas tiene cada rol, y a quién se lo das o se lo quitas. Los roles automáticos (socio, junta, antiguo socio) se asignan solos según el historial.</p>
+        </div>
+        <button id="toggle-new-role" type="button" class="btn btn-secondary btn-small">+ Nuevo rol</button>
       </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cerrar</button>
+      <div class="table-wrap">
+        <table class="stack-on-phone">
+          <thead>
+            <tr><th>Nombre</th><th>Descripción</th><th>Personas</th><th></th><th></th></tr>
+          </thead>
+          <tbody id="roles-table-body"></tbody>
+        </table>
       </div>
-    </form>
-    <section id="material-attributes-section" hidden>
-      <h4>Atributos</h4>
-      <p class="subtitle">Cada atributo es un texto libre o una lista de opciones, y puede ser obligatorio. El orden es el de los valores en el nombre del material, que se escribe solo con los valores («Mosquetones · aluminio · asimétrico»). Los cambios de atributos se aplican al momento, sin pulsar «Guardar».</p>
-      <div id="material-attributes-list"></div>
-      <h4>Nuevo atributo</h4>
-      <form id="material-attribute-form">
-        <div class="field-grid">
+      <dialog id="new-role-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Nuevo rol</h3>
+        <p class="hint">
+          Los roles del sistema (admin, junta, socio) son los únicos que dan permisos
+          en la aplicación. Un rol nuevo sirve como etiqueta organizativa para el club
+          (por ejemplo, "material" o "instructor").
+        </p>
+        <form id="new-role-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="nr-name">Nombre</label>
+              <input id="nr-name" name="name" type="text" required>
+            </div>
+            <div class="field span-2">
+              <label for="nr-description">Descripción <span class="optional">(opcional)</span></label>
+              <input id="nr-description" name="description" type="text">
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Crear rol</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div class="section-header">
+        <div>
+          <h2 id="section-sessions">Sesiones</h2>
+          <p class="subtitle">Quién tiene la sesión abierta, desde cuándo y desde dónde. Revocar una sesión la cierra en el acto.</p>
+        </div>
+      </div>
+      <p class="filter-bar">
+        <label class="checkbox-label" for="sessions-show-all"><input id="sessions-show-all" type="checkbox"> Incluir las caducadas y las revocadas</label>
+      </p>
+      <div class="table-wrap">
+        <table class="stack-on-phone">
+          <thead>
+            <tr id="sessions-head"><th data-sort-key="person">Persona<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="last_used">Último uso<span class="sort-arrow" aria-hidden="true"></span></th><th>Desde</th><th>Navegador</th><th data-sort-key="created">Creada<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="expires">Caduca<span class="sort-arrow" aria-hidden="true"></span></th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody id="sessions-table-body"></tbody>
+        </table>
+      </div>
+      <p class="load-more"><button type="button" id="sessions-load-more" class="btn btn-secondary" hidden>Ver más</button></p>
+      <dialog id="session-expiry-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Cambiar la caducidad</h3>
+        <p class="hint" id="session-expiry-hint"></p>
+        <form id="session-expiry-form">
           <div class="field">
-            <label for="ma-name">Nombre</label>
-            <input id="ma-name" name="name" type="text" maxlength="100" required>
+            <label for="session-expiry-input">Caduca el</label>
+            <input id="session-expiry-input" type="datetime-local" required>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div class="section-header">
+        <div>
+          <h2 id="section-holidays">Festivos</h2>
+          <p class="subtitle">Los días que el calendario de actividades marca como festivos, año por año.</p>
+        </div>
+        <button id="toggle-new-holiday" type="button" class="btn btn-secondary btn-small">+ Nuevo festivo</button>
+      </div>
+      <p class="filter-bar">
+        <button id="holidays-prev" type="button" class="btn btn-secondary btn-small" aria-label="Año anterior">‹</button>
+        <strong id="holidays-year"></strong>
+        <button id="holidays-next" type="button" class="btn btn-secondary btn-small" aria-label="Año siguiente">›</button>
+        <button id="holidays-copy" type="button" class="btn btn-secondary btn-small">Copiar del año anterior</button>
+      </p>
+      <div class="table-wrap">
+        <table class="stack-on-phone">
+          <thead>
+            <tr><th>Fecha</th><th>Nombre</th><th></th></tr>
+          </thead>
+          <tbody id="holidays-table-body"></tbody>
+        </table>
+      </div>
+      <dialog id="new-holiday-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Nuevo festivo</h3>
+        <form id="new-holiday-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="nh-date">Fecha</label>
+              <input id="nh-date" name="date" type="date" required>
+            </div>
+            <div class="field">
+              <label for="nh-name">Nombre</label>
+              <input id="nh-name" name="name" type="text" required>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Añadir festivo</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div class="section-header">
+        <div>
+          <h2 id="section-club-info">Datos de interés</h2>
+          <p class="subtitle">Lo que se ve en la portada: nombre del club, NIF, dirección, cuentas, teléfono de Bizum… Se guardan en la base de datos, no en el código.</p>
+        </div>
+        <button id="toggle-new-club-info" type="button" class="btn btn-secondary btn-small">+ Nuevo dato</button>
+      </div>
+      <div class="table-wrap">
+        <table class="stack-on-phone">
+          <thead>
+            <tr><th>Dato</th><th>Valor</th><th>Botón de copiar</th><th></th></tr>
+          </thead>
+          <tbody id="club-info-table-body"></tbody>
+        </table>
+      </div>
+      <dialog id="club-info-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3 id="club-info-dialog-title">Nuevo dato</h3>
+        <form id="club-info-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="ci-label">Dato</label>
+              <input id="ci-label" name="label" type="text" maxlength="100" required placeholder="Teléfono para Bizum">
+            </div>
+            <div class="field span-2">
+              <label for="ci-value">Valor</label>
+              <input id="ci-value" name="value" type="text" maxlength="500" required>
+            </div>
+            <div class="field">
+              <label for="ci-copy-value">Texto que copia el botón <span class="optional">(opcional)</span></label>
+              <input id="ci-copy-value" name="copy_value" type="text" maxlength="500">
+            </div>
+            <div class="field">
+              <label for="ci-copy-label">Texto del botón <span class="optional">(opcional)</span></label>
+              <input id="ci-copy-label" name="copy_label" type="text" maxlength="100" placeholder="Copiar">
+            </div>
+          </div>
+          <p class="hint">Si pones un texto para copiar, aparece un botón junto al valor que lo copia (por ejemplo el IBAN sin espacios). Sin él, solo se ve el valor.</p>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div class="section-header">
+        <div>
+          <h2 id="section-material-types">Tipos de material</h2>
+          <p class="subtitle">Cada material tiene uno. «Cuerda» y «Saca» son fijos (llevan sus propios datos); los demás se cambian libremente, pero un tipo que tiene material no se puede borrar. Cada tipo puede tener atributos (color, forma, tipo de cierre…) y decide si la descripción de su material es obligatoria.</p>
+        </div>
+        <button id="toggle-new-material-type" type="button" class="btn btn-secondary btn-small">+ Nuevo tipo</button>
+      </div>
+      <div class="table-wrap">
+        <table class="stack-on-phone">
+          <thead>
+            <tr><th>Tipo</th><th>Descripción</th><th>Atributos</th><th></th></tr>
+          </thead>
+          <tbody id="material-types-table-body"></tbody>
+        </table>
+      </div>
+      <dialog id="material-type-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3 id="material-type-dialog-title">Nuevo tipo</h3>
+        <form id="material-type-form">
+          <div class="field">
+            <label for="mt-name">Nombre</label>
+            <input id="mt-name" name="name" type="text" maxlength="100" required>
           </div>
           <div class="field">
-            <label for="ma-data-type">Valores</label>
-            <select id="ma-data-type" name="data_type">
-              <option value="text">Texto libre</option>
-              <option value="enum">Lista de opciones</option>
-            </select>
+            <label class="checkbox-label" for="mt-description-required"><input id="mt-description-required" name="description_required" type="checkbox" checked> La descripción es obligatoria</label>
           </div>
-          <div class="field">
-            <label class="checkbox-label" for="ma-required"><input id="ma-required" name="required" type="checkbox"> Obligatorio</label>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cerrar</button>
           </div>
-          <div class="field span-2" id="ma-options-field" hidden>
-            <label for="ma-options">Opciones <span class="optional">(una por línea)</span></label>
-            <textarea id="ma-options" name="options" rows="4"></textarea>
-          </div>
-        </div>
-        <div class="panel-actions">
-          <button type="submit" class="btn btn-secondary">Añadir atributo</button>
-        </div>
-      </form>
-    </section>
-  </dialog>
+        </form>
+        <section id="material-attributes-section" hidden>
+          <h4>Atributos</h4>
+          <p class="subtitle">Cada atributo es un texto libre o una lista de opciones, y puede ser obligatorio. El orden es el de los valores en el nombre del material, que se escribe solo con los valores («Mosquetones · aluminio · asimétrico»). Los cambios de atributos se aplican al momento, sin pulsar «Guardar».</p>
+          <div id="material-attributes-list"></div>
+          <h4>Nuevo atributo</h4>
+          <form id="material-attribute-form">
+            <div class="field-grid">
+              <div class="field">
+                <label for="ma-name">Nombre</label>
+                <input id="ma-name" name="name" type="text" maxlength="100" required>
+              </div>
+              <div class="field">
+                <label for="ma-data-type">Valores</label>
+                <select id="ma-data-type" name="data_type">
+                  <option value="text">Texto libre</option>
+                  <option value="enum">Lista de opciones</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="checkbox-label" for="ma-required"><input id="ma-required" name="required" type="checkbox"> Obligatorio</label>
+              </div>
+              <div class="field span-2" id="ma-options-field" hidden>
+                <label for="ma-options">Opciones <span class="optional">(una por línea)</span></label>
+                <textarea id="ma-options" name="options" rows="4"></textarea>
+              </div>
+            </div>
+            <div class="panel-actions">
+              <button type="submit" class="btn btn-secondary">Añadir atributo</button>
+            </div>
+          </form>
+        </section>
+      </dialog>
     </main>
   </div>
 </div>

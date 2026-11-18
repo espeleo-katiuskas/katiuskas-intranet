@@ -13,79 +13,79 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <p><a href="/sistemas">&larr; Volver a los sistemas</a></p>
+      <p><a href="/sistemas">&larr; Volver a los sistemas</a></p>
 
-  <p id="feedback" class="success-message" hidden></p>
+      <p id="feedback" class="success-message" hidden></p>
 
-  <h1 id="system-name">Sistema</h1>
-  <p class="subtitle" id="system-meta"></p>
-  <div id="system-description" class="rich-text"></div>
-  <div class="panel-actions">
-    <button id="edit-system" type="button" class="btn btn-secondary btn-small">Editar sistema</button>
-    <button id="delete-system" type="button" class="btn btn-danger btn-small" data-roles="admin,board">Borrar sistema</button>
-  </div>
-
-  <dialog id="edit-system-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar sistema</h3>
-    <form id="edit-system-form">
-      <div class="field-grid">
-        <div class="field span-2">
-          <label for="es-name">Nombre</label>
-          <input id="es-name" name="name" type="text" maxlength="200" required>
-        </div>
-        <div class="field span-2">
-          <label for="es-description">Descripción <span class="optional">(opcional)</span></label>
-          <textarea id="es-description" name="description"></textarea>
-          <p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---».</p>
-        </div>
-      </div>
+      <h1 id="system-name">Sistema</h1>
+      <p class="subtitle" id="system-meta"></p>
+      <div id="system-description" class="rich-text"></div>
       <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+        <button id="edit-system" type="button" class="btn btn-secondary btn-small">Editar sistema</button>
+        <button id="delete-system" type="button" class="btn btn-danger btn-small" data-roles="admin,board">Borrar sistema</button>
       </div>
-    </form>
-  </dialog>
 
-  <section>
-    <h2>Mapa</h2>
-    <div id="system-map" class="places-map small"></div>
-    <p class="subtitle" id="system-map-link-line"><a id="system-map-link" href="/lugares?vista=mapa">Ver en el mapa de todos los lugares</a></p>
-  </section>
+      <dialog id="edit-system-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Editar sistema</h3>
+        <form id="edit-system-form">
+          <div class="field-grid">
+            <div class="field span-2">
+              <label for="es-name">Nombre</label>
+              <input id="es-name" name="name" type="text" maxlength="200" required>
+            </div>
+            <div class="field span-2">
+              <label for="es-description">Descripción <span class="optional">(opcional)</span></label>
+              <textarea id="es-description" name="description"></textarea>
+              <p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---».</p>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
 
-  <section>
-    <h2>Cavidades</h2>
-    <p class="subtitle">Las bocas y cavidades que forman el sistema, con todo lo que se sabe de cada una. Una cavidad está como mucho en un sistema.</p>
-    <div id="system-places"></div>
-    <div class="role-add-row">
-      <input type="text" id="cavity-search" list="cavity-options" autocomplete="off" placeholder="Escribe el nombre de una cavidad…" aria-label="Cavidad">
-      <datalist id="cavity-options"></datalist>
-      <button type="button" id="add-cavity" class="btn btn-secondary btn-small">+ Cavidad</button>
-    </div>
-  </section>
+      <section>
+        <h2>Mapa</h2>
+        <div id="system-map" class="places-map small"></div>
+        <p class="subtitle" id="system-map-link-line"><a id="system-map-link" href="/lugares?vista=mapa">Ver en el mapa de todos los lugares</a></p>
+      </section>
 
-  <section>
-    <h2>Fotos y documentos del sistema</h2>
-    <p class="subtitle">Topografías del conjunto, fotos, permisos o cualquier otro documento. Cualquier socio puede añadirlos.</p>
-    <div id="system-files"></div>
-    <form id="file-form" class="comment-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="file-input">Fichero (10 MiB como máximo)</label>
-          <input id="file-input" name="file" type="file" required>
+      <section>
+        <h2>Cavidades</h2>
+        <p class="subtitle">Las bocas y cavidades que forman el sistema, con todo lo que se sabe de cada una. Una cavidad está como mucho en un sistema.</p>
+        <div id="system-places"></div>
+        <div class="role-add-row">
+          <input type="text" id="cavity-search" list="cavity-options" autocomplete="off" placeholder="Escribe el nombre de una cavidad…" aria-label="Cavidad">
+          <datalist id="cavity-options"></datalist>
+          <button type="button" id="add-cavity" class="btn btn-secondary btn-small">+ Cavidad</button>
         </div>
-        <div class="field">
-          <label for="file-title">Título <span class="optional">(opcional)</span></label>
-          <input id="file-title" name="title" type="text" maxlength="200" placeholder="Qué es">
-        </div>
-      </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-secondary btn-small">Añadir fichero</button>
-      </div>
-    </form>
-  </section>
+      </section>
 
-  <p class="subtitle" id="system-authorship"></p>
+      <section>
+        <h2>Fotos y documentos del sistema</h2>
+        <p class="subtitle">Topografías del conjunto, fotos, permisos o cualquier otro documento. Cualquier socio puede añadirlos.</p>
+        <div id="system-files"></div>
+        <form id="file-form" class="comment-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="file-input">Fichero (10 MiB como máximo)</label>
+              <input id="file-input" name="file" type="file" required>
+            </div>
+            <div class="field">
+              <label for="file-title">Título <span class="optional">(opcional)</span></label>
+              <input id="file-title" name="title" type="text" maxlength="200" placeholder="Qué es">
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-secondary btn-small">Añadir fichero</button>
+          </div>
+        </form>
+      </section>
+
+      <p class="subtitle" id="system-authorship"></p>
     </main>
   </div>
 </div>

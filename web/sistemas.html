@@ -13,57 +13,57 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <p><a href="/lugares">&larr; Volver a los lugares</a></p>
-  <div class="section-header">
-    <div>
-      <h1>Sistemas</h1>
-      <p class="subtitle">Un sistema es un conjunto de cavidades que se comunican bajo tierra: cada boca es un lugar, y el sistema reúne lo que se sabe de todas, con su descripción y sus fotos y documentos. Cualquier socio puede crear uno.</p>
-    </div>
-    <div class="table-actions">
-      <button id="toggle-new-system" type="button" class="btn btn-secondary btn-small">+ Nuevo sistema</button>
-    </div>
-  </div>
-
-  <p id="feedback" class="success-message" hidden></p>
-
-  <dialog id="new-system-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Nuevo sistema</h3>
-    <form id="new-system-form">
-      <div class="field-grid">
-        <div class="field span-2">
-          <label for="ns-name">Nombre</label>
-          <input id="ns-name" name="name" type="text" maxlength="200" required>
+      <p><a href="/lugares">&larr; Volver a los lugares</a></p>
+      <div class="section-header">
+        <div>
+          <h1>Sistemas</h1>
+          <p class="subtitle">Un sistema es un conjunto de cavidades que se comunican bajo tierra: cada boca es un lugar, y el sistema reúne lo que se sabe de todas, con su descripción y sus fotos y documentos. Cualquier socio puede crear uno.</p>
         </div>
-        <div class="field span-2">
-          <label for="ns-description">Descripción <span class="optional">(opcional)</span></label>
-          <textarea id="ns-description" name="description"></textarea>
-          <p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---». Las cavidades se añaden en la página del sistema.</p>
+        <div class="table-actions">
+          <button id="toggle-new-system" type="button" class="btn btn-secondary btn-small">+ Nuevo sistema</button>
         </div>
       </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Crear sistema</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+
+      <p id="feedback" class="success-message" hidden></p>
+
+      <dialog id="new-system-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Nuevo sistema</h3>
+        <form id="new-system-form">
+          <div class="field-grid">
+            <div class="field span-2">
+              <label for="ns-name">Nombre</label>
+              <input id="ns-name" name="name" type="text" maxlength="200" required>
+            </div>
+            <div class="field span-2">
+              <label for="ns-description">Descripción <span class="optional">(opcional)</span></label>
+              <textarea id="ns-description" name="description"></textarea>
+              <p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---». Las cavidades se añaden en la página del sistema.</p>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Crear sistema</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div class="filter-bar">
+        <div class="field" id="systems-search-field">
+          <label for="systems-search">Buscar sistemas</label>
+          <input id="systems-search" type="search" autocomplete="off" placeholder="Nombre del sistema o de una cavidad…">
+        </div>
       </div>
-    </form>
-  </dialog>
+      <p class="people-count" id="systems-count" hidden></p>
 
-  <div class="filter-bar">
-    <div class="field" id="systems-search-field">
-      <label for="systems-search">Buscar sistemas</label>
-      <input id="systems-search" type="search" autocomplete="off" placeholder="Nombre del sistema o de una cavidad…">
-    </div>
-  </div>
-  <p class="people-count" id="systems-count" hidden></p>
-
-  <div class="table-wrap">
-    <table class="stack-on-phone">
-      <thead>
-        <tr><th>Sistema</th><th>Cavidades</th></tr>
-      </thead>
-      <tbody id="systems-table-body"></tbody>
-    </table>
-  </div>
+      <div class="table-wrap">
+        <table class="stack-on-phone">
+          <thead>
+            <tr><th>Sistema</th><th>Cavidades</th></tr>
+          </thead>
+          <tbody id="systems-table-body"></tbody>
+        </table>
+      </div>
     </main>
   </div>
 </div>

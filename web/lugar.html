@@ -13,117 +13,117 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <p><a href="/lugares">&larr; Volver a los lugares</a></p>
+      <p><a href="/lugares">&larr; Volver a los lugares</a></p>
 
-  <p id="feedback" class="success-message" hidden></p>
+      <p id="feedback" class="success-message" hidden></p>
 
-  <h1 id="place-name">Lugar</h1>
-  <p class="subtitle" id="place-meta"></p>
-  <p id="place-state"></p>
-  <div class="detail-list" id="place-details"></div>
-  <div class="panel-actions">
-    <button id="edit-place" type="button" class="btn btn-secondary btn-small">Editar lugar</button>
-    <button id="add-point" type="button" class="btn btn-secondary btn-small">Añadir punto</button>
-    <button id="delete-place" type="button" class="btn btn-danger btn-small" data-roles="admin,board">Borrar lugar</button>
-  </div>
-
-  <div id="osm-changes"></div>
-
-  <section id="system-section" hidden>
-    <h2>Sistema</h2>
-    <p id="system-intro"></p>
-    <div id="system-description" class="rich-text"></div>
-    <h3>Otras cavidades del sistema</h3>
-    <ul id="system-places"></ul>
-  </section>
-
-  <section>
-    <h2>Mapa</h2>
-    <div id="place-map" class="places-map small"></div>
-    <p class="subtitle"><a id="place-map-link" href="/lugares?vista=mapa">Ver en el mapa de todos los lugares</a></p>
-  </section>
-
-  <section>
-    <h2>Cómo llegar</h2>
-    <div id="place-access" class="rich-text"></div>
-  </section>
-
-  <section>
-    <h2>Descripción</h2>
-    <div id="place-description" class="rich-text"></div>
-  </section>
-
-  <section id="sheet-section" hidden>
-    <h2>Ficha técnica</h2>
-    <p class="subtitle">Qué instalación falta para poder recorrerla.</p>
-    <div id="place-sheet" class="rich-text"></div>
-  </section>
-
-  <section>
-    <h2>Otros puntos</h2>
-    <p class="subtitle">Dónde dejar el coche, dónde empieza la aproximación, puntos del camino, cada una de las bocas…</p>
-    <div class="table-wrap">
-      <table class="stack-on-phone">
-        <thead>
-          <tr><th>Qué es</th><th>Nombre</th><th>Coordenadas</th><th>Nota</th><th></th></tr>
-        </thead>
-        <tbody id="points-table-body"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section>
-    <h2>Actividades</h2>
-    <p class="subtitle">Lo que se ha hecho aquí, y lo que está por hacer. Quien organiza una actividad dice a qué lugares va, en su página.</p>
-    <div class="table-wrap">
-      <table class="stack-on-phone">
-        <thead>
-          <tr><th>Fecha</th><th>Actividad</th><th>Tipo</th><th>Organiza</th></tr>
-        </thead>
-        <tbody id="place-activities-body"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section>
-    <h2>Fotos y documentos</h2>
-    <p class="subtitle">Cualquier socio puede añadir fotos, topografías, permisos o cualquier otro documento.</p>
-    <h3 id="own-files-title" hidden>De esta cavidad</h3>
-    <div id="place-files"></div>
-    <div id="system-files-block" hidden>
-      <h3 id="system-files-title"></h3>
-      <div id="system-files"></div>
-    </div>
-    <h3 id="own-form-title" hidden>Añadir un fichero a esta cavidad</h3>
-    <form id="file-form" class="comment-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="file-input">Fichero (10 MiB como máximo)</label>
-          <input id="file-input" name="file" type="file" required>
-        </div>
-        <div class="field">
-          <label for="file-title">Título <span class="optional">(opcional)</span></label>
-          <input id="file-title" name="title" type="text" maxlength="200" placeholder="Qué es">
-        </div>
-      </div>
+      <h1 id="place-name">Lugar</h1>
+      <p class="subtitle" id="place-meta"></p>
+      <p id="place-state"></p>
+      <div class="detail-list" id="place-details"></div>
       <div class="panel-actions">
-        <button type="submit" class="btn btn-secondary btn-small">Añadir fichero</button>
+        <button id="edit-place" type="button" class="btn btn-secondary btn-small">Editar lugar</button>
+        <button id="add-point" type="button" class="btn btn-secondary btn-small">Añadir punto</button>
+        <button id="delete-place" type="button" class="btn btn-danger btn-small" data-roles="admin,board">Borrar lugar</button>
       </div>
-    </form>
-  </section>
 
-  <p class="subtitle" id="place-authorship"></p>
+      <div id="osm-changes"></div>
+
+      <section id="system-section" hidden>
+        <h2>Sistema</h2>
+        <p id="system-intro"></p>
+        <div id="system-description" class="rich-text"></div>
+        <h3>Otras cavidades del sistema</h3>
+        <ul id="system-places"></ul>
+      </section>
+
+      <section>
+        <h2>Mapa</h2>
+        <div id="place-map" class="places-map small"></div>
+        <p class="subtitle"><a id="place-map-link" href="/lugares?vista=mapa">Ver en el mapa de todos los lugares</a></p>
+      </section>
+
+      <section>
+        <h2>Cómo llegar</h2>
+        <div id="place-access" class="rich-text"></div>
+      </section>
+
+      <section>
+        <h2>Descripción</h2>
+        <div id="place-description" class="rich-text"></div>
+      </section>
+
+      <section id="sheet-section" hidden>
+        <h2>Ficha técnica</h2>
+        <p class="subtitle">Qué instalación falta para poder recorrerla.</p>
+        <div id="place-sheet" class="rich-text"></div>
+      </section>
+
+      <section>
+        <h2>Otros puntos</h2>
+        <p class="subtitle">Dónde dejar el coche, dónde empieza la aproximación, puntos del camino, cada una de las bocas…</p>
+        <div class="table-wrap">
+          <table class="stack-on-phone">
+            <thead>
+              <tr><th>Qué es</th><th>Nombre</th><th>Coordenadas</th><th>Nota</th><th></th></tr>
+            </thead>
+            <tbody id="points-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Actividades</h2>
+        <p class="subtitle">Lo que se ha hecho aquí, y lo que está por hacer. Quien organiza una actividad dice a qué lugares va, en su página.</p>
+        <div class="table-wrap">
+          <table class="stack-on-phone">
+            <thead>
+              <tr><th>Fecha</th><th>Actividad</th><th>Tipo</th><th>Organiza</th></tr>
+            </thead>
+            <tbody id="place-activities-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Fotos y documentos</h2>
+        <p class="subtitle">Cualquier socio puede añadir fotos, topografías, permisos o cualquier otro documento.</p>
+        <h3 id="own-files-title" hidden>De esta cavidad</h3>
+        <div id="place-files"></div>
+        <div id="system-files-block" hidden>
+          <h3 id="system-files-title"></h3>
+          <div id="system-files"></div>
+        </div>
+        <h3 id="own-form-title" hidden>Añadir un fichero a esta cavidad</h3>
+        <form id="file-form" class="comment-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="file-input">Fichero (10 MiB como máximo)</label>
+              <input id="file-input" name="file" type="file" required>
+            </div>
+            <div class="field">
+              <label for="file-title">Título <span class="optional">(opcional)</span></label>
+              <input id="file-title" name="title" type="text" maxlength="200" placeholder="Qué es">
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-secondary btn-small">Añadir fichero</button>
+          </div>
+        </form>
+      </section>
+
+      <p class="subtitle" id="place-authorship"></p>
       <!-- Shown inside the dialog "Editar lugar" (place.js moves it there while it is open). -->
-  <section id="osm-section" class="osm-block" hidden>
-    <h3>OpenStreetMap</h3>
-    <p id="osm-status"></p>
-    <div id="osm-data"></div>
-    <div class="panel-actions">
-      <button id="osm-link" type="button" class="btn btn-secondary btn-small">Vincular con OpenStreetMap</button>
-      <button id="osm-unlink" type="button" class="btn btn-secondary btn-small" hidden>Desvincular</button>
-    </div>
-  </section>
-</main>
+      <section id="osm-section" class="osm-block" hidden>
+        <h3>OpenStreetMap</h3>
+        <p id="osm-status"></p>
+        <div id="osm-data"></div>
+        <div class="panel-actions">
+          <button id="osm-link" type="button" class="btn btn-secondary btn-small">Vincular con OpenStreetMap</button>
+          <button id="osm-unlink" type="button" class="btn btn-secondary btn-small" hidden>Desvincular</button>
+        </div>
+      </section>
+    </main>
   </div>
 </div>
 <script type="module" src="js/place.js"></script>

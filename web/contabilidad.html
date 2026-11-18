@@ -13,139 +13,139 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <div class="section-header">
-    <div>
-      <h1>Contabilidad</h1>
-      <p class="subtitle">Plan de cuentas del club, en árbol, con el saldo de cada una.</p>
-    </div>
-    <div class="table-actions">
-      <a href="/justificantes" class="btn btn-secondary btn-small">Justificantes</a>
-      <button id="toggle-new-account" type="button" class="btn btn-secondary btn-small">+ Nueva cuenta</button>
-    </div>
-  </div>
-
-  <p class="filter-bar" id="show-hidden-wrap" hidden>
-    <label class="checkbox-label" for="show-hidden-accounts"><input id="show-hidden-accounts" type="checkbox"> <span id="show-hidden-label">Mostrar cuentas ocultas</span></label>
-  </p>
-
-  <p id="feedback" class="success-message" hidden></p>
-
-  <dialog id="new-account-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Nueva cuenta</h3>
-    <form id="new-account-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="na-name">Nombre</label>
-          <input id="na-name" name="name" type="text" required>
+      <div class="section-header">
+        <div>
+          <h1>Contabilidad</h1>
+          <p class="subtitle">Plan de cuentas del club, en árbol, con el saldo de cada una.</p>
         </div>
-        <div class="field">
-          <label for="na-code">Código <span class="optional">(opcional)</span></label>
-          <input id="na-code" name="code" type="text">
-        </div>
-        <div class="field">
-          <label for="na-parent">Cuenta superior <span class="optional">(opcional)</span></label>
-          <select id="na-parent" name="parent_id"></select>
-        </div>
-        <div class="field span-2">
-          <label for="na-type">Tipo <span class="optional">(opcional)</span></label>
-          <select id="na-type" name="type"></select>
-          <p class="hint">Para qué se usa sobre todo la cuenta. Si no se indica, hereda el de su cuenta superior. Los pagos de un reparto se hacen en una cuenta de tipo «activo» y se apuntan en una de tipo «ingresos».</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="na-allows-dues"><input id="na-allows-dues" type="checkbox"> Para cuotas anuales</label>
-          <p class="hint">Una transacción que use esta cuenta podrá registrar las cuotas anuales de los socios. Tiene que ser de tipo «ingresos».</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="na-allows-licenses"><input id="na-allows-licenses" type="checkbox"> Para licencias</label>
-          <p class="hint">Una transacción que use esta cuenta podrá registrar licencias federativas nuevas. Tiene que ser de tipo «ingresos».</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="na-distribution-default"><input id="na-distribution-default" type="checkbox"> Cuenta por defecto de los repartos</label>
-          <p class="hint">Los pagos de un reparto que no tenga cuenta propia se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="na-material-rental"><input id="na-material-rental" type="checkbox"> Alquileres de material</label>
-          <p class="hint">Los alquileres de material se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="na-material-sale"><input id="na-material-sale" type="checkbox"> Ventas de material</label>
-          <p class="hint">Las ventas de material se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="na-hidden"><input id="na-hidden" type="checkbox"> Oculta</label>
-          <p class="hint">Para una cuenta que ya no se usa: no sale en esta lista ni al elegir «otra cuenta» salvo que se pida. Su historial se conserva.</p>
+        <div class="table-actions">
+          <a href="/justificantes" class="btn btn-secondary btn-small">Justificantes</a>
+          <button id="toggle-new-account" type="button" class="btn btn-secondary btn-small">+ Nueva cuenta</button>
         </div>
       </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Crear cuenta</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
 
-  <dialog id="edit-account-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar cuenta</h3>
-    <form id="edit-account-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="ea-name">Nombre</label>
-          <input id="ea-name" type="text" required>
-        </div>
-        <div class="field">
-          <label for="ea-code">Código <span class="optional">(opcional)</span></label>
-          <input id="ea-code" type="text">
-        </div>
-        <div class="field">
-          <label for="ea-parent">Cuenta superior <span class="optional">(opcional)</span></label>
-          <select id="ea-parent"></select>
-        </div>
-        <div class="field span-2">
-          <label for="ea-type">Tipo <span class="optional">(opcional)</span></label>
-          <select id="ea-type"></select>
-          <p class="hint">Para qué se usa sobre todo la cuenta. Si no se indica, hereda el de su cuenta superior. Los pagos de un reparto se hacen en una cuenta de tipo «activo» y se apuntan en una de tipo «ingresos».</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="ea-allows-dues"><input id="ea-allows-dues" type="checkbox"> Para cuotas anuales</label>
-          <p class="hint">Una transacción que use esta cuenta podrá registrar las cuotas anuales de los socios. Tiene que ser de tipo «ingresos».</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="ea-allows-licenses"><input id="ea-allows-licenses" type="checkbox"> Para licencias</label>
-          <p class="hint">Una transacción que use esta cuenta podrá registrar licencias federativas nuevas. Tiene que ser de tipo «ingresos».</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="ea-distribution-default"><input id="ea-distribution-default" type="checkbox"> Cuenta por defecto de los repartos</label>
-          <p class="hint">Los pagos de un reparto que no tenga cuenta propia se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="ea-material-rental"><input id="ea-material-rental" type="checkbox"> Alquileres de material</label>
-          <p class="hint">Los alquileres de material se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="ea-material-sale"><input id="ea-material-sale" type="checkbox"> Ventas de material</label>
-          <p class="hint">Las ventas de material se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="ea-hidden"><input id="ea-hidden" type="checkbox"> Oculta</label>
-          <p class="hint">Para una cuenta que ya no se usa: no sale en esta lista ni al elegir «otra cuenta» salvo que se pida. Su historial se conserva.</p>
-        </div>
-      </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
+      <p class="filter-bar" id="show-hidden-wrap" hidden>
+        <label class="checkbox-label" for="show-hidden-accounts"><input id="show-hidden-accounts" type="checkbox"> <span id="show-hidden-label">Mostrar cuentas ocultas</span></label>
+      </p>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Cuenta</th><th class="nowrap">Saldo</th><th class="nowrap">Último movimiento</th><th></th></tr>
-      </thead>
-      <tbody id="accounts-table-body"></tbody>
-    </table>
-  </div>
+      <p id="feedback" class="success-message" hidden></p>
+
+      <dialog id="new-account-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Nueva cuenta</h3>
+        <form id="new-account-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="na-name">Nombre</label>
+              <input id="na-name" name="name" type="text" required>
+            </div>
+            <div class="field">
+              <label for="na-code">Código <span class="optional">(opcional)</span></label>
+              <input id="na-code" name="code" type="text">
+            </div>
+            <div class="field">
+              <label for="na-parent">Cuenta superior <span class="optional">(opcional)</span></label>
+              <select id="na-parent" name="parent_id"></select>
+            </div>
+            <div class="field span-2">
+              <label for="na-type">Tipo <span class="optional">(opcional)</span></label>
+              <select id="na-type" name="type"></select>
+              <p class="hint">Para qué se usa sobre todo la cuenta. Si no se indica, hereda el de su cuenta superior. Los pagos de un reparto se hacen en una cuenta de tipo «activo» y se apuntan en una de tipo «ingresos».</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="na-allows-dues"><input id="na-allows-dues" type="checkbox"> Para cuotas anuales</label>
+              <p class="hint">Una transacción que use esta cuenta podrá registrar las cuotas anuales de los socios. Tiene que ser de tipo «ingresos».</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="na-allows-licenses"><input id="na-allows-licenses" type="checkbox"> Para licencias</label>
+              <p class="hint">Una transacción que use esta cuenta podrá registrar licencias federativas nuevas. Tiene que ser de tipo «ingresos».</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="na-distribution-default"><input id="na-distribution-default" type="checkbox"> Cuenta por defecto de los repartos</label>
+              <p class="hint">Los pagos de un reparto que no tenga cuenta propia se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="na-material-rental"><input id="na-material-rental" type="checkbox"> Alquileres de material</label>
+              <p class="hint">Los alquileres de material se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="na-material-sale"><input id="na-material-sale" type="checkbox"> Ventas de material</label>
+              <p class="hint">Las ventas de material se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="na-hidden"><input id="na-hidden" type="checkbox"> Oculta</label>
+              <p class="hint">Para una cuenta que ya no se usa: no sale en esta lista ni al elegir «otra cuenta» salvo que se pida. Su historial se conserva.</p>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Crear cuenta</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="edit-account-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Editar cuenta</h3>
+        <form id="edit-account-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="ea-name">Nombre</label>
+              <input id="ea-name" type="text" required>
+            </div>
+            <div class="field">
+              <label for="ea-code">Código <span class="optional">(opcional)</span></label>
+              <input id="ea-code" type="text">
+            </div>
+            <div class="field">
+              <label for="ea-parent">Cuenta superior <span class="optional">(opcional)</span></label>
+              <select id="ea-parent"></select>
+            </div>
+            <div class="field span-2">
+              <label for="ea-type">Tipo <span class="optional">(opcional)</span></label>
+              <select id="ea-type"></select>
+              <p class="hint">Para qué se usa sobre todo la cuenta. Si no se indica, hereda el de su cuenta superior. Los pagos de un reparto se hacen en una cuenta de tipo «activo» y se apuntan en una de tipo «ingresos».</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="ea-allows-dues"><input id="ea-allows-dues" type="checkbox"> Para cuotas anuales</label>
+              <p class="hint">Una transacción que use esta cuenta podrá registrar las cuotas anuales de los socios. Tiene que ser de tipo «ingresos».</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="ea-allows-licenses"><input id="ea-allows-licenses" type="checkbox"> Para licencias</label>
+              <p class="hint">Una transacción que use esta cuenta podrá registrar licencias federativas nuevas. Tiene que ser de tipo «ingresos».</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="ea-distribution-default"><input id="ea-distribution-default" type="checkbox"> Cuenta por defecto de los repartos</label>
+              <p class="hint">Los pagos de un reparto que no tenga cuenta propia se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="ea-material-rental"><input id="ea-material-rental" type="checkbox"> Alquileres de material</label>
+              <p class="hint">Los alquileres de material se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="ea-material-sale"><input id="ea-material-sale" type="checkbox"> Ventas de material</label>
+              <p class="hint">Las ventas de material se apuntan aquí. Tiene que ser de tipo «ingresos». Solo puede haber una: marcarla quita la marca a la que la tuviera.</p>
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="ea-hidden"><input id="ea-hidden" type="checkbox"> Oculta</label>
+              <p class="hint">Para una cuenta que ya no se usa: no sale en esta lista ni al elegir «otra cuenta» salvo que se pida. Su historial se conserva.</p>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Cuenta</th><th class="nowrap">Saldo</th><th class="nowrap">Último movimiento</th><th></th></tr>
+          </thead>
+          <tbody id="accounts-table-body"></tbody>
+        </table>
+      </div>
     </main>
   </div>
 </div>

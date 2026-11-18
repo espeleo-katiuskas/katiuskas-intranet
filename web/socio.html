@@ -13,295 +13,295 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <p><a href="/socios">&larr; Volver a socios</a></p>
-  <h1 id="member-name">Socio</h1>
-  <p class="subtitle" id="member-email"></p>
-  <p id="member-number"></p>
-  <p id="member-last-login"></p>
-  <p>
-    <button id="impersonate-button" type="button" class="btn btn-secondary btn-small" data-roles="admin">
-      Entrar como esta persona
-    </button>
-  </p>
+      <p><a href="/socios">&larr; Volver a socios</a></p>
+      <h1 id="member-name">Socio</h1>
+      <p class="subtitle" id="member-email"></p>
+      <p id="member-number"></p>
+      <p id="member-last-login"></p>
+      <p>
+        <button id="impersonate-button" type="button" class="btn btn-secondary btn-small" data-roles="admin">
+          Entrar como esta persona
+        </button>
+      </p>
 
-  <p id="feedback" class="success-message" hidden></p>
+      <p id="feedback" class="success-message" hidden></p>
 
-  <div class="panel">
-    <h3>Datos</h3>
-    <p class="hint" id="board-readonly-hint" hidden>
-      Solo un administrador puede editar estos datos.
-    </p>
-    <form id="edit-member-form" autocomplete="off">
-      <div class="field-grid">
-        <div class="field">
-          <label for="em-first-name">Nombre</label>
-          <input id="em-first-name" name="first_name" type="text" autocomplete="off" required>
-        </div>
-        <div class="field">
-          <label for="em-last-name">Apellidos</label>
-          <input id="em-last-name" name="last_name" type="text" autocomplete="off" required>
-        </div>
-        <div class="field">
-          <label for="em-email">Email</label>
-          <input id="em-email" name="email" type="text" autocomplete="off" placeholder="correo@ejemplo.com otro@ejemplo.com">
-        </div>
-        <div class="field">
-          <label for="em-phone">Teléfono</label>
-          <input id="em-phone" name="phone" type="tel" autocomplete="off" placeholder="600111222 622333444 (sin espacios dentro de cada uno)">
-        </div>
-        <div class="field">
-          <label for="em-national-id">DNI</label>
-          <input id="em-national-id" name="national_id" type="text" autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="em-birth-date">Fecha de nacimiento</label>
-          <input id="em-birth-date" name="birth_date" type="date" autocomplete="off" required>
-        </div>
-        <div class="field">
-          <label for="em-gender">Género</label>
-          <select id="em-gender" name="gender" autocomplete="off">
-            <option value="">Sin especificar</option>
-            <option value="male">Masculino</option>
-            <option value="female">Femenino</option>
-          </select>
-        </div>
-        <div class="field span-2">
-          <label for="em-address">Dirección</label>
-          <input id="em-address" name="address" type="text" autocomplete="off" readonly>
-        </div>
-        <div class="field">
-          <label for="em-postal-code">Código postal</label>
-          <input id="em-postal-code" name="postal_code" type="text" autocomplete="off" readonly>
-        </div>
-        <div class="field">
-          <label for="em-city">Ciudad</label>
-          <input id="em-city" name="city" type="text" autocomplete="off" readonly>
-        </div>
-        <div class="field">
-          <label for="em-province">Provincia</label>
-          <input id="em-province" name="province" type="text" autocomplete="off" readonly>
-        </div>
-        <div class="field span-2">
-          <label for="em-emergency-contact">Contacto de emergencia</label>
-          <textarea id="em-emergency-contact" name="emergency_contact" autocomplete="off" placeholder="Nombre, teléfono, correo... uno o varios contactos"></textarea>
-        </div>
+      <div class="panel">
+        <h3>Datos</h3>
+        <p class="hint" id="board-readonly-hint" hidden>
+          Solo un administrador puede editar estos datos.
+        </p>
+        <form id="edit-member-form" autocomplete="off">
+          <div class="field-grid">
+            <div class="field">
+              <label for="em-first-name">Nombre</label>
+              <input id="em-first-name" name="first_name" type="text" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label for="em-last-name">Apellidos</label>
+              <input id="em-last-name" name="last_name" type="text" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label for="em-email">Email</label>
+              <input id="em-email" name="email" type="text" autocomplete="off" placeholder="correo@ejemplo.com otro@ejemplo.com">
+            </div>
+            <div class="field">
+              <label for="em-phone">Teléfono</label>
+              <input id="em-phone" name="phone" type="tel" autocomplete="off" placeholder="600111222 622333444 (sin espacios dentro de cada uno)">
+            </div>
+            <div class="field">
+              <label for="em-national-id">DNI</label>
+              <input id="em-national-id" name="national_id" type="text" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="em-birth-date">Fecha de nacimiento</label>
+              <input id="em-birth-date" name="birth_date" type="date" autocomplete="off" required>
+            </div>
+            <div class="field">
+              <label for="em-gender">Género</label>
+              <select id="em-gender" name="gender" autocomplete="off">
+                <option value="">Sin especificar</option>
+                <option value="male">Masculino</option>
+                <option value="female">Femenino</option>
+              </select>
+            </div>
+            <div class="field span-2">
+              <label for="em-address">Dirección</label>
+              <input id="em-address" name="address" type="text" autocomplete="off" readonly>
+            </div>
+            <div class="field">
+              <label for="em-postal-code">Código postal</label>
+              <input id="em-postal-code" name="postal_code" type="text" autocomplete="off" readonly>
+            </div>
+            <div class="field">
+              <label for="em-city">Ciudad</label>
+              <input id="em-city" name="city" type="text" autocomplete="off" readonly>
+            </div>
+            <div class="field">
+              <label for="em-province">Provincia</label>
+              <input id="em-province" name="province" type="text" autocomplete="off" readonly>
+            </div>
+            <div class="field span-2">
+              <label for="em-emergency-contact">Contacto de emergencia</label>
+              <textarea id="em-emergency-contact" name="emergency_contact" autocomplete="off" placeholder="Nombre, teléfono, correo... uno o varios contactos"></textarea>
+            </div>
+          </div>
+          <div class="panel-actions" data-roles="admin">
+            <button type="submit" class="btn btn-primary">Guardar cambios</button>
+            <button type="button" class="btn btn-secondary" id="cancel-edit-member">Cancelar</button>
+          </div>
+        </form>
       </div>
+
+      <div class="section-header">
+        <h2>Roles</h2>
+      </div>
+      <div id="member-roles-list"></div>
+      <div id="member-role-add"></div>
+
+      <div class="section-header">
+        <h2>Historial como socio</h2>
+      </div>
+      <p class="hint" data-roles="admin">
+        Las licencias y las cuotas anuales se registran desde la transacción que las paga,
+        en Contabilidad — no desde aquí.
+      </p>
+      <dialog id="status-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3 id="status-dialog-title">Alta en el club</h3>
+        <p class="hint" id="status-dialog-hint" hidden></p>
+        <div class="field-grid">
+          <div class="field">
+            <label for="status-dialog-date" id="status-dialog-date-label">Fecha</label>
+            <input id="status-dialog-date" type="date">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn btn-primary btn-small" id="save-status-dialog">Guardar</button>
+          <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+        </div>
+      </dialog>
+      <dialog id="add-board-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Nuevo cargo en la Junta Directiva</h3>
+        <div class="field-grid">
+          <div class="field">
+            <label for="add-board-position">Cargo</label>
+            <select id="add-board-position">
+              <option value="president">Presidente</option>
+              <option value="vice_president">Vicepresidente</option>
+              <option value="secretary">Secretario</option>
+              <option value="treasurer">Tesorero</option>
+              <option value="member_at_large">Vocal</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="add-board-start-date">Fecha de inicio</label>
+            <input id="add-board-start-date" type="date">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn btn-primary btn-small" id="save-add-board-term">Guardar</button>
+          <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+        </div>
+      </dialog>
+
+      <dialog id="edit-board-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Editar cargo</h3>
+        <div class="field-grid">
+          <div class="field">
+            <label for="eb-position">Cargo</label>
+            <select id="eb-position">
+              <option value="president">Presidente</option>
+              <option value="vice_president">Vicepresidente</option>
+              <option value="secretary">Secretario</option>
+              <option value="treasurer">Tesorero</option>
+              <option value="member_at_large">Vocal</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="eb-start-date">Fecha de inicio</label>
+            <input id="eb-start-date" type="date">
+          </div>
+          <div class="field">
+            <label for="eb-end-date">Fecha de fin <span class="optional">(vacío = sigue en la junta)</span></label>
+            <input id="eb-end-date" type="date">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn btn-primary btn-small" id="save-edit-board">Guardar</button>
+          <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+        </div>
+      </dialog>
+
+      <dialog id="edit-license-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Editar licencia</h3>
+        <div class="field-grid">
+          <div class="field">
+            <label for="el-license-type">Tipo de licencia</label>
+            <select id="el-license-type"></select>
+          </div>
+          <div class="field" id="el-other-detail-field" hidden>
+            <label for="el-other-detail">¿Cuál?</label>
+            <input id="el-other-detail" type="text">
+          </div>
+          <div class="field">
+            <label for="el-issued-date">Fecha de obtención</label>
+            <input id="el-issued-date" type="date">
+          </div>
+          <div class="field">
+            <label for="el-year">Año que cubre</label>
+            <input id="el-year" type="number" step="1">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn btn-primary btn-small" id="save-edit-license">Guardar</button>
+          <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+        </div>
+      </dialog>
+
+      <dialog id="add-license-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Añadir licencia sin pago</h3>
+        <p class="hint">Para una licencia que no se ha pagado en el club, por ejemplo porque la persona se ha federado en otro sitio. Las licencias que sí se pagan en el club se registran desde su transacción, en Contabilidad.</p>
+        <div class="field-grid">
+          <div class="field">
+            <label for="al-license-type">Tipo de licencia</label>
+            <select id="al-license-type"></select>
+          </div>
+          <div class="field" id="al-other-detail-field" hidden>
+            <label for="al-other-detail">¿Cuál?</label>
+            <input id="al-other-detail" type="text">
+          </div>
+          <div class="field">
+            <label for="al-issued-date">Fecha de obtención</label>
+            <input id="al-issued-date" type="date">
+          </div>
+          <div class="field">
+            <label for="al-year">Año que cubre</label>
+            <input id="al-year" type="number" step="1">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn btn-primary btn-small" id="save-add-license">Guardar</button>
+          <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+        </div>
+      </dialog>
+
+      <div class="detail-list" id="timeline-list"></div>
+
       <div class="panel-actions" data-roles="admin">
-        <button type="submit" class="btn btn-primary">Guardar cambios</button>
-        <button type="button" class="btn btn-secondary" id="cancel-edit-member">Cancelar</button>
+        <span id="membership-status-actions"></span>
+        <span id="board-status-actions"></span>
+        <button type="button" class="btn btn-secondary btn-small" id="add-license-button">+ Licencia sin pago</button>
       </div>
-    </form>
-  </div>
 
-  <div class="section-header">
-    <h2>Roles</h2>
-  </div>
-  <div id="member-roles-list"></div>
-  <div id="member-role-add"></div>
+      <h2>Actividades</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Inicio</th><th>Fin</th><th>Título</th><th>Tipo</th><th>Estado</th><th>Rol</th></tr>
+          </thead>
+          <tbody id="activities-table-body"></tbody>
+        </table>
+      </div>
 
-  <div class="section-header">
-    <h2>Historial como socio</h2>
-  </div>
-  <p class="hint" data-roles="admin">
-    Las licencias y las cuotas anuales se registran desde la transacción que las paga,
-    en Contabilidad — no desde aquí.
-  </p>
-  <dialog id="status-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3 id="status-dialog-title">Alta en el club</h3>
-    <p class="hint" id="status-dialog-hint" hidden></p>
-    <div class="field-grid">
-      <div class="field">
-        <label for="status-dialog-date" id="status-dialog-date-label">Fecha</label>
-        <input id="status-dialog-date" type="date">
+      <h2>Material</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Material</th><th>Tipo</th><th>Cantidad</th><th>Fecha</th><th>Devuelto</th><th>Estado</th></tr>
+          </thead>
+          <tbody id="movements-table-body"></tbody>
+        </table>
       </div>
-    </div>
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-status-dialog">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
-    </div>
-  </dialog>
-  <dialog id="add-board-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Nuevo cargo en la Junta Directiva</h3>
-    <div class="field-grid">
-      <div class="field">
-        <label for="add-board-position">Cargo</label>
-        <select id="add-board-position">
-          <option value="president">Presidente</option>
-          <option value="vice_president">Vicepresidente</option>
-          <option value="secretary">Secretario</option>
-          <option value="treasurer">Tesorero</option>
-          <option value="member_at_large">Vocal</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="add-board-start-date">Fecha de inicio</label>
-        <input id="add-board-start-date" type="date">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-add-board-term">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
-    </div>
-  </dialog>
 
-  <dialog id="edit-board-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar cargo</h3>
-    <div class="field-grid">
-      <div class="field">
-        <label for="eb-position">Cargo</label>
-        <select id="eb-position">
-          <option value="president">Presidente</option>
-          <option value="vice_president">Vicepresidente</option>
-          <option value="secretary">Secretario</option>
-          <option value="treasurer">Tesorero</option>
-          <option value="member_at_large">Vocal</option>
-        </select>
+      <h2>Licencias federativas</h2>
+      <div class="info-card">
+        <label for="license-files-year">Año</label>
+        <select id="license-files-year" class="year-select"></select>
+        <ul class="license-thumbnail-grid" id="license-files-list"></ul>
       </div>
-      <div class="field">
-        <label for="eb-start-date">Fecha de inicio</label>
-        <input id="eb-start-date" type="date">
-      </div>
-      <div class="field">
-        <label for="eb-end-date">Fecha de fin <span class="optional">(vacío = sigue en la junta)</span></label>
-        <input id="eb-end-date" type="date">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-edit-board">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
-    </div>
-  </dialog>
 
-  <dialog id="edit-license-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar licencia</h3>
-    <div class="field-grid">
-      <div class="field">
-        <label for="el-license-type">Tipo de licencia</label>
-        <select id="el-license-type"></select>
+      <h2>Ficheros</h2>
+      <nav id="uf-breadcrumbs" class="breadcrumbs"></nav>
+      <div id="uf-directory-view">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Nombre</th><th>Tamaño</th><th>Modificado</th></tr>
+            </thead>
+            <tbody id="uf-entries-list"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="field" id="el-other-detail-field" hidden>
-        <label for="el-other-detail">¿Cuál?</label>
-        <input id="el-other-detail" type="text">
+      <div id="uf-file-view" hidden>
+        <div class="section-header">
+          <h3 id="uf-file-name"></h3>
+          <div class="panel-actions">
+            <button id="uf-file-download" type="button" class="btn btn-secondary btn-small">Descargar</button>
+            <button id="uf-file-back" type="button" class="btn btn-secondary btn-small">Volver a la carpeta</button>
+          </div>
+        </div>
+        <p class="subtitle" id="uf-file-meta"></p>
+        <div id="uf-file-preview"></div>
       </div>
-      <div class="field">
-        <label for="el-issued-date">Fecha de obtención</label>
-        <input id="el-issued-date" type="date">
-      </div>
-      <div class="field">
-        <label for="el-year">Año que cubre</label>
-        <input id="el-year" type="number" step="1">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-edit-license">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
-    </div>
-  </dialog>
 
-  <dialog id="add-license-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Añadir licencia sin pago</h3>
-    <p class="hint">Para una licencia que no se ha pagado en el club, por ejemplo porque la persona se ha federado en otro sitio. Las licencias que sí se pagan en el club se registran desde su transacción, en Contabilidad.</p>
-    <div class="field-grid">
-      <div class="field">
-        <label for="al-license-type">Tipo de licencia</label>
-        <select id="al-license-type"></select>
+      <div id="sessions-section" data-roles="admin">
+        <h2>Sesiones</h2>
+        <p class="subtitle">Los dispositivos en los que esta persona tiene la sesión abierta. Cerrar una la obliga a volver a pedir un enlace para entrar.</p>
+        <p class="hint" id="sessions-impersonating" hidden></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr id="sessions-head"><th>Navegador</th><th data-sort-key="last_used">Último uso<span class="sort-arrow" aria-hidden="true"></span></th><th>Desde</th><th data-sort-key="created">Abierta<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="expires">Caduca<span class="sort-arrow" aria-hidden="true"></span></th><th></th></tr>
+            </thead>
+            <tbody id="sessions-list"><tr><td colspan="6">Cargando…</td></tr></tbody>
+          </table>
+        </div>
       </div>
-      <div class="field" id="al-other-detail-field" hidden>
-        <label for="al-other-detail">¿Cuál?</label>
-        <input id="al-other-detail" type="text">
-      </div>
-      <div class="field">
-        <label for="al-issued-date">Fecha de obtención</label>
-        <input id="al-issued-date" type="date">
-      </div>
-      <div class="field">
-        <label for="al-year">Año que cubre</label>
-        <input id="al-year" type="number" step="1">
-      </div>
-    </div>
-    <div class="panel-actions">
-      <button type="button" class="btn btn-primary btn-small" id="save-add-license">Guardar</button>
-      <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
-    </div>
-  </dialog>
-
-  <div class="detail-list" id="timeline-list"></div>
-
-  <div class="panel-actions" data-roles="admin">
-    <span id="membership-status-actions"></span>
-    <span id="board-status-actions"></span>
-    <button type="button" class="btn btn-secondary btn-small" id="add-license-button">+ Licencia sin pago</button>
-  </div>
-
-  <h2>Actividades</h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Inicio</th><th>Fin</th><th>Título</th><th>Tipo</th><th>Estado</th><th>Rol</th></tr>
-      </thead>
-      <tbody id="activities-table-body"></tbody>
-    </table>
-  </div>
-
-  <h2>Material</h2>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th>Material</th><th>Tipo</th><th>Cantidad</th><th>Fecha</th><th>Devuelto</th><th>Estado</th></tr>
-      </thead>
-      <tbody id="movements-table-body"></tbody>
-    </table>
-  </div>
-
-  <h2>Licencias federativas</h2>
-  <div class="info-card">
-    <label for="license-files-year">Año</label>
-    <select id="license-files-year" class="year-select"></select>
-    <ul class="license-thumbnail-grid" id="license-files-list"></ul>
-  </div>
-
-  <h2>Ficheros</h2>
-  <nav id="uf-breadcrumbs" class="breadcrumbs"></nav>
-  <div id="uf-directory-view">
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>Nombre</th><th>Tamaño</th><th>Modificado</th></tr>
-        </thead>
-        <tbody id="uf-entries-list"></tbody>
-      </table>
-    </div>
-  </div>
-  <div id="uf-file-view" hidden>
-    <div class="section-header">
-      <h3 id="uf-file-name"></h3>
-      <div class="panel-actions">
-        <button id="uf-file-download" type="button" class="btn btn-secondary btn-small">Descargar</button>
-        <button id="uf-file-back" type="button" class="btn btn-secondary btn-small">Volver a la carpeta</button>
-      </div>
-    </div>
-    <p class="subtitle" id="uf-file-meta"></p>
-    <div id="uf-file-preview"></div>
-  </div>
-
-  <div id="sessions-section" data-roles="admin">
-    <h2>Sesiones</h2>
-    <p class="subtitle">Los dispositivos en los que esta persona tiene la sesión abierta. Cerrar una la obliga a volver a pedir un enlace para entrar.</p>
-    <p class="hint" id="sessions-impersonating" hidden></p>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr id="sessions-head"><th>Navegador</th><th data-sort-key="last_used">Último uso<span class="sort-arrow" aria-hidden="true"></span></th><th>Desde</th><th data-sort-key="created">Abierta<span class="sort-arrow" aria-hidden="true"></span></th><th data-sort-key="expires">Caduca<span class="sort-arrow" aria-hidden="true"></span></th><th></th></tr>
-        </thead>
-        <tbody id="sessions-list"><tr><td colspan="6">Cargando…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
 
     </main>
   </div>

@@ -13,168 +13,168 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <div class="section-header">
-    <div>
-      <h1>Material</h1>
-      <p class="subtitle">Catálogo de material del club, su disponibilidad y sus movimientos.</p>
-    </div>
-    <div class="table-actions">
-      <a href="/material-prestado" class="btn btn-secondary btn-small" data-roles="admin,board,material">Material prestado o alquilado</a>
-      <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small manage-only" data-roles="admin,board,material">+ Nuevo material</button>
-      <button id="toggle-manage" type="button" class="btn btn-secondary btn-small" aria-pressed="false" data-roles="admin,board,material">Gestionar material</button>
-    </div>
-  </div>
-
-  <p id="feedback" class="success-message" hidden></p>
-
-  <dialog id="new-item-dialog" class="panel modal" data-roles="admin,board,material">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3 id="ni-title">Nuevo material</h3>
-    <p class="hint" id="ni-duplicate-note" hidden></p>
-    <form id="new-item-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="ni-type">Tipo</label>
-          <select id="ni-type" name="type_id" required></select>
+      <div class="section-header">
+        <div>
+          <h1>Material</h1>
+          <p class="subtitle">Catálogo de material del club, su disponibilidad y sus movimientos.</p>
         </div>
-        <div class="field" data-kind-field="rope">
-          <label for="ni-rope-type">Tipo de cuerda</label>
-          <select id="ni-rope-type" name="rope_type">
-            <option value="caving">Espeleología</option>
-            <option value="canyoning">Cañones</option>
-          </select>
-        </div>
-        <div class="field" data-kind-field="bag">
-          <label for="ni-bag-type">Tipo de saca</label>
-          <select id="ni-bag-type" name="bag_type">
-            <option value="caving">Espeleología</option>
-            <option value="canyoning">Cañones</option>
-            <option value="quick">Saca rápida</option>
-            <option value="special">Saca especial</option>
-          </select>
-        </div>
-        <div class="field" data-kind-field="general" data-create-only>
-          <label for="ni-total-quantity">Cantidad</label>
-          <input id="ni-total-quantity" name="total_quantity" type="number" min="1" value="1">
-        </div>
-        <div class="field">
-          <label for="ni-brand">Marca <span class="optional" data-kind-field="general">(opcional)</span></label>
-          <input id="ni-brand" name="brand" type="text">
-        </div>
-        <div class="field">
-          <label for="ni-model">Modelo <span class="optional" data-kind-field="general,bag">(opcional)</span></label>
-          <input id="ni-model" name="model" type="text">
-        </div>
-        <div class="field">
-          <label for="ni-code">Código <span class="optional" data-kind-field="general">(opcional)</span></label>
-          <input id="ni-code" name="code" type="text">
-        </div>
-        <div class="field" data-kind-field="rope">
-          <label for="ni-manufacture-year">Año de fabricación</label>
-          <input id="ni-manufacture-year" name="manufacture_year" type="number" min="1900" step="1">
-        </div>
-        <div class="field" data-kind-field="rope">
-          <label for="ni-diameter-mm">Diámetro (mm)</label>
-          <input id="ni-diameter-mm" name="diameter_mm" type="number" min="0" step="0.1">
-        </div>
-        <div class="field" data-kind-field="rope">
-          <label for="ni-length-m">Longitud (m)</label>
-          <input id="ni-length-m" name="length_m" type="number" min="1" step="1">
-        </div>
-        <div class="field" data-kind-field="bag">
-          <label for="ni-capacity-liters">Capacidad (L)</label>
-          <input id="ni-capacity-liters" name="capacity_liters" type="number" min="0" step="0.1">
-        </div>
-        <div class="field" data-kind-field="rope,bag">
-          <label for="ni-color">Color <span class="optional">(opcional)</span></label>
-          <input id="ni-color" name="color" type="text" maxlength="40" placeholder="Azul, rojo y negro…">
-        </div>
-        <div class="field" data-create-only>
-          <label for="ni-acquired-at">Fecha de adquisición <span class="optional">(opcional)</span></label>
-          <input id="ni-acquired-at" name="acquired_at" type="date">
-        </div>
-        <div class="field">
-          <label for="ni-rental-price">Precio de alquiler / semana <span class="optional">(opcional)</span></label>
-          <input id="ni-rental-price" name="rental_price_per_week" type="number" min="0" step="0.01">
-        </div>
-        <div class="field">
-          <label for="ni-sale-price">Precio de venta <span class="optional">(opcional)</span></label>
-          <input id="ni-sale-price" name="sale_price" type="number" min="0" step="0.01">
-        </div>
-        <div class="field span-2">
-          <label class="checkbox-label" for="ni-loanable"><input id="ni-loanable" name="loanable" type="checkbox" checked> Se puede prestar</label>
-        </div>
-        <div class="field span-2">
-          <label for="ni-description"><span data-kind-field="general">Descripción <span id="ni-description-optional" class="optional" hidden>(opcional)</span></span><span data-kind-field="rope,bag">Observaciones <span class="optional">(opcional)</span></span></label>
-          <textarea id="ni-description" name="description"></textarea>
+        <div class="table-actions">
+          <a href="/material-prestado" class="btn btn-secondary btn-small" data-roles="admin,board,material">Material prestado o alquilado</a>
+          <button id="toggle-new-item" type="button" class="btn btn-secondary btn-small manage-only" data-roles="admin,board,material">+ Nuevo material</button>
+          <button id="toggle-manage" type="button" class="btn btn-secondary btn-small" aria-pressed="false" data-roles="admin,board,material">Gestionar material</button>
         </div>
       </div>
-      <div class="panel-actions">
-        <button id="ni-submit" type="submit" class="btn btn-primary">Crear material</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+
+      <p id="feedback" class="success-message" hidden></p>
+
+      <dialog id="new-item-dialog" class="panel modal" data-roles="admin,board,material">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3 id="ni-title">Nuevo material</h3>
+        <p class="hint" id="ni-duplicate-note" hidden></p>
+        <form id="new-item-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="ni-type">Tipo</label>
+              <select id="ni-type" name="type_id" required></select>
+            </div>
+            <div class="field" data-kind-field="rope">
+              <label for="ni-rope-type">Tipo de cuerda</label>
+              <select id="ni-rope-type" name="rope_type">
+                <option value="caving">Espeleología</option>
+                <option value="canyoning">Cañones</option>
+              </select>
+            </div>
+            <div class="field" data-kind-field="bag">
+              <label for="ni-bag-type">Tipo de saca</label>
+              <select id="ni-bag-type" name="bag_type">
+                <option value="caving">Espeleología</option>
+                <option value="canyoning">Cañones</option>
+                <option value="quick">Saca rápida</option>
+                <option value="special">Saca especial</option>
+              </select>
+            </div>
+            <div class="field" data-kind-field="general" data-create-only>
+              <label for="ni-total-quantity">Cantidad</label>
+              <input id="ni-total-quantity" name="total_quantity" type="number" min="1" value="1">
+            </div>
+            <div class="field">
+              <label for="ni-brand">Marca <span class="optional" data-kind-field="general">(opcional)</span></label>
+              <input id="ni-brand" name="brand" type="text">
+            </div>
+            <div class="field">
+              <label for="ni-model">Modelo <span class="optional" data-kind-field="general,bag">(opcional)</span></label>
+              <input id="ni-model" name="model" type="text">
+            </div>
+            <div class="field">
+              <label for="ni-code">Código <span class="optional" data-kind-field="general">(opcional)</span></label>
+              <input id="ni-code" name="code" type="text">
+            </div>
+            <div class="field" data-kind-field="rope">
+              <label for="ni-manufacture-year">Año de fabricación</label>
+              <input id="ni-manufacture-year" name="manufacture_year" type="number" min="1900" step="1">
+            </div>
+            <div class="field" data-kind-field="rope">
+              <label for="ni-diameter-mm">Diámetro (mm)</label>
+              <input id="ni-diameter-mm" name="diameter_mm" type="number" min="0" step="0.1">
+            </div>
+            <div class="field" data-kind-field="rope">
+              <label for="ni-length-m">Longitud (m)</label>
+              <input id="ni-length-m" name="length_m" type="number" min="1" step="1">
+            </div>
+            <div class="field" data-kind-field="bag">
+              <label for="ni-capacity-liters">Capacidad (L)</label>
+              <input id="ni-capacity-liters" name="capacity_liters" type="number" min="0" step="0.1">
+            </div>
+            <div class="field" data-kind-field="rope,bag">
+              <label for="ni-color">Color <span class="optional">(opcional)</span></label>
+              <input id="ni-color" name="color" type="text" maxlength="40" placeholder="Azul, rojo y negro…">
+            </div>
+            <div class="field" data-create-only>
+              <label for="ni-acquired-at">Fecha de adquisición <span class="optional">(opcional)</span></label>
+              <input id="ni-acquired-at" name="acquired_at" type="date">
+            </div>
+            <div class="field">
+              <label for="ni-rental-price">Precio de alquiler / semana <span class="optional">(opcional)</span></label>
+              <input id="ni-rental-price" name="rental_price_per_week" type="number" min="0" step="0.01">
+            </div>
+            <div class="field">
+              <label for="ni-sale-price">Precio de venta <span class="optional">(opcional)</span></label>
+              <input id="ni-sale-price" name="sale_price" type="number" min="0" step="0.01">
+            </div>
+            <div class="field span-2">
+              <label class="checkbox-label" for="ni-loanable"><input id="ni-loanable" name="loanable" type="checkbox" checked> Se puede prestar</label>
+            </div>
+            <div class="field span-2">
+              <label for="ni-description"><span data-kind-field="general">Descripción <span id="ni-description-optional" class="optional" hidden>(opcional)</span></span><span data-kind-field="rope,bag">Observaciones <span class="optional">(opcional)</span></span></label>
+              <textarea id="ni-description" name="description"></textarea>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button id="ni-submit" type="submit" class="btn btn-primary">Crear material</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div class="field" id="item-search-field">
+        <label for="item-search">Buscar material</label>
+        <input id="item-search" type="search" autocomplete="off" placeholder="Tipo, características" title="Cuerdas por longitud: «&gt;30» o «&gt;30m» las de más de 30 metros, «&lt;20» o «&lt;20m» las de menos de 20">
       </div>
-    </form>
-  </dialog>
-
-  <div class="field" id="item-search-field">
-    <label for="item-search">Buscar material</label>
-    <input id="item-search" type="search" autocomplete="off" placeholder="Tipo, características" title="Cuerdas por longitud: «&gt;30» o «&gt;30m» las de más de 30 metros, «&lt;20» o «&lt;20m» las de menos de 20">
-  </div>
-  <div class="field">
-    <label class="checkbox-label" for="show-all-items"><input id="show-all-items" type="checkbox"> Mostrar también el material que ya no está (vendido, perdido, abandonado o retirado)</label>
-  </div>
-
-  <div class="table-wrap">
-    <table class="stack-on-phone">
-      <thead>
-        <tr><th>Tipo</th><th>Características</th><th>Disponible</th><th>Estado</th><th></th></tr>
-      </thead>
-      <tbody id="items-table-body"></tbody>
-    </table>
-  </div>
-
-  <!-- Shared by #new-movement-dialog's own socio/actividad inputs below. -->
-  <datalist id="mv-user-options"></datalist>
-  <datalist id="mv-activity-options"></datalist>
-
-  <dialog id="new-movement-dialog" class="panel modal" data-roles="admin,board,material">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Registrar movimiento</h3>
-    <p class="hint" id="new-movement-item-label"></p>
-    <form id="new-movement-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="mv-type">Tipo</label>
-          <select id="mv-type"></select>
-        </div>
-        <div class="field" id="mv-user-field">
-          <label for="mv-user">Socio <span class="optional" id="mv-user-hint">(opcional)</span></label>
-          <input type="text" id="mv-user" list="mv-user-options" autocomplete="off" placeholder="Escribe un nombre…">
-        </div>
-        <div class="field" id="mv-activity-field">
-          <label for="mv-activity">Actividad <span class="optional" id="mv-activity-hint">(opcional)</span></label>
-          <input type="text" id="mv-activity" list="mv-activity-options" autocomplete="off" placeholder="Escribe para buscar…">
-        </div>
-        <div class="field" id="mv-quantity-field">
-          <label for="mv-quantity">Cantidad</label>
-          <input type="number" min="1" value="1" id="mv-quantity">
-        </div>
-        <div class="field span-2" id="mv-account-field" hidden>
-          <label for="mv-account">Cuenta en la que se ingresa <span class="optional" id="mv-total"></span></label>
-          <select id="mv-account"></select>
-        </div>
-        <div class="field span-2">
-          <label for="mv-notes">Notas <span class="optional">(opcional)</span></label>
-          <input type="text" id="mv-notes" placeholder="Motivo, contexto…">
-        </div>
+      <div class="field">
+        <label class="checkbox-label" for="show-all-items"><input id="show-all-items" type="checkbox"> Mostrar también el material que ya no está (vendido, perdido, abandonado o retirado)</label>
       </div>
-      <p class="hint">El precio (si aplica) es siempre el indicado en el material.</p>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Registrar movimiento</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+
+      <div class="table-wrap">
+        <table class="stack-on-phone">
+          <thead>
+            <tr><th>Tipo</th><th>Características</th><th>Disponible</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody id="items-table-body"></tbody>
+        </table>
       </div>
-    </form>
-  </dialog>
+
+      <!-- Shared by #new-movement-dialog's own socio/actividad inputs below. -->
+      <datalist id="mv-user-options"></datalist>
+      <datalist id="mv-activity-options"></datalist>
+
+      <dialog id="new-movement-dialog" class="panel modal" data-roles="admin,board,material">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Registrar movimiento</h3>
+        <p class="hint" id="new-movement-item-label"></p>
+        <form id="new-movement-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="mv-type">Tipo</label>
+              <select id="mv-type"></select>
+            </div>
+            <div class="field" id="mv-user-field">
+              <label for="mv-user">Socio <span class="optional" id="mv-user-hint">(opcional)</span></label>
+              <input type="text" id="mv-user" list="mv-user-options" autocomplete="off" placeholder="Escribe un nombre…">
+            </div>
+            <div class="field" id="mv-activity-field">
+              <label for="mv-activity">Actividad <span class="optional" id="mv-activity-hint">(opcional)</span></label>
+              <input type="text" id="mv-activity" list="mv-activity-options" autocomplete="off" placeholder="Escribe para buscar…">
+            </div>
+            <div class="field" id="mv-quantity-field">
+              <label for="mv-quantity">Cantidad</label>
+              <input type="number" min="1" value="1" id="mv-quantity">
+            </div>
+            <div class="field span-2" id="mv-account-field" hidden>
+              <label for="mv-account">Cuenta en la que se ingresa <span class="optional" id="mv-total"></span></label>
+              <select id="mv-account"></select>
+            </div>
+            <div class="field span-2">
+              <label for="mv-notes">Notas <span class="optional">(opcional)</span></label>
+              <input type="text" id="mv-notes" placeholder="Motivo, contexto…">
+            </div>
+          </div>
+          <p class="hint">El precio (si aplica) es siempre el indicado en el material.</p>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Registrar movimiento</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
 
     </main>
   </div>

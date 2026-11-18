@@ -13,176 +13,176 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <p><a href="/contabilidad">&larr; Volver a Contabilidad</a></p>
-  <div class="section-header">
-    <div>
-      <h1 id="account-title">Cuenta</h1>
-      <p class="subtitle" id="account-balance-line"></p>
-      <p class="subtitle" id="account-type-line" hidden></p>
-    </div>
-    <button id="toggle-new-transaction" type="button" class="btn btn-secondary btn-small">+ Nueva transacción</button>
-  </div>
-
-  <p id="feedback" class="success-message" hidden></p>
-
-  <dialog id="new-transaction-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Nueva transacción</h3>
-    <p class="hint">Una línea por cada otra cuenta. Esta cuenta recibe la suma de las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
-    <form id="new-transaction-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="nt-date">Fecha</label>
-          <input id="nt-date" name="occurred_at" type="date" required>
+      <p><a href="/contabilidad">&larr; Volver a Contabilidad</a></p>
+      <div class="section-header">
+        <div>
+          <h1 id="account-title">Cuenta</h1>
+          <p class="subtitle" id="account-balance-line"></p>
+          <p class="subtitle" id="account-type-line" hidden></p>
         </div>
-        <div class="field">
-          <label for="nt-total">Total en esta cuenta</label>
-          <input id="nt-total" type="text" readonly tabindex="-1" value="0,00 €">
-        </div>
-        <div class="field span-2">
-          <label for="nt-description">Descripción</label>
-          <input id="nt-description" name="description" type="text" required>
-        </div>
-        <div class="field span-2">
-          <div id="nt-lines" class="entry-lines"></div>
-          <p class="hint">Positiva si entra en esta cuenta, negativa si sale. Al rellenar una línea aparece otra: esta cuenta recibe la suma de todas las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
-        </div>
-        <div class="field span-2">
-          <label for="nt-files-input">Ficheros <span class="optional">(tickets, facturas…)</span></label>
-          <input id="nt-files-input" type="file" multiple>
-          <p class="hint">Hasta 10 MB cada uno. Se adjuntan al guardar la transacción.</p>
-        </div>
-        <div class="field span-2" data-roles="admin" id="nt-flags-hint">
-          <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
-        </div>
-        <div class="field span-2" data-roles="admin" id="nt-dues-field" hidden>
-          <label>Cuotas anuales a registrar en esta transacción</label>
-          <div id="nt-dues-chips"></div>
-          <div class="role-add-row">
-            <input type="text" id="nt-due-user" list="nt-due-user-options" autocomplete="off" placeholder="Socio…">
-            <datalist id="nt-due-user-options"></datalist>
-            <input type="number" id="nt-due-year" step="1" placeholder="Año" style="width:5.5em">
-            <button type="button" class="btn btn-secondary btn-small" id="nt-add-due">+ Añadir cuota</button>
-          </div>
-        </div>
-        <div class="field span-2" data-roles="admin" id="nt-licenses-field" hidden>
-          <label>Licencias nuevas a registrar en esta transacción</label>
-          <div id="nt-licenses-chips"></div>
-          <div class="role-add-row">
-            <input type="text" id="nt-license-user" list="nt-license-user-options" autocomplete="off" placeholder="Socio…">
-            <datalist id="nt-license-user-options"></datalist>
-            <select id="nt-license-type"></select>
-            <input type="text" id="nt-license-other-detail" placeholder="¿Cuál?" hidden>
-            <input type="number" id="nt-license-year" step="1" placeholder="Año" style="width:5.5em">
-            <button type="button" class="btn btn-secondary btn-small" id="nt-add-license">+ Añadir licencia</button>
-          </div>
-        </div>
+        <button id="toggle-new-transaction" type="button" class="btn btn-secondary btn-small">+ Nueva transacción</button>
       </div>
-      <p class="hint" data-roles="admin" id="nt-dates-hint" hidden>
-        La fecha de la transacción se usa como fecha de obtención de cada licencia nueva,
-        y como fecha de alta para cualquier socio sin alta previa cuya cuota se registre aquí.
-        El año de cada cuota y licencia se propone a partir de esa fecha (el siguiente, si es
-        diciembre), pero puedes cambiarlo.
+
+      <p id="feedback" class="success-message" hidden></p>
+
+      <dialog id="new-transaction-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Nueva transacción</h3>
+        <p class="hint">Una línea por cada otra cuenta. Esta cuenta recibe la suma de las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
+        <form id="new-transaction-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="nt-date">Fecha</label>
+              <input id="nt-date" name="occurred_at" type="date" required>
+            </div>
+            <div class="field">
+              <label for="nt-total">Total en esta cuenta</label>
+              <input id="nt-total" type="text" readonly tabindex="-1" value="0,00 €">
+            </div>
+            <div class="field span-2">
+              <label for="nt-description">Descripción</label>
+              <input id="nt-description" name="description" type="text" required>
+            </div>
+            <div class="field span-2">
+              <div id="nt-lines" class="entry-lines"></div>
+              <p class="hint">Positiva si entra en esta cuenta, negativa si sale. Al rellenar una línea aparece otra: esta cuenta recibe la suma de todas las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
+            </div>
+            <div class="field span-2">
+              <label for="nt-files-input">Ficheros <span class="optional">(tickets, facturas…)</span></label>
+              <input id="nt-files-input" type="file" multiple>
+              <p class="hint">Hasta 10 MB cada uno. Se adjuntan al guardar la transacción.</p>
+            </div>
+            <div class="field span-2" data-roles="admin" id="nt-flags-hint">
+              <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
+            </div>
+            <div class="field span-2" data-roles="admin" id="nt-dues-field" hidden>
+              <label>Cuotas anuales a registrar en esta transacción</label>
+              <div id="nt-dues-chips"></div>
+              <div class="role-add-row">
+                <input type="text" id="nt-due-user" list="nt-due-user-options" autocomplete="off" placeholder="Socio…">
+                <datalist id="nt-due-user-options"></datalist>
+                <input type="number" id="nt-due-year" step="1" placeholder="Año" style="width:5.5em">
+                <button type="button" class="btn btn-secondary btn-small" id="nt-add-due">+ Añadir cuota</button>
+              </div>
+            </div>
+            <div class="field span-2" data-roles="admin" id="nt-licenses-field" hidden>
+              <label>Licencias nuevas a registrar en esta transacción</label>
+              <div id="nt-licenses-chips"></div>
+              <div class="role-add-row">
+                <input type="text" id="nt-license-user" list="nt-license-user-options" autocomplete="off" placeholder="Socio…">
+                <datalist id="nt-license-user-options"></datalist>
+                <select id="nt-license-type"></select>
+                <input type="text" id="nt-license-other-detail" placeholder="¿Cuál?" hidden>
+                <input type="number" id="nt-license-year" step="1" placeholder="Año" style="width:5.5em">
+                <button type="button" class="btn btn-secondary btn-small" id="nt-add-license">+ Añadir licencia</button>
+              </div>
+            </div>
+          </div>
+          <p class="hint" data-roles="admin" id="nt-dates-hint" hidden>
+            La fecha de la transacción se usa como fecha de obtención de cada licencia nueva,
+            y como fecha de alta para cualquier socio sin alta previa cuya cuota se registre aquí.
+            El año de cada cuota y licencia se propone a partir de esa fecha (el siguiente, si es
+            diciembre), pero puedes cambiarlo.
+          </p>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Crear transacción</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="edit-transaction-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Editar transacción</h3>
+        <form id="edit-transaction-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="et-date">Fecha</label>
+              <input id="et-date" type="date" required>
+            </div>
+            <div class="field">
+              <label for="et-total">Total en esta cuenta</label>
+              <input id="et-total" type="text" readonly tabindex="-1" value="0,00 €">
+            </div>
+            <div class="field span-2">
+              <label for="et-description">Descripción</label>
+              <input id="et-description" type="text" required>
+            </div>
+            <div class="field span-2">
+              <div id="et-lines" class="entry-lines"></div>
+              <p class="hint">Positiva si entra en esta cuenta, negativa si sale. Al rellenar una línea aparece otra: esta cuenta recibe la suma de todas las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
+            </div>
+            <div class="field span-2">
+              <label for="et-files-input">Ficheros <span class="optional">(tickets, facturas…)</span></label>
+              <ul id="et-files-list" class="entry-detail-list"></ul>
+              <input id="et-files-input" type="file" multiple>
+              <p class="hint">«Quitar» borra el fichero en el acto. Los que elijas aquí, hasta 10 MB cada uno, se adjuntan al guardar.</p>
+            </div>
+            <div class="field span-2" data-roles="admin" id="et-flags-hint">
+              <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
+            </div>
+            <div class="field span-2" data-roles="admin" id="et-dues-field" hidden>
+              <label>Cuotas anuales de esta transacción</label>
+              <div id="et-dues-existing"></div>
+              <p class="hint" id="et-dues-hint">Las ya registradas aparecen arriba y no se pueden quitar desde este diálogo; aquí solo se añaden cuotas nuevas.</p>
+              <div id="et-dues-chips"></div>
+              <div class="role-add-row">
+                <input type="text" id="et-due-user" list="et-due-user-options" autocomplete="off" placeholder="Socio…">
+                <datalist id="et-due-user-options"></datalist>
+                <input type="number" id="et-due-year" step="1" placeholder="Año" style="width:5.5em">
+                <button type="button" class="btn btn-secondary btn-small" id="et-add-due">+ Añadir cuota</button>
+              </div>
+            </div>
+            <div class="field span-2" data-roles="admin" id="et-licenses-field" hidden>
+              <label>Licencias de esta transacción</label>
+              <div id="et-licenses-existing"></div>
+              <p class="hint" id="et-licenses-hint">Las ya registradas aparecen arriba y no se pueden quitar desde este diálogo; aquí solo se añaden licencias nuevas.</p>
+              <div id="et-licenses-chips"></div>
+              <div class="role-add-row">
+                <input type="text" id="et-license-user" list="et-license-user-options" autocomplete="off" placeholder="Socio…">
+                <datalist id="et-license-user-options"></datalist>
+                <select id="et-license-type"></select>
+                <input type="text" id="et-license-other-detail" placeholder="¿Cuál?" hidden>
+                <input type="number" id="et-license-year" step="1" placeholder="Año" style="width:5.5em">
+                <button type="button" class="btn btn-secondary btn-small" id="et-add-license">+ Añadir licencia</button>
+              </div>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <form id="entries-filter" class="filter-bar">
+        <div class="field">
+          <label for="entries-search">Buscar en la descripción</label>
+          <input type="search" id="entries-search" autocomplete="off" placeholder="Palabras que tienen que aparecer">
+        </div>
+        <div class="field">
+          <label for="entries-from">Desde</label>
+          <input type="date" id="entries-from">
+        </div>
+        <div class="field">
+          <label for="entries-to">Hasta</label>
+          <input type="date" id="entries-to">
+        </div>
+        <button type="submit" class="btn btn-secondary btn-small">Filtrar</button>
+        <button type="button" id="entries-filter-clear" class="btn btn-secondary btn-small">Quitar filtros</button>
+      </form>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th class="nowrap">Fecha</th><th id="entries-account-head" hidden>Cuenta</th><th>Descripción</th><th class="nowrap">Importe</th><th class="nowrap">Saldo</th><th></th></tr>
+          </thead>
+          <tbody id="entries-table-body"></tbody>
+        </table>
+      </div>
+      <p class="load-more">
+        <button type="button" id="entries-load-more" class="btn btn-secondary" hidden>Ver más</button>
       </p>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Crear transacción</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="edit-transaction-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar transacción</h3>
-    <form id="edit-transaction-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="et-date">Fecha</label>
-          <input id="et-date" type="date" required>
-        </div>
-        <div class="field">
-          <label for="et-total">Total en esta cuenta</label>
-          <input id="et-total" type="text" readonly tabindex="-1" value="0,00 €">
-        </div>
-        <div class="field span-2">
-          <label for="et-description">Descripción</label>
-          <input id="et-description" type="text" required>
-        </div>
-        <div class="field span-2">
-          <div id="et-lines" class="entry-lines"></div>
-          <p class="hint">Positiva si entra en esta cuenta, negativa si sale. Al rellenar una línea aparece otra: esta cuenta recibe la suma de todas las cantidades, y cada otra cuenta, la opuesta de la suya.</p>
-        </div>
-        <div class="field span-2">
-          <label for="et-files-input">Ficheros <span class="optional">(tickets, facturas…)</span></label>
-          <ul id="et-files-list" class="entry-detail-list"></ul>
-          <input id="et-files-input" type="file" multiple>
-          <p class="hint">«Quitar» borra el fichero en el acto. Los que elijas aquí, hasta 10 MB cada uno, se adjuntan al guardar.</p>
-        </div>
-        <div class="field span-2" data-roles="admin" id="et-flags-hint">
-          <p class="hint">Para registrar cuotas anuales o licencias con esta transacción, usa una cuenta marcada para ello: se marca al editar la cuenta, en Contabilidad.</p>
-        </div>
-        <div class="field span-2" data-roles="admin" id="et-dues-field" hidden>
-          <label>Cuotas anuales de esta transacción</label>
-          <div id="et-dues-existing"></div>
-          <p class="hint" id="et-dues-hint">Las ya registradas aparecen arriba y no se pueden quitar desde este diálogo; aquí solo se añaden cuotas nuevas.</p>
-          <div id="et-dues-chips"></div>
-          <div class="role-add-row">
-            <input type="text" id="et-due-user" list="et-due-user-options" autocomplete="off" placeholder="Socio…">
-            <datalist id="et-due-user-options"></datalist>
-            <input type="number" id="et-due-year" step="1" placeholder="Año" style="width:5.5em">
-            <button type="button" class="btn btn-secondary btn-small" id="et-add-due">+ Añadir cuota</button>
-          </div>
-        </div>
-        <div class="field span-2" data-roles="admin" id="et-licenses-field" hidden>
-          <label>Licencias de esta transacción</label>
-          <div id="et-licenses-existing"></div>
-          <p class="hint" id="et-licenses-hint">Las ya registradas aparecen arriba y no se pueden quitar desde este diálogo; aquí solo se añaden licencias nuevas.</p>
-          <div id="et-licenses-chips"></div>
-          <div class="role-add-row">
-            <input type="text" id="et-license-user" list="et-license-user-options" autocomplete="off" placeholder="Socio…">
-            <datalist id="et-license-user-options"></datalist>
-            <select id="et-license-type"></select>
-            <input type="text" id="et-license-other-detail" placeholder="¿Cuál?" hidden>
-            <input type="number" id="et-license-year" step="1" placeholder="Año" style="width:5.5em">
-            <button type="button" class="btn btn-secondary btn-small" id="et-add-license">+ Añadir licencia</button>
-          </div>
-        </div>
-      </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
-
-  <form id="entries-filter" class="filter-bar">
-    <div class="field">
-      <label for="entries-search">Buscar en la descripción</label>
-      <input type="search" id="entries-search" autocomplete="off" placeholder="Palabras que tienen que aparecer">
-    </div>
-    <div class="field">
-      <label for="entries-from">Desde</label>
-      <input type="date" id="entries-from">
-    </div>
-    <div class="field">
-      <label for="entries-to">Hasta</label>
-      <input type="date" id="entries-to">
-    </div>
-    <button type="submit" class="btn btn-secondary btn-small">Filtrar</button>
-    <button type="button" id="entries-filter-clear" class="btn btn-secondary btn-small">Quitar filtros</button>
-  </form>
-
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr><th class="nowrap">Fecha</th><th id="entries-account-head" hidden>Cuenta</th><th>Descripción</th><th class="nowrap">Importe</th><th class="nowrap">Saldo</th><th></th></tr>
-      </thead>
-      <tbody id="entries-table-body"></tbody>
-    </table>
-  </div>
-  <p class="load-more">
-    <button type="button" id="entries-load-more" class="btn btn-secondary" hidden>Ver más</button>
-  </p>
     </main>
   </div>
 </div>

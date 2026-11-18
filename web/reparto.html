@@ -13,62 +13,62 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <p><a href="/repartos">&larr; Volver a repartos</a></p>
-  <h1 id="distribution-title">Reparto</h1>
-  <p class="subtitle" id="distribution-meta"></p>
-  <div id="distribution-description" class="rich-text"></div>
+      <p><a href="/repartos">&larr; Volver a repartos</a></p>
+      <h1 id="distribution-title">Reparto</h1>
+      <p class="subtitle" id="distribution-meta"></p>
+      <div id="distribution-description" class="rich-text"></div>
 
-  <p id="feedback" class="success-message" hidden></p>
+      <p id="feedback" class="success-message" hidden></p>
 
-  <!-- Managing the distribution is another page, whose button only the people who manage it have. -->
-  <p data-roles="admin,board,material">
-    <a id="manage-link" class="btn btn-secondary btn-small">⚙ Gestionar este reparto</a>
-  </p>
+      <!-- Managing the distribution is another page, whose button only the people who manage it have. -->
+      <p data-roles="admin,board,material">
+        <a id="manage-link" class="btn btn-secondary btn-small">⚙ Gestionar este reparto</a>
+      </p>
 
-  <!-- Asking for things: nothing of it exists while the distribution is a draft. -->
-  <div id="ask-sections">
-    <div id="order-section">
-      <div class="section-header">
-        <div>
-          <h2>Pedir</h2>
-          <p class="subtitle" id="order-status"></p>
+      <!-- Asking for things: nothing of it exists while the distribution is a draft. -->
+      <div id="ask-sections">
+        <div id="order-section">
+          <div class="section-header">
+            <div>
+              <h2>Pedir</h2>
+              <p class="subtitle" id="order-status"></p>
+            </div>
+          </div>
+          <form id="order-form" class="panel" hidden></form>
         </div>
-      </div>
-      <form id="order-form" class="panel" hidden></form>
-    </div>
 
-    <div class="section-header">
-      <div>
-        <h2>Tus pedidos</h2>
+        <div class="section-header">
+          <div>
+            <h2>Tus pedidos</h2>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr id="units-head"></tr>
+            </thead>
+            <tbody id="units-list"><tr><td colspan="7">Cargando…</td></tr></tbody>
+          </table>
+        </div>
+        <p class="hint" id="units-total"></p>
       </div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr id="units-head"></tr>
-        </thead>
-        <tbody id="units-list"><tr><td colspan="7">Cargando…</td></tr></tbody>
-      </table>
-    </div>
-    <p class="hint" id="units-total"></p>
-  </div>
 
-  <dialog id="edit-unit-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3 id="edit-unit-title">Cambiar lo elegido</h3>
-    <p class="hint" id="edit-unit-hint"></p>
-    <form id="edit-unit-form">
-      <div id="eu-options" class="field-grid"></div>
-      <div class="field" id="eu-quantity-field" hidden>
-        <label for="eu-quantity" id="eu-quantity-label">Cantidad</label>
-        <input id="eu-quantity" type="number" min="1" max="100000" step="1">
-      </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
-      </div>
-    </form>
-  </dialog>
+      <dialog id="edit-unit-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3 id="edit-unit-title">Cambiar lo elegido</h3>
+        <p class="hint" id="edit-unit-hint"></p>
+        <form id="edit-unit-form">
+          <div id="eu-options" class="field-grid"></div>
+          <div class="field" id="eu-quantity-field" hidden>
+            <label for="eu-quantity" id="eu-quantity-label">Cantidad</label>
+            <input id="eu-quantity" type="number" min="1" max="100000" step="1">
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
     </main>
   </div>
 </div>

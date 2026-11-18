@@ -13,231 +13,231 @@
   <div class="main-column">
     <header class="topbar" id="topbar"></header>
     <main class="content">
-  <p><a href="/actividades">&larr; Volver a actividades</a></p>
-  <h1 id="activity-title">Actividad</h1>
-  <p class="subtitle" id="activity-meta"></p>
-  <p class="subtitle" id="activity-leader"></p>
-  <p class="joined-note" id="joined-note" hidden>✓ Estás apuntado a esta actividad.</p>
-  <div id="activity-description" class="rich-text"></div>
+      <p><a href="/actividades">&larr; Volver a actividades</a></p>
+      <h1 id="activity-title">Actividad</h1>
+      <p class="subtitle" id="activity-meta"></p>
+      <p class="subtitle" id="activity-leader"></p>
+      <p class="joined-note" id="joined-note" hidden>✓ Estás apuntado a esta actividad.</p>
+      <div id="activity-description" class="rich-text"></div>
 
-  <p id="feedback" class="success-message" hidden></p>
+      <p id="feedback" class="success-message" hidden></p>
 
-  <div class="panel-actions">
-    <button id="join-activity" type="button" class="btn btn-secondary btn-small" hidden>Apuntarme</button>
-    <button id="leave-activity" type="button" class="btn btn-secondary btn-small" hidden>Darme de baja</button>
-    <button id="open-edit-activity" type="button" class="btn btn-secondary btn-small" hidden>Editar actividad</button>
-    <button id="cancel-activity" type="button" class="btn btn-danger btn-small" hidden>Cancelar actividad</button>
-    <button id="reactivate-activity" type="button" class="btn btn-secondary btn-small" hidden>Reactivar actividad</button>
-  </div>
-
-  <p class="hint" id="attendance" hidden></p>
-
-  <dialog id="edit-activity-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar</h3>
-    <form id="edit-activity-form">
-      <div class="field-grid">
-        <div class="field span-2">
-          <label for="ea-title">Título</label>
-          <input id="ea-title" name="title" type="text" required>
-        </div>
-        <div class="field">
-          <label for="ea-type">Tipo</label>
-          <select id="ea-type" name="type">
-            <option value="caving">Espeleología</option>
-            <option value="canyoning">Cañones</option>
-            <option value="training">Formación</option>
-            <option value="social">Social</option>
-            <option value="other">Otro</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="ea-start-date">Fecha de inicio</label>
-          <input id="ea-start-date" name="start_date" type="date" required>
-        </div>
-        <div class="field">
-          <label for="ea-end-date">Fecha de fin</label>
-          <input id="ea-end-date" name="end_date" type="date" required>
-        </div>
-        <div class="field">
-          <label for="ea-visibility">Visibilidad</label>
-          <select id="ea-visibility" name="visibility">
-            <option value="public">Pública</option>
-            <option value="private">Privada</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="ea-max-participants">Máximo de apuntados <span class="optional">(opcional)</span></label>
-          <input id="ea-max-participants" name="max_participants" type="number" min="1" step="1" inputmode="numeric" placeholder="Sin límite">
-        </div>
-        <div class="field" data-roles="admin,board">
-          <label for="ea-leader">Organizador</label>
-          <input id="ea-leader" type="text" list="ea-leader-options" autocomplete="off" placeholder="Escribe un nombre…">
-          <datalist id="ea-leader-options"></datalist>
-        </div>
-        <div class="field span-2">
-          <label for="ea-description">Descripción</label>
-          <textarea id="ea-description" name="description"></textarea>
-          <p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---».</p>
-        </div>
-      </div>
       <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar cambios</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+        <button id="join-activity" type="button" class="btn btn-secondary btn-small" hidden>Apuntarme</button>
+        <button id="leave-activity" type="button" class="btn btn-secondary btn-small" hidden>Darme de baja</button>
+        <button id="open-edit-activity" type="button" class="btn btn-secondary btn-small" hidden>Editar actividad</button>
+        <button id="cancel-activity" type="button" class="btn btn-danger btn-small" hidden>Cancelar actividad</button>
+        <button id="reactivate-activity" type="button" class="btn btn-secondary btn-small" hidden>Reactivar actividad</button>
       </div>
-    </form>
-  </dialog>
 
-  <div class="section-header">
-    <h2>Lugares</h2>
-  </div>
-  <p class="hint">Las cuevas, cañones y otros lugares del catálogo a los que va la actividad.</p>
-  <div class="detail-list" id="places-list"></div>
-  <div class="role-add-row" id="add-place-row" hidden>
-    <input type="text" id="place-search" list="place-options" autocomplete="off" placeholder="Escribe el nombre de un lugar…" aria-label="Lugar">
-    <datalist id="place-options"></datalist>
-    <button type="button" id="add-place" class="btn btn-secondary btn-small">+ Lugar</button>
-  </div>
+      <p class="hint" id="attendance" hidden></p>
 
-  <div class="section-header">
-    <h2>Participantes</h2>
-  </div>
-  <div class="detail-list" id="participants-list"></div>
-  <div class="role-add-row" id="add-participant-row" hidden>
-    <input type="text" id="participant-search" list="participant-options" autocomplete="off" placeholder="Escribe un nombre…">
-    <datalist id="participant-options"></datalist>
-    <button type="button" id="add-participant" class="btn btn-secondary btn-small">+ Participante</button>
-  </div>
+      <dialog id="edit-activity-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Editar</h3>
+        <form id="edit-activity-form">
+          <div class="field-grid">
+            <div class="field span-2">
+              <label for="ea-title">Título</label>
+              <input id="ea-title" name="title" type="text" required>
+            </div>
+            <div class="field">
+              <label for="ea-type">Tipo</label>
+              <select id="ea-type" name="type">
+                <option value="caving">Espeleología</option>
+                <option value="canyoning">Cañones</option>
+                <option value="training">Formación</option>
+                <option value="social">Social</option>
+                <option value="other">Otro</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="ea-start-date">Fecha de inicio</label>
+              <input id="ea-start-date" name="start_date" type="date" required>
+            </div>
+            <div class="field">
+              <label for="ea-end-date">Fecha de fin</label>
+              <input id="ea-end-date" name="end_date" type="date" required>
+            </div>
+            <div class="field">
+              <label for="ea-visibility">Visibilidad</label>
+              <select id="ea-visibility" name="visibility">
+                <option value="public">Pública</option>
+                <option value="private">Privada</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="ea-max-participants">Máximo de apuntados <span class="optional">(opcional)</span></label>
+              <input id="ea-max-participants" name="max_participants" type="number" min="1" step="1" inputmode="numeric" placeholder="Sin límite">
+            </div>
+            <div class="field" data-roles="admin,board">
+              <label for="ea-leader">Organizador</label>
+              <input id="ea-leader" type="text" list="ea-leader-options" autocomplete="off" placeholder="Escribe un nombre…">
+              <datalist id="ea-leader-options"></datalist>
+            </div>
+            <div class="field span-2">
+              <label for="ea-description">Descripción</label>
+              <textarea id="ea-description" name="description"></textarea>
+              <p class="hint">Admite enlaces, **negrita**, *cursiva*, listas con «- », títulos con «# » y «---».</p>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar cambios</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
 
-  <div class="section-header">
-    <h2>Invitados</h2>
-  </div>
-  <p class="hint">Personas de fuera del club que van a la actividad. Las invita alguno de los apuntados.</p>
-  <div class="detail-list" id="guests-list"></div>
-  <div class="role-add-row" id="add-guest-row" hidden>
-    <input type="text" id="guest-name" autocomplete="off" maxlength="100" placeholder="Nombre del invitado…" aria-label="Nombre del invitado">
-    <input type="text" id="guest-inviter" list="guest-inviter-options" autocomplete="off" placeholder="Quién lo invita…" aria-label="Quién lo invita" hidden>
-    <datalist id="guest-inviter-options"></datalist>
-    <button type="button" id="add-guest" class="btn btn-secondary btn-small">+ Invitado</button>
-  </div>
+      <div class="section-header">
+        <h2>Lugares</h2>
+      </div>
+      <p class="hint">Las cuevas, cañones y otros lugares del catálogo a los que va la actividad.</p>
+      <div class="detail-list" id="places-list"></div>
+      <div class="role-add-row" id="add-place-row" hidden>
+        <input type="text" id="place-search" list="place-options" autocomplete="off" placeholder="Escribe el nombre de un lugar…" aria-label="Lugar">
+        <datalist id="place-options"></datalist>
+        <button type="button" id="add-place" class="btn btn-secondary btn-small">+ Lugar</button>
+      </div>
 
-  <div class="section-header" data-roles="admin,board,material">
-    <h2>Material prestado</h2>
-    <button id="toggle-new-loan" type="button" class="btn btn-secondary btn-small">+ Préstamo/devolución</button>
-  </div>
-  <div class="table-wrap" data-roles="admin,board,material">
-    <table>
-      <thead>
-        <tr><th>Material</th><th>Pendiente</th><th>Total prestado</th><th></th></tr>
-      </thead>
-      <tbody id="activity-loans-table-body"></tbody>
-    </table>
-  </div>
-  <dialog id="new-loan-dialog" class="panel modal" data-roles="admin,board,material">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Registrar préstamo o devolución</h3>
-    <form id="new-loan-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="loan-type">Tipo</label>
-          <select id="loan-type">
-            <option value="loan">Préstamo</option>
-            <option value="return">Devolución</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="loan-item">Material</label>
-          <input id="loan-item" type="text" list="loan-item-options" autocomplete="off" placeholder="Escribe para buscar…">
-          <datalist id="loan-item-options"></datalist>
-        </div>
-        <div class="field">
-          <label for="loan-user">Socio <span class="optional">(opcional)</span></label>
-          <input id="loan-user" type="text" list="loan-user-options" autocomplete="off" placeholder="Escribe un nombre…">
-          <datalist id="loan-user-options"></datalist>
-        </div>
-        <div class="field" id="loan-quantity-field">
-          <label for="loan-quantity">Cantidad</label>
-          <input id="loan-quantity" type="number" min="1" value="1">
-        </div>
-        <div class="field span-2">
-          <label for="loan-notes">Notas <span class="optional">(opcional)</span></label>
-          <input id="loan-notes" type="text" placeholder="Motivo, contexto…">
-        </div>
+      <div class="section-header">
+        <h2>Participantes</h2>
       </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary btn-small" id="loan-submit">Registrar préstamo</button>
-        <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+      <div class="detail-list" id="participants-list"></div>
+      <div class="role-add-row" id="add-participant-row" hidden>
+        <input type="text" id="participant-search" list="participant-options" autocomplete="off" placeholder="Escribe un nombre…">
+        <datalist id="participant-options"></datalist>
+        <button type="button" id="add-participant" class="btn btn-secondary btn-small">+ Participante</button>
       </div>
-    </form>
-  </dialog>
 
-  <div class="section-header">
-    <h2>Memoria</h2>
-    <button id="toggle-memoria-add" type="button" class="btn btn-secondary btn-small" hidden>+ Añadir a la memoria</button>
-  </div>
-  <div class="detail-list" id="memoria-list"></div>
-  <dialog id="memoria-add-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Añadir a la memoria</h3>
-    <form id="memoria-add-form">
-      <div class="field-grid">
-        <div class="field">
-          <label for="memoria-type">Tipo</label>
-          <select id="memoria-type">
-            <option value="text">Texto</option>
-            <option value="file">Fichero</option>
-          </select>
-        </div>
-        <div class="field span-2">
-          <label for="memoria-title">Título</label>
-          <input id="memoria-title" type="text" required>
-        </div>
-        <div class="field span-2" id="memoria-description-field">
-          <label for="memoria-description">Descripción</label>
-          <textarea id="memoria-description" placeholder="Admite Markdown: **negrita**, *cursiva*, listas, enlaces…"></textarea>
-        </div>
-        <div class="field span-2" id="memoria-file-field" hidden>
-          <label for="memoria-file">Fichero</label>
-          <input id="memoria-file" type="file">
-        </div>
-        <div class="field span-2">
-          <label for="memoria-place">Lugar <span class="optional">(opcional)</span></label>
-          <select id="memoria-place"></select>
-          <p class="hint" id="memoria-place-hint"></p>
-        </div>
+      <div class="section-header">
+        <h2>Invitados</h2>
       </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary btn-small">Añadir</button>
-        <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+      <p class="hint">Personas de fuera del club que van a la actividad. Las invita alguno de los apuntados.</p>
+      <div class="detail-list" id="guests-list"></div>
+      <div class="role-add-row" id="add-guest-row" hidden>
+        <input type="text" id="guest-name" autocomplete="off" maxlength="100" placeholder="Nombre del invitado…" aria-label="Nombre del invitado">
+        <input type="text" id="guest-inviter" list="guest-inviter-options" autocomplete="off" placeholder="Quién lo invita…" aria-label="Quién lo invita" hidden>
+        <datalist id="guest-inviter-options"></datalist>
+        <button type="button" id="add-guest" class="btn btn-secondary btn-small">+ Invitado</button>
       </div>
-    </form>
-  </dialog>
 
-  <dialog id="edit-memoria-dialog" class="panel modal">
-    <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
-    <h3>Editar elemento de la memoria</h3>
-    <form id="edit-memoria-form">
-      <div class="field-grid">
-        <div class="field span-2">
-          <label for="em-title">Título</label>
-          <input id="em-title" type="text" required>
-        </div>
-        <div class="field span-2" id="em-description-field">
-          <label for="em-description">Descripción</label>
-          <textarea id="em-description" placeholder="Admite Markdown: **negrita**, *cursiva*, listas, enlaces…"></textarea>
-        </div>
-        <div class="field span-2">
-          <label for="em-place">Lugar <span class="optional">(opcional)</span></label>
-          <select id="em-place"></select>
-          <p class="hint" id="em-place-hint"></p>
-        </div>
+      <div class="section-header" data-roles="admin,board,material">
+        <h2>Material prestado</h2>
+        <button id="toggle-new-loan" type="button" class="btn btn-secondary btn-small">+ Préstamo/devolución</button>
       </div>
-      <div class="panel-actions">
-        <button type="submit" class="btn btn-primary">Guardar</button>
-        <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+      <div class="table-wrap" data-roles="admin,board,material">
+        <table>
+          <thead>
+            <tr><th>Material</th><th>Pendiente</th><th>Total prestado</th><th></th></tr>
+          </thead>
+          <tbody id="activity-loans-table-body"></tbody>
+        </table>
       </div>
-    </form>
-  </dialog>
+      <dialog id="new-loan-dialog" class="panel modal" data-roles="admin,board,material">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Registrar préstamo o devolución</h3>
+        <form id="new-loan-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="loan-type">Tipo</label>
+              <select id="loan-type">
+                <option value="loan">Préstamo</option>
+                <option value="return">Devolución</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="loan-item">Material</label>
+              <input id="loan-item" type="text" list="loan-item-options" autocomplete="off" placeholder="Escribe para buscar…">
+              <datalist id="loan-item-options"></datalist>
+            </div>
+            <div class="field">
+              <label for="loan-user">Socio <span class="optional">(opcional)</span></label>
+              <input id="loan-user" type="text" list="loan-user-options" autocomplete="off" placeholder="Escribe un nombre…">
+              <datalist id="loan-user-options"></datalist>
+            </div>
+            <div class="field" id="loan-quantity-field">
+              <label for="loan-quantity">Cantidad</label>
+              <input id="loan-quantity" type="number" min="1" value="1">
+            </div>
+            <div class="field span-2">
+              <label for="loan-notes">Notas <span class="optional">(opcional)</span></label>
+              <input id="loan-notes" type="text" placeholder="Motivo, contexto…">
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary btn-small" id="loan-submit">Registrar préstamo</button>
+            <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div class="section-header">
+        <h2>Memoria</h2>
+        <button id="toggle-memoria-add" type="button" class="btn btn-secondary btn-small" hidden>+ Añadir a la memoria</button>
+      </div>
+      <div class="detail-list" id="memoria-list"></div>
+      <dialog id="memoria-add-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Añadir a la memoria</h3>
+        <form id="memoria-add-form">
+          <div class="field-grid">
+            <div class="field">
+              <label for="memoria-type">Tipo</label>
+              <select id="memoria-type">
+                <option value="text">Texto</option>
+                <option value="file">Fichero</option>
+              </select>
+            </div>
+            <div class="field span-2">
+              <label for="memoria-title">Título</label>
+              <input id="memoria-title" type="text" required>
+            </div>
+            <div class="field span-2" id="memoria-description-field">
+              <label for="memoria-description">Descripción</label>
+              <textarea id="memoria-description" placeholder="Admite Markdown: **negrita**, *cursiva*, listas, enlaces…"></textarea>
+            </div>
+            <div class="field span-2" id="memoria-file-field" hidden>
+              <label for="memoria-file">Fichero</label>
+              <input id="memoria-file" type="file">
+            </div>
+            <div class="field span-2">
+              <label for="memoria-place">Lugar <span class="optional">(opcional)</span></label>
+              <select id="memoria-place"></select>
+              <p class="hint" id="memoria-place-hint"></p>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary btn-small">Añadir</button>
+            <button type="button" class="btn btn-secondary btn-small" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="edit-memoria-dialog" class="panel modal">
+        <button type="button" class="modal-close" data-modal-close aria-label="Cerrar">&times;</button>
+        <h3>Editar elemento de la memoria</h3>
+        <form id="edit-memoria-form">
+          <div class="field-grid">
+            <div class="field span-2">
+              <label for="em-title">Título</label>
+              <input id="em-title" type="text" required>
+            </div>
+            <div class="field span-2" id="em-description-field">
+              <label for="em-description">Descripción</label>
+              <textarea id="em-description" placeholder="Admite Markdown: **negrita**, *cursiva*, listas, enlaces…"></textarea>
+            </div>
+            <div class="field span-2">
+              <label for="em-place">Lugar <span class="optional">(opcional)</span></label>
+              <select id="em-place"></select>
+              <p class="hint" id="em-place-hint"></p>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-secondary" data-modal-close>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
 
     </main>
   </div>
