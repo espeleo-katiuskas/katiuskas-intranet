@@ -2030,7 +2030,9 @@ Besides the schema, the migrations leave this data:
   plus ZERO, ASEDEB, FAE, FERM, FMM and "Otra").
 - `areas`: the 195 states of the UN (193 members and 2 observers, by their ISO 3166-1 code) and, for
   Spain, its 19 autonomous communities and cities, 52 provinces and 8,132 municipalities of the INE
-  (1 January 2025), in migration `00062`.
+  (1 January 2025), in migration `00062`; and migration `00074` takes out the province and the
+  municipality that the INE lists for Ceuta and Melilla, which are autonomous cities with nothing
+  below them, so that they are directly below the country: 50 provinces and 8,130 municipalities.
 - `place_geologies`: Caliza, Yeso, Hielo, Lava, Dolomía, Mármol, Sal, Arenisca, Cuarcita,
   Conglomerado and Granito.
 - `place_types`: Cavidad (cave) and Cañón (canyon), fixed, and Vía ferrata, Refugio and Otro
@@ -2151,3 +2153,5 @@ at the end; that database has to be recreated when a new migration appears.
 - `00072_osm_area.sql`: `osm_elements.area_id`, the zone of each element
 - `00073_activity_resource_place_restrict.sql`: the foreign key of the place of a memoria entry,
   which 00065 left without `ON DELETE RESTRICT`, gets it
+- `00074_autonomous_cities.sql`: Ceuta and Melilla, autonomous cities, have no province and no
+  municipality below them: what pointed at those zones moves up to the city, and they are deleted
