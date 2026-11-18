@@ -293,11 +293,23 @@ func TestSyncerWorksOutTheZone(t *testing.T) {
 			feature(`{"type":"Point","coordinates":[10.0,50.0]}`, `{"@type":"node","@id":2,"@version":1,"@timestamp":1700000000,"natural":"cave_entrance","name":"Cueva del Agua"}`),
 		),
 		boundaries: boundary(`{"boundary":"administrative","admin_level":"8","ref:ine":"`+code+`000000"}`,
-			`{"type":"Polygon","coordinates":`+square(-4, 40, -3, 41)+`}`),
+			`{"type":"Polygon","coordinates":`+square(-4, 40, -3, 41)+`}`) +
+			// A municipality the club has no zone for: the sign that its list is behind.
+			boundary(`{"boundary":"administrative","admin_level":"8","ref:ine":"99999000000"}`,
+				`{"type":"Polygon","coordinates":`+square(20, 40, 21, 41)+`}`),
 	}
 	s := osmmirror.NewSyncer(repo, ex)
 	if res, err := s.Sync(ctx, "spain", "x.osm.pbf", false); err != nil || res.Added != 2 {
 		t.Fatalf("first load: %+v %v", res, err)
+	}
+	var unknown int
+	var unknownCodes *string
+	if err := tx.QueryRow(ctx, `SELECT unknown_zones, unknown_zone_codes FROM osm_sync_runs
+		WHERE source = 'spain' ORDER BY id DESC LIMIT 1`).Scan(&unknown, &unknownCodes); err != nil {
+		t.Fatal(err)
+	}
+	if unknown != 1 || unknownCodes == nil || *unknownCodes != "99999" {
+		t.Errorf("the run says one municipality is unknown, 99999: %d %v", unknown, unknownCodes)
 	}
 	var one, two *int64
 	if err := tx.QueryRow(ctx, `SELECT (SELECT area_id FROM osm_elements WHERE osm_id = 1), (SELECT area_id FROM osm_elements WHERE osm_id = 2)`).Scan(&one, &two); err != nil {

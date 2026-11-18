@@ -5807,6 +5807,8 @@ components:
                   changed: { type: integer }
                   deleted: { type: integer }
                   unchanged: { type: integer }
+                  unknown_zones: { type: integer, description: "Municipal boundaries of the last good load that the club has no zone for." }
+                  unknown_zone_codes: { type: string, description: "The first of their INE codes, separated by commas." }
                   stale: { type: boolean, description: "The data is older than max_age_days." }
                   failing: { type: boolean, description: "The latest load failed." }
 

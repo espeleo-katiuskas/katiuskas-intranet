@@ -25,6 +25,10 @@ func NewRepository(pool db.PGX) *Repository { return &Repository{pool: pool} }
 // Result counts what a load did.
 type Result struct {
 	Added, Changed, Deleted, Unchanged int
+	// UnknownZones is how many municipal boundaries of the extract the club has no zone for, and
+	// UnknownZoneCodes the first of their codes, separated by commas.
+	UnknownZones     int
+	UnknownZoneCodes string
 }
 
 // ContentHash is a hash of what an element is as far as the mirror is concerned: its tags, its point, its
@@ -235,8 +239,8 @@ func (r *Repository) FinishRun(ctx context.Context, id int64, res Result, runErr
 	}
 	_, err := r.pool.Exec(ctx, `
 		UPDATE osm_sync_runs SET finished_at = now(), status = $2, added = $3, changed = $4, deleted = $5,
-			unchanged = $6, error = $7 WHERE id = $1
-	`, id, status, res.Added, res.Changed, res.Deleted, res.Unchanged, msg)
+			unchanged = $6, error = $7, unknown_zones = $8, unknown_zone_codes = NULLIF($9, '') WHERE id = $1
+	`, id, status, res.Added, res.Changed, res.Deleted, res.Unchanged, msg, res.UnknownZones, res.UnknownZoneCodes)
 	return err
 }
 

@@ -48,7 +48,7 @@ func TestAssignZones(t *testing.T) {
 	}
 	// The zones of the club, by INE code; 28034 is on the map but not in the catalogue.
 	resolve := osmmirror.MunicipalityResolver(map[string]int64{"28030": 30, "28031": 31, "28032": 32, "28033": 33})
-	n, err := osmmirror.AssignZones(strings.NewReader(in), elements, resolve)
+	res, err := osmmirror.AssignZones(strings.NewReader(in), elements, resolve)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,13 +58,16 @@ func TestAssignZones(t *testing.T) {
 			t.Errorf("element %d: expected zone %d, got %d", i, w, elements[i].AreaID)
 		}
 	}
-	if n != 4 {
-		t.Errorf("4 elements with a municipality expected, got %d", n)
+	if res.Assigned != 4 {
+		t.Errorf("4 elements with a municipality expected, got %d", res.Assigned)
+	}
+	if len(res.Unknown) != 1 || res.Unknown[0] != "28034" {
+		t.Errorf("only 28034 is a municipality the club does not know, got %v", res.Unknown)
 	}
 	if _, err := osmmirror.AssignZones(strings.NewReader("\x1e{not json}\n"), elements, resolve); err == nil {
 		t.Error("expected an error for a line that is not JSON")
 	}
-	if n, err := osmmirror.AssignZones(strings.NewReader(""), []osmmirror.Element{at(1, 1)}, resolve); err != nil || n != 0 {
-		t.Errorf("no boundaries, no zones: %d %v", n, err)
+	if n, err := osmmirror.AssignZones(strings.NewReader(""), []osmmirror.Element{at(1, 1)}, resolve); err != nil || n.Assigned != 0 || len(n.Unknown) != 0 {
+		t.Errorf("no boundaries, no zones: %v %v", n, err)
 	}
 }

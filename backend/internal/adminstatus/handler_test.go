@@ -394,16 +394,18 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 		OSMMaxAge: 14 * 24 * time.Hour,
 	}
 	type source struct {
-		Source        string `json:"source"`
-		Elements      int    `json:"elements"`
-		Gone          int    `json:"gone"`
-		LastRunStatus string `json:"last_run_status"`
-		LastError     string `json:"last_error"`
-		DataAgeDays   int    `json:"data_age_days"`
-		Added         int    `json:"added"`
-		Changed       int    `json:"changed"`
-		Stale         bool   `json:"stale"`
-		Failing       bool   `json:"failing"`
+		Source           string `json:"source"`
+		Elements         int    `json:"elements"`
+		Gone             int    `json:"gone"`
+		LastRunStatus    string `json:"last_run_status"`
+		LastError        string `json:"last_error"`
+		DataAgeDays      int    `json:"data_age_days"`
+		Added            int    `json:"added"`
+		Changed          int    `json:"changed"`
+		UnknownZones     int    `json:"unknown_zones"`
+		UnknownZoneCodes string `json:"unknown_zone_codes"`
+		Stale            bool   `json:"stale"`
+		Failing          bool   `json:"failing"`
 	}
 	type answer struct {
 		Problems []string `json:"problems"`
@@ -459,6 +461,8 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 		}
 		day := 24 * time.Hour
 		run("spain", "ok", 3*day, 3*day, 2, 1, "")
+		exec(t, tx, `UPDATE osm_sync_runs SET unknown_zones = 2, unknown_zone_codes = '28999,41999'
+			WHERE source = 'spain'`)
 		run("canary-islands", "ok", 20*day, 20*day, 4, 0, "")
 		run("canary-islands", "failed", 1*day, 1*day, 0, 0, "download: status 503")
 	})
@@ -472,6 +476,9 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 	if spain.Elements != 2 || spain.Gone != 1 || spain.LastRunStatus != "ok" || spain.Added != 2 || spain.Changed != 1 ||
 		spain.DataAgeDays != 3 || spain.Stale || spain.Failing {
 		t.Errorf("spain went well: %+v", spain)
+	}
+	if spain.UnknownZones != 2 || spain.UnknownZoneCodes != "28999,41999" || canary.UnknownZones != 0 {
+		t.Errorf("spain has two municipalities the club does not know, and is no problem: %+v", spain)
 	}
 	if canary.Elements != 1 || canary.LastRunStatus != "failed" || canary.LastError != "download: status 503" ||
 		canary.DataAgeDays != 20 || canary.Added != 4 || !canary.Stale || !canary.Failing {

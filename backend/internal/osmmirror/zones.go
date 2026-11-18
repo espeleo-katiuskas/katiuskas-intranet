@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 )
 
 // The zone of each element: the one whose boundary holds its point (a municipality, in Spain). The
@@ -23,36 +24,47 @@ func cellOf(lon, lat float64) cell {
 	return cell{int(math.Floor(lon / zoneCell)), int(math.Floor(lat / zoneCell))}
 }
 
-// ZoneResolver says which zone a boundary is, from its tags: the id of a zone of the club, or 0 if it is not
-// the boundary of any. It is where the rule of each country lives; MunicipalityResolver is Spain's.
-type ZoneResolver func(tags map[string]any) int64
+// ZoneResolver says what a boundary is, from its tags: `code`, its code in the system of its country ("" if it is
+// not a boundary that this rule takes for a zone), and `zone`, the id of the zone of the club that has that code
+// (0 if the club has none: the boundary is known but the catalogue is behind, which AssignZones reports). It is
+// where the rule of each country lives; MunicipalityResolver is Spain's.
+type ZoneResolver func(tags map[string]any) (zone int64, code string)
 
 // MunicipalityResolver is the rule of Spain: a boundary tagged `boundary=administrative` and `admin_level=8`
 // with a `ref:ine` is the municipality whose code (the first five digits of the reference, whose eleven are the
-// municipality followed by the entity) is in ids, the zones of kind Municipio by their code. Another country
-// would add a rule of its own (its own reference, its own level) once its zones are in the catalogue.
+// municipality followed by the entity) is in ids, the zones of kind Municipio by their code and the autonomous
+// cities by the code of their municipality. Another country would add a rule of its own (its own reference, its
+// own level) once its zones are in the catalogue.
 func MunicipalityResolver(ids map[string]int64) ZoneResolver {
-	return func(tags map[string]any) int64 {
+	return func(tags map[string]any) (int64, string) {
 		if tags["boundary"] != "administrative" || tags["admin_level"] != "8" {
-			return 0
+			return 0, ""
 		}
 		ref, _ := tags["ref:ine"].(string)
 		if len(ref) < 5 {
-			return 0
+			return 0, ""
 		}
 		for _, r := range ref[:5] {
 			if r < '0' || r > '9' {
-				return 0
+				return 0, ""
 			}
 		}
-		return ids[ref[:5]]
+		return ids[ref[:5]], ref[:5]
 	}
+}
+
+// ZoneResult is what AssignZones did: how many elements got a zone, and the codes of the boundaries that the rule
+// knew but the club has no zone for, sorted and without repeats.
+type ZoneResult struct {
+	Assigned int
+	Unknown  []string
 }
 
 // AssignZones reads the polygons that `osmium export -f geojsonseq` wrote (one feature per line) and sets the
 // AreaID of the elements whose point is inside the polygon of a boundary that `resolve` knows: the first that
-// holds it. It gives how many it set. Elements in no zone are left with none.
-func AssignZones(r io.Reader, elements []Element, resolve ZoneResolver) (int, error) {
+// holds it. It gives how many it set, and the codes of the boundaries that have no zone in the club. Elements in
+// no zone are left with none.
+func AssignZones(r io.Reader, elements []Element, resolve ZoneResolver) (ZoneResult, error) {
 	grid := map[cell][]int{}
 	for i := range elements {
 		c := cellOf(elements[i].Lon, elements[i].Lat)
@@ -65,7 +77,8 @@ func AssignZones(r io.Reader, elements []Element, resolve ZoneResolver) (int, er
 		} `json:"geometry"`
 		Properties map[string]any `json:"properties"`
 	}
-	assigned := 0
+	result := ZoneResult{}
+	unknown := map[string]bool{}
 	br := bufio.NewReaderSize(r, 1<<20)
 	for line := 1; ; line++ {
 		raw, err := br.ReadBytes('\n')
@@ -73,23 +86,32 @@ func AssignZones(r io.Reader, elements []Element, resolve ZoneResolver) (int, er
 		if len(raw) > 0 {
 			var f feature
 			if jsonErr := json.Unmarshal(raw, &f); jsonErr != nil {
-				return assigned, fmt.Errorf("boundary line %d: %w", line, jsonErr)
+				return result, fmt.Errorf("boundary line %d: %w", line, jsonErr)
 			}
-			if zone := resolve(f.Properties); zone != 0 {
+			zone, code := resolve(f.Properties)
+			switch {
+			case zone != 0:
 				polygons, convErr := polygonsOf(f.Geometry.Type, f.Geometry.Coordinates)
 				if convErr != nil {
-					return assigned, fmt.Errorf("boundary line %d: %w", line, convErr)
+					return result, fmt.Errorf("boundary line %d: %w", line, convErr)
 				}
-				assigned += assignIn(polygons, zone, elements, grid)
+				result.Assigned += assignIn(polygons, zone, elements, grid)
+			case code != "":
+				unknown[code] = true // A boundary of a municipality that the club has no zone for.
 			}
 		}
 		if err == io.EOF {
-			return assigned, nil
+			break
 		}
 		if err != nil {
-			return assigned, err
+			return result, err
 		}
 	}
+	for code := range unknown {
+		result.Unknown = append(result.Unknown, code)
+	}
+	sort.Strings(result.Unknown)
+	return result, nil
 }
 
 // polygonsOf reads the coordinates of a Polygon or a MultiPolygon.

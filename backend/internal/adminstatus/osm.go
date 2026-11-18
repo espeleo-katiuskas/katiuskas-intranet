@@ -31,6 +31,10 @@ type osmSourceStatus struct {
 	Changed       int        `json:"changed"`
 	Deleted       int        `json:"deleted"`
 	Unchanged     int        `json:"unchanged"`
+	// UnknownZones is how many municipal boundaries of the extract the club has no zone for (the sign that
+	// its list of municipalities is behind), and UnknownZoneCodes the first of their codes. Not a problem.
+	UnknownZones     int    `json:"unknown_zones"`
+	UnknownZoneCodes string `json:"unknown_zone_codes,omitempty"`
 	// Stale says the data is older than the limit; Failing, that the latest load failed.
 	Stale   bool `json:"stale"`
 	Failing bool `json:"failing"`
@@ -49,7 +53,8 @@ type osmStatus struct {
 func (h *Handler) osmStatus(ctx context.Context) *osmStatus {
 	rows, err := h.pool.Query(ctx, `
 		WITH last_ok AS (
-			SELECT DISTINCT ON (source) source, source_timestamp, finished_at, added, changed, deleted, unchanged
+			SELECT DISTINCT ON (source) source, source_timestamp, finished_at, added, changed, deleted, unchanged,
+				unknown_zones, unknown_zone_codes
 			FROM osm_sync_runs WHERE status = 'ok' ORDER BY source, started_at DESC, id DESC
 		), last_run AS (
 			SELECT DISTINCT ON (source) source, started_at, status, error
@@ -62,7 +67,8 @@ func (h *Handler) osmStatus(ctx context.Context) *osmStatus {
 		SELECT s.source, coalesce(c.elements, 0), coalesce(c.gone, 0),
 			r.started_at, r.status, coalesce(r.error, ''),
 			o.finished_at, o.source_timestamp,
-			coalesce(o.added, 0), coalesce(o.changed, 0), coalesce(o.deleted, 0), coalesce(o.unchanged, 0)
+			coalesce(o.added, 0), coalesce(o.changed, 0), coalesce(o.deleted, 0), coalesce(o.unchanged, 0),
+			coalesce(o.unknown_zones, 0), coalesce(o.unknown_zone_codes, '')
 		FROM (SELECT source FROM osm_sync_runs UNION SELECT source FROM osm_elements) s
 		LEFT JOIN counts c ON c.source = s.source
 		LEFT JOIN last_run r ON r.source = s.source
@@ -80,7 +86,8 @@ func (h *Handler) osmStatus(ctx context.Context) *osmStatus {
 		var s osmSourceStatus
 		var runStatus *string
 		if err := rows.Scan(&s.Source, &s.Elements, &s.Gone, &s.LastRunAt, &runStatus, &s.LastError,
-			&s.LastOKAt, &s.DataTimestamp, &s.Added, &s.Changed, &s.Deleted, &s.Unchanged); err != nil {
+			&s.LastOKAt, &s.DataTimestamp, &s.Added, &s.Changed, &s.Deleted, &s.Unchanged,
+			&s.UnknownZones, &s.UnknownZoneCodes); err != nil {
 			slog.Warn("admin status: cannot read the OpenStreetMap mirror", "error", err)
 			return nil
 		}

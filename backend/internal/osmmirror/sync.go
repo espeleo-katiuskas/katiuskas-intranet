@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -97,22 +98,32 @@ func (s *Syncer) readRoutes(ctx context.Context, file string) ([]Element, error)
 	return ReadRoutes(f)
 }
 
-func (s *Syncer) assignZones(ctx context.Context, file string, elements []Element) (int, error) {
+func (s *Syncer) assignZones(ctx context.Context, file string, elements []Element) (ZoneResult, error) {
 	path, cleanup, err := s.Extractor.ExportBoundaries(ctx, file)
 	if err != nil {
-		return 0, err
+		return ZoneResult{}, err
 	}
 	defer cleanup()
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, err
+		return ZoneResult{}, err
 	}
 	defer f.Close()
 	ids, err := s.Repo.MunicipalityIDs(ctx)
 	if err != nil {
-		return 0, err
+		return ZoneResult{}, err
 	}
 	return AssignZones(f, elements, MunicipalityResolver(ids))
+}
+
+// maxUnknownCodes is how many codes of boundaries without a zone a load keeps in its row.
+const maxUnknownCodes = 20
+
+func firstOf(codes []string) []string {
+	if len(codes) > maxUnknownCodes {
+		return codes[:maxUnknownCodes]
+	}
+	return codes
 }
 
 func (s *Syncer) load(ctx context.Context, name, file string, force bool) (Result, error) {
@@ -139,7 +150,11 @@ func (s *Syncer) load(ctx context.Context, name, file string, force bool) (Resul
 	if err != nil {
 		return Result{}, fmt.Errorf("work out the zones of %s: %w", name, err)
 	}
-	slog.Info("zones", "source", name, "elements", len(elements), "with_zone", zones)
+	slog.Info("zones", "source", name, "elements", len(elements), "with_zone", zones.Assigned)
+	if len(zones.Unknown) > 0 {
+		slog.Warn("municipal boundaries with no zone in the catalogue: its list of municipalities is behind",
+			"source", name, "count", len(zones.Unknown), "codes", strings.Join(firstOf(zones.Unknown), ","))
+	}
 	if !force {
 		before, err := s.Repo.Active(ctx, name)
 		if err != nil {
@@ -149,5 +164,8 @@ func (s *Syncer) load(ctx context.Context, name, file string, force bool) (Resul
 			return Result{}, fmt.Errorf("%w: %d found, %d in the mirror (use force if it is right)", ErrTooFew, len(elements), before)
 		}
 	}
-	return s.Repo.Apply(ctx, name, elements)
+	res, err := s.Repo.Apply(ctx, name, elements)
+	res.UnknownZones = len(zones.Unknown)
+	res.UnknownZoneCodes = strings.Join(firstOf(zones.Unknown), ",")
+	return res, err
 }
