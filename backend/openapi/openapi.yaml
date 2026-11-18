@@ -4661,10 +4661,11 @@ paths:
             missing_attribute (a required attribute of the type has no value) or
             invalid_attribute (an attribute that is not the type's, given twice, an option of
             another attribute, or a value of the wrong kind).
-        "409": >
-          duplicate_item_code — another item already has that code; or duplicate_material —
-          another item is exactly the same (same type, brand, model, code, description and
-          attributes: more units of it are a stock of more than one, added with an acquisition).
+        "409":
+          description: >
+            duplicate_item_code — another item already has that code; or duplicate_material —
+            another item is exactly the same (same type, brand, model, code, description and
+            attributes: more units of it are a stock of more than one, added with an acquisition).
 
   /material/items/{id}:
     put:
