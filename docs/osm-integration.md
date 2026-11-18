@@ -79,7 +79,10 @@ country needs a rule of its own and its zones in the catalogue. Country polygons
 fallback and cannot be used: in an extract that cuts it, the relation of a country is not a closed
 polygon (only Andorra's was built). The column is `ON DELETE SET NULL`, the one foreign key that is
 not `RESTRICT` (a test names it and says why): the value is derived, so deleting a zone must not be
-stopped by it, and merging two moves the elements.
+stopped by it, and merging two moves the elements. A boundary whose INE code the club has no zone
+for (a new municipality, a merger) is counted by each load and shown in `/admin`: the signal that
+the list of municipalities needs updating, which is done by hand, about once a year, with
+`scripts/generate-areas-seed.py` and a new migration.
 
 **The two sides of a linked place are shown, not merged.** The OSM value is shown as OSM says it,
 the club's value wins in the club's own pages, and nothing is copied except by a person pressing

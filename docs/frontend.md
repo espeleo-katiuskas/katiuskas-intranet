@@ -433,7 +433,9 @@ OpenStreetMap" (`osmGroup` in `admin.js`, from `osm` of `GET /admin/status`): th
 and, for each extract (España con las Baleares, Ceuta y Melilla; Islas Canarias), how many it holds
 (and how many are no longer in OpenStreetMap), the date of its data and how old it is (in bold when
 it is older than the limit), the last good load and what it did, and, if the latest load failed,
-when and why. A mirror never loaded says so. The same two problems (a failed load, old data) are in
+when and why. If the last good load found municipal boundaries the club has no zone for, a line
+says how many and which (INE codes): the list of municipalities needs updating. A mirror never
+loaded says so. The same two problems (a failed load, old data) are in
 the list "Hay problemas" at the top.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which

@@ -1387,11 +1387,13 @@ Nested fields:
   knows and `max_age_days` how old the data may be before it is a problem (0: not checked). Each
   source (one of the extracts it is loaded from, `spain`, `canary-islands`) is `{source, elements,
   gone, last_run_at, last_run_status, last_error, last_ok_at, data_timestamp, data_age_days, added,
-  changed, deleted, unchanged, stale, failing}`: the elements it holds and those that are no longer
-  in OpenStreetMap, the latest load whatever came of it (when, `ok`, `failed` or `running`, and the
-  error), and the latest load that went well (when it ended, the date of its data, how old that is,
-  and what it did); `stale` says the data is older than the limit and `failing` that the latest load
-  failed. `sources` is empty if the mirror was never loaded; `osm` is left out if it cannot be read
+  changed, deleted, unchanged, unknown_zones, unknown_zone_codes, stale, failing}`: the elements it
+  holds and those that are no longer in OpenStreetMap, the latest load whatever came of it (when,
+  `ok`, `failed` or `running`, and the error), and the latest load that went well (when it ended,
+  the date of its data, how old that is, and what it did, and how many municipal boundaries it found
+  that the club has no zone for, with the first of their INE codes: the list of municipalities is
+  behind, which is not a problem); `stale` says the data is older than the limit and `failing` that
+  the latest load failed. `sources` is empty if the mirror was never loaded; `osm` is left out if it cannot be read
 - `activity`: `{users, requests}`, each `{last_hour, last_day, last_month}`; left out if it cannot
   be read. `users` counts the different people with a session used in the period (a session counts
   in the period of its last use only; an administrator acting as somebody else does not count) and

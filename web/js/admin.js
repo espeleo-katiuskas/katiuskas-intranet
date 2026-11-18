@@ -610,6 +610,12 @@ function osmGroup(osm) {
     if (source.failing) {
       html += `<br><strong>La última carga falló</strong> (${escapeHtml(ago(source.last_run_at))})${source.last_error ? `: ${escapeHtml(source.last_error)}` : ''}`;
     }
+    if (source.unknown_zones > 0) {
+      const codes = source.unknown_zone_codes
+        ? ` (${source.unknown_zone_codes.replaceAll(',', ', ')})`
+        : '';
+      html += `<br>${escapeHtml(`${count(source.unknown_zones, 'municipio de OpenStreetMap no está', 'municipios de OpenStreetMap no están')} en las zonas del club${codes}: hay que actualizar la lista de municipios`)}`;
+    }
     rows.push([OSM_SOURCE_LABELS[source.source] ?? source.source, html]);
   }
   return statusGroup('Mirror de OpenStreetMap', rows);

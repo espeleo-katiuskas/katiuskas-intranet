@@ -1346,8 +1346,14 @@ NULL`: derived data, worked out again on the next load, so deleting a zone is no
 `areas.Repository.Merge` moves the elements to the zone that stays); the names of the zone and of
 the one above it are joined only when it is read (`whereJoin`: `Point.Where` in a search and
 `Detail.Where`). A failure to read the boundaries fails the load, since storing the elements without
-it would erase every zone. About 2 % of the elements are in no municipality (the coast, Gibraltar,
-Ceuta, the Basque condominiums).
+it would erase every zone. A boundary that the resolver recognizes (it has a code) but whose code
+the club has no zone for is counted: `AssignZones` returns it in `ZoneResult.Unknown`, the load logs
+a warning and stores the count and the first twenty codes in its row (`osm_sync_runs.unknown_zones`,
+`unknown_zone_codes`), and the status of the system shows them (not as a problem: the elements are
+just left without a zone). It is how the club learns that its list of municipalities is behind (a
+new municipality, a merger); the list is updated by hand, once a year or so, with
+`scripts/generate-areas-seed.py` and a new migration. About 2 % of the elements are in no
+municipality (the coast, Gibraltar, Ceuta, the Basque condominiums).
 
 **Searching by name.** `GET /osm/search?q=` (`Service.Search`, `Repository.SearchByWords`) is how a
 person finds the cave they know the name of, to make a place of it. The text is normalized with

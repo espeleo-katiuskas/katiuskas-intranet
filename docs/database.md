@@ -1457,11 +1457,15 @@ that a load that fails is in the log with its error.
 | `status` | text | no | `running` |
 | `added`, `changed`, `deleted`, `unchanged` | integer | no | 0 |
 | `error` | text | yes |  |
+| `unknown_zones` | integer | no | 0 |
+| `unknown_zone_codes` | text | yes |  |
 
-`source_timestamp` is the date of the data in the extract (its replication timestamp): a load
-whose extract is not newer than the one of the last successful load of the same source does
-nothing. `status` is `running`, `ok` or `failed`. Index `idx_osm_sync_runs_source` on `(source,
-started_at DESC)`.
+`unknown_zones` is how many municipal boundaries of the extract have no zone in the club's
+catalogue, and `unknown_zone_codes` the first twenty of their INE codes, separated by commas: the
+sign that the list of municipalities is behind OpenStreetMap's. `source_timestamp` is the date of
+the data in the extract (its replication timestamp): a load whose extract is not newer than the one
+of the last successful load of the same source does nothing. `status` is `running`, `ok` or
+`failed`. Index `idx_osm_sync_runs_source` on `(source, started_at DESC)`.
 
 ## Distributions
 
@@ -2155,3 +2159,5 @@ at the end; that database has to be recreated when a new migration appears.
   which 00065 left without `ON DELETE RESTRICT`, gets it
 - `00074_autonomous_cities.sql`: Ceuta and Melilla, autonomous cities, have no province and no
   municipality below them: what pointed at those zones moves up to the city, and they are deleted
+- `00075_osm_unknown_zones.sql`: `osm_sync_runs.unknown_zones` and `unknown_zone_codes`, the
+  municipal boundaries of a load that the club has no zone for
