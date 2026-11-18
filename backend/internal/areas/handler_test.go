@@ -242,8 +242,8 @@ func TestSeed(t *testing.T) {
 	if n := count(`SELECT count(*) FROM areas WHERE parent_id = $1 AND kind IN ('Comunidad autónoma', 'Ciudad autónoma')`, e.spain); n != 19 {
 		t.Errorf("expected the 19 communities and cities of Spain, got %d", n)
 	}
-	if n := count(`SELECT count(*) FROM areas p JOIN areas c ON c.id = p.parent_id WHERE p.kind = 'Provincia' AND c.parent_id = $1`, e.spain); n != 52 {
-		t.Errorf("expected the 52 provinces, each in a community, got %d", n)
+	if n := count(`SELECT count(*) FROM areas p JOIN areas c ON c.id = p.parent_id WHERE p.kind = 'Provincia' AND c.parent_id = $1`, e.spain); n != 50 {
+		t.Errorf("expected the 50 provinces, each in a community (Ceuta and Melilla have none), got %d", n)
 	}
 	if n := count(`SELECT count(*) FROM areas WHERE kind = 'Municipio'`); n < 8100 || n > 8200 {
 		t.Errorf("expected about 8,130 municipalities, got %d", n)
@@ -689,6 +689,18 @@ func TestLocate(t *testing.T) {
 		t.Errorf("the municipality, with its ancestors: %+v", got.Area)
 	}
 
+	// Ceuta and Melilla are autonomous cities with nothing below them: the municipality that the geocoder
+	// names (51001, 52001) is the city, directly below the country.
+	for municipality, name := range map[string]string{"51001": "Ceuta", "52001": "Melilla"} {
+		e.boundaries.answer = areas.Containing{CountryCode: "ES", MunicipalityCode: municipality}
+		got := decode[answer](t, locate("lat=35.89&lon=-5.32"))
+		if got.Area == nil || got.Area.Name != name || got.Area.Kind != "Ciudad autónoma" || len(got.Area.Ancestors) != 1 ||
+			got.Area.Ancestors[0].ID != e.spain {
+			t.Errorf("%s is an autonomous city below the country: %+v", municipality, got.Area)
+		}
+	}
+	e.boundaries.answer = areas.Containing{CountryCode: "ES", MunicipalityCode: valdemancoCode}
+
 	// A municipality the seed does not have: the country.
 	e.boundaries.answer = areas.Containing{CountryCode: "PT", MunicipalityCode: "99999"}
 	if got := decode[answer](t, locate("lat=39&lon=-8")); got.Area == nil || got.Area.ID != e.portugal {
@@ -773,5 +785,43 @@ func TestGeocode(t *testing.T) {
 	status(t, rec, http.StatusOK)
 	if got := decode[[]areas.Place](t, rec); len(got) != 0 {
 		t.Errorf("no source, nothing found: %+v", got)
+	}
+}
+
+// Ceuta and Melilla are autonomous cities: in law there is nothing between them and the country, nor below them
+// (migration 00074 took out the province and the municipality that the INE lists for each).
+func TestAutonomousCitiesHaveNothingBelow(t *testing.T) {
+	e := newEnv(t)
+	rows, err := e.tx.Query(context.Background(), `
+		SELECT c.name, c.parent_id, (SELECT count(*) FROM areas k WHERE k.parent_id = c.id)
+		FROM areas c WHERE c.kind = 'Ciudad autónoma' ORDER BY c.name`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		var parent *int64
+		var children int
+		if err := rows.Scan(&name, &parent, &children); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
+		if parent == nil || *parent != e.spain || children != 0 {
+			t.Errorf("%s is directly below the country and has nothing below: parent %v, %d children", name, parent, children)
+		}
+	}
+	if len(names) != 2 || names[0] != "Ceuta" || names[1] != "Melilla" {
+		t.Errorf("Ceuta and Melilla are the autonomous cities: %v", names)
+	}
+	var provinces, municipalities int
+	if err := e.tx.QueryRow(context.Background(), `
+		SELECT count(*) FILTER (WHERE kind = 'Provincia'), count(*) FILTER (WHERE kind = 'Municipio')
+		FROM areas`).Scan(&provinces, &municipalities); err != nil {
+		t.Fatal(err)
+	}
+	if provinces != 50 || municipalities != 8130 {
+		t.Errorf("50 provinces and 8,130 municipalities are left, got %d and %d", provinces, municipalities)
 	}
 }

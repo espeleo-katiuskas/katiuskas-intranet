@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/areas"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 )
 
@@ -421,7 +422,8 @@ func (r *Repository) SearchByWords(ctx context.Context, words, categories []stri
 }
 
 // MunicipalityIDs is the zones of kind Municipio by their code (the INE code, five digits), which is what a
-// boundary of Spain says in its `ref:ine`.
+// boundary of Spain says in its `ref:ine`, and the autonomous cities (Ceuta and Melilla, which have no
+// municipality below them) by the INE code of their municipality (51001, 52001).
 func (r *Repository) MunicipalityIDs(ctx context.Context) (map[string]int64, error) {
 	rows, err := r.pool.Query(ctx, `SELECT code, id FROM areas WHERE kind = 'Municipio' AND code IS NOT NULL`)
 	if err != nil {
@@ -436,6 +438,32 @@ func (r *Repository) MunicipalityIDs(ctx context.Context) (map[string]int64, err
 			return nil, err
 		}
 		ids[code] = id
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	cities, err := r.pool.Query(ctx, `SELECT code, id FROM areas WHERE kind = 'Ciudad autónoma' AND code IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer cities.Close()
+	cityIDs := map[string]int64{}
+	for cities.Next() {
+		var code string
+		var id int64
+		if err := cities.Scan(&code, &id); err != nil {
+			return nil, err
+		}
+		cityIDs[code] = id
+	}
+	if err := cities.Err(); err != nil {
+		return nil, err
+	}
+	for municipality, city := range areas.AutonomousCityCodes {
+		if id, ok := cityIDs[city]; ok {
+			ids[municipality] = id
+		}
 	}
 	return ids, rows.Err()
 }

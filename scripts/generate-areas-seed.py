@@ -13,7 +13,10 @@ Sources (both free to reuse with attribution):
   of which only the 195 states of the UN are seeded (see UN_STATES).
 
 The migration is the result, not this script: it is here to say where the data comes from and to make
-the next edition of the INE list easy to bring in (as a new migration).
+the next edition of the INE list easy to bring in (as a new migration). The INE lists Ceuta and Melilla
+as provinces with one municipality each, but they are autonomous cities with nothing below them:
+migration 00074 took those two levels out of what this script wrote, so a new edition has to leave
+them out too.
 
 norm_name must be what `areas.Normalize` gives in Go for the same name (a test checks it).
 """

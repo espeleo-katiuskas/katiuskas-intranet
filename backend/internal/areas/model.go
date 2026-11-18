@@ -105,3 +105,9 @@ func Normalize(name string) string {
 	}
 	return strings.TrimSuffix(b.String(), " ")
 }
+
+// AutonomousCityCodes says which zone of kind "Ciudad autónoma" is the municipality that has each INE code:
+// Ceuta (51001) and Melilla (52001) are autonomous cities, with no province and no municipality below, so
+// OpenStreetMap and Nominatim name their municipality (51001, 52001) and the zone is the city, whose code
+// (18, 19) is the one of the community.
+var AutonomousCityCodes = map[string]string{"51001": "18", "52001": "19"}

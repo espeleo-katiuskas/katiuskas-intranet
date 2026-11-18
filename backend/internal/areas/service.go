@@ -46,7 +46,8 @@ func (s *Service) Geocode(ctx context.Context, text string) ([]Place, error) {
 }
 
 // Locate is the zone that a point is in, with its ancestors, or nil if there is none to say: the
-// municipality when it is a Spanish one the seed knows (by INE code), else the country. It asks an
+// municipality when it is a Spanish one the seed knows (by INE code; Ceuta and Melilla, which have none, give
+// the autonomous city), else the country. It asks an
 // outside source (ErrLocateUnavailable when that fails), so it is a help to propose a zone, never a
 // fact.
 func (s *Service) Locate(ctx context.Context, lat, lon float64) (*Area, error) {
@@ -60,10 +61,15 @@ func (s *Service) Locate(ctx context.Context, lat, lon float64) (*Area, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, candidate := range []struct{ kind, code string }{
+	candidates := []struct{ kind, code string }{
 		{"Municipio", found.MunicipalityCode},
 		{"", found.CountryCode},
-	} {
+	}
+	if city, ok := AutonomousCityCodes[found.MunicipalityCode]; ok {
+		// Ceuta and Melilla have no municipality below them: the zone is the city itself.
+		candidates = append([]struct{ kind, code string }{{"Ciudad autónoma", city}}, candidates...)
+	}
+	for _, candidate := range candidates {
 		if candidate.code == "" {
 			continue
 		}

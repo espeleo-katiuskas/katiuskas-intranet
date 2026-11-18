@@ -367,3 +367,35 @@ func TestDeletingAZoneEmptiesTheElementsInIt(t *testing.T) {
 		t.Errorf("the element is in no zone now: %v %v", left, err)
 	}
 }
+
+// The zones that a boundary of Spain can be: the municipalities by their INE code, and Ceuta and Melilla, which
+// are autonomous cities with no municipality below them, by the code of their municipality.
+func TestMunicipalityIDs(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := osmmirror.NewRepository(tx)
+	ctx := context.Background()
+	ids, err := repo.MunicipalityIDs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var valdemanco, ceuta, melilla int64
+	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&valdemanco); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE kind = 'Ciudad autónoma' AND name = 'Ceuta'`).Scan(&ceuta); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE kind = 'Ciudad autónoma' AND name = 'Melilla'`).Scan(&melilla); err != nil {
+		t.Fatal(err)
+	}
+	var code string
+	if err := tx.QueryRow(ctx, `SELECT code FROM areas WHERE id = $1`, valdemanco).Scan(&code); err != nil {
+		t.Fatal(err)
+	}
+	if ids[code] != valdemanco || ids["51001"] != ceuta || ids["52001"] != melilla {
+		t.Errorf("Valdemanco %d, Ceuta %d and Melilla %d expected: %d %d %d", valdemanco, ceuta, melilla, ids[code], ids["51001"], ids["52001"])
+	}
+	if len(ids) != 8130+2 {
+		t.Errorf("8,130 municipalities and the 2 cities expected, got %d", len(ids))
+	}
+}
