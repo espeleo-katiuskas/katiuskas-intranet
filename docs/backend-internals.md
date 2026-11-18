@@ -1072,8 +1072,11 @@ a failure is 502 `search_unavailable`, and the answers are kept 24 hours by the 
 request that would wait longer than the timeout for its turn fails at once instead of lengthening
 the queue, so one person who sends many cannot hold everybody else up.
 
-**Adding.** Any member adds a zone below another; an admin also adds a country (`POST /areas` with
-no `parent_id`: 403 `area_root_admin_only` for anybody else, and the kind is "País" unless given).
+**Adding.** Any member adds a zone below another, except in Spain; an admin also adds a country
+(`POST /areas` with no `parent_id`: 403 `area_root_admin_only` for anybody else, and the kind is
+"País" unless given). A zone below Spain at any depth (`Service.Create` finds the country at the
+top of the parent's ancestors and compares it with the one whose code is `ES`) is only added by an
+admin (403 `area_spain_admin_only`): those come from the INE's lists, loaded by migrations.
 The `kind` is the one most of its siblings have, unless it is given, and the first zone below
 another needs it said (400 `area_kind_required`). Nothing else is checked, so a typo is possible:
 that is what an admin fixes.

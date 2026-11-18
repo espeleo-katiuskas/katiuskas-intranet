@@ -186,7 +186,8 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 // add creates a zone below another as the member and returns it.
 func (e *env) add(parent int64, name, kind string) areas.Area {
 	e.t.Helper()
-	rec := e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": parent, "name": name, "kind": kind})
+	// Added by an admin: the zones of Spain are only added by one (TestOnlyAnAdminAddsZonesInSpain).
+	rec := e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"parent_id": parent, "name": name, "kind": kind})
 	status(e.t, rec, http.StatusCreated)
 	return decode[areas.Area](e.t, rec)
 }
@@ -319,7 +320,8 @@ func TestPermissions(t *testing.T) {
 		{"GET", "/api/v1/areas?search=madrid", nil},
 		{"GET", areaPath(victim), nil},
 	}
-	adders := []call{{"POST", "/api/v1/areas", map[string]any{"parent_id": e.madrid, "name": "Otro más"}}}
+	// Outside Spain: the zones of Spain are only added by an admin.
+	adders := []call{{"POST", "/api/v1/areas", map[string]any{"parent_id": e.portugal, "name": "Otro más", "kind": "Distrito"}}}
 	admins := []call{
 		{"PUT", areaPath(victim), map[string]any{"name": "Renombrado"}},
 		{"POST", areaPath(victim) + "/merge", map[string]any{"into_id": other.ID}},
@@ -457,14 +459,14 @@ func TestAdd(t *testing.T) {
 	// The same name is the same zone, whatever its case, accents and punctuation; below another zone it
 	// is another one.
 	for _, name := range []string{"municipio nuevo", "MUNICIPIO  NUEVO", "Munícipio-Nuevo"} {
-		errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": e.madrid, "name": name}), 409, "duplicate_area")
+		errorCode(t, e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"parent_id": e.madrid, "name": name}), 409, "duplicate_area")
 	}
 	var comunidad int64
 	if err := e.tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE parent_id = $1 AND name = 'Murcia'`, e.spain).Scan(&comunidad); err != nil {
 		// Murcia is a community under a longer name; any other zone does as well.
 		comunidad = e.madridCommunity
 	}
-	status(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": comunidad, "name": "Municipio Nuevo", "kind": "Zona"}), http.StatusCreated)
+	status(t, e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"parent_id": comunidad, "name": "Municipio Nuevo", "kind": "Zona"}), http.StatusCreated)
 
 	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": e.madrid, "name": "   "}), 400, "area_name_required")
 	errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": e.madrid, "name": "---"}), 400, "area_name_required")
@@ -576,6 +578,18 @@ func TestMerge(t *testing.T) {
 	if still := decode[areas.Area](t, e.json("GET", areaPath(a), e.member.token, nil)); still.ChildCount != 1 {
 		t.Errorf("a refused merge changes nothing: %+v", still)
 	}
+}
+
+// A zone of Spain, at any depth, is only added by an admin: they come from the INE's lists. Anybody adds one
+// anywhere else.
+func TestOnlyAnAdminAddsZonesInSpain(t *testing.T) {
+	e := newEnv(t)
+	for _, parent := range []int64{e.spain, e.madridCommunity, e.madrid} {
+		errorCode(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": parent, "name": "Nueva", "kind": "Zona"}), 403, "area_spain_admin_only")
+	}
+	status(t, e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"parent_id": e.madrid, "name": "Del admin", "kind": "Zona"}), http.StatusCreated)
+	e.notifier.wait(t)
+	status(t, e.json("POST", "/api/v1/areas", e.member.token, map[string]any{"parent_id": e.portugal, "name": "Aveiro", "kind": "Distrito"}), http.StatusCreated)
 }
 
 // Countries are deleted when empty and merged with each other, like any zone; a merge keeps the official

@@ -13,6 +13,9 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+// SpainCode is the ISO 3166-1 alpha-2 code of the country whose zones are loaded from the INE.
+const SpainCode = "ES"
+
 // The longest a name and a kind may be, in characters.
 const (
 	MaxNameLength = 200
@@ -25,12 +28,15 @@ var (
 	ErrUnknownParent = errors.New("there is no such zone to add it to")
 	// ErrRootAdminOnly is a zone with no zone above it (a country) asked for by somebody who is not admin.
 	ErrRootAdminOnly = errors.New("only an admin can add a zone that is not in another one (a country)")
-	ErrBlankName     = errors.New("the name of the zone is required")
-	ErrKindRequired  = errors.New("the kind of the zone is required: there is no other zone below this one to take it from")
-	ErrTooLong       = errors.New("the name or the kind of the zone is too long")
-	ErrDuplicate     = errors.New("there is already a zone with that name there")
-	ErrHasChildren   = errors.New("the zone has zones below it and cannot be deleted")
-	ErrInUse         = errors.New("the zone has places and cannot be deleted")
+	// ErrSpainAdminOnly is a zone to be added in Spain by somebody who is not admin: the zones of Spain (communities,
+	// provinces, municipalities) are loaded from the INE's lists, and only an admin touches them by hand.
+	ErrSpainAdminOnly = errors.New("the zones of Spain are loaded automatically: only an admin can add one")
+	ErrBlankName      = errors.New("the name of the zone is required")
+	ErrKindRequired   = errors.New("the kind of the zone is required: there is no other zone below this one to take it from")
+	ErrTooLong        = errors.New("the name or the kind of the zone is too long")
+	ErrDuplicate      = errors.New("there is already a zone with that name there")
+	ErrHasChildren    = errors.New("the zone has zones below it and cannot be deleted")
+	ErrInUse          = errors.New("the zone has places and cannot be deleted")
 	// ErrMergeParents means two zones are merged only if they are below the same one.
 	ErrMergeParents = errors.New("only two zones below the same one can be merged")
 	ErrMergeSelf    = errors.New("a zone cannot be merged into itself")

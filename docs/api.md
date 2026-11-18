@@ -1029,15 +1029,16 @@ admin alone.
 - **GET** `/areas/{id}` — *Any baseline role*. One zone with its `ancestors`, the country first.
   - returns: 200 `Area`
   - errors: 400 `invalid_id`; 404 `not_found`
-- **POST** `/areas` — *Any baseline role; admin to add a country*. Adds a zone below another or,
-  without `parent_id` (or with 0), a country: a zone in no other one, a "País" unless a `kind` says
-  otherwise.
+- **POST** `/areas` — *Any baseline role; admin to add a country or a zone in Spain*. Adds a zone
+  below another or, without `parent_id` (or with 0), a country: a zone in no other one, a "País"
+  unless a `kind` says otherwise. A zone in Spain, at any depth, is only added by an admin: they
+  come from the INE's lists.
   - body: `parent_id`, `name*` (at most 200 characters; unique below the same zone ignoring case,
     accents and punctuation), `kind` (at most 60 characters). Without a `kind` it is the kind of the
     zones already below that one; with none below it yet, it has to be given.
   - returns: 201 `Area`
   - errors: 400 `invalid_body`, `unknown_area`, `area_name_required`, `area_kind_required`,
-    `area_text_too_long`; 403 `area_root_admin_only`; 409 `duplicate_area`
+    `area_text_too_long`; 403 `area_root_admin_only`, `area_spain_admin_only`; 409 `duplicate_area`
 - **PUT** `/areas/{id}` — *Admin*. Renames a zone, if a `kind` is given changes it (a country can be
   renamed) and, if `parent_id` is in the body, moves it with all that is below it below another zone
   (`null` makes it a country); without `parent_id` it stays where it is.

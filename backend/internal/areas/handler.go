@@ -61,6 +61,7 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrNotFound, http.StatusNotFound, "not_found"},
 		{ErrUnknownParent, http.StatusBadRequest, "unknown_area"},
 		{ErrRootAdminOnly, http.StatusForbidden, "area_root_admin_only"},
+		{ErrSpainAdminOnly, http.StatusForbidden, "area_spain_admin_only"},
 		{ErrInvalidPoint, http.StatusBadRequest, "invalid_coordinates"},
 		{ErrLocateUnavailable, http.StatusBadGateway, "locate_unavailable"},
 		{ErrSearchUnavailable, http.StatusBadGateway, "search_unavailable"},
@@ -192,7 +193,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, ErrRootAdminOnly, "could not add the zone")
 		return
 	}
-	a, err := h.service.Create(r.Context(), body.ParentID, body.Name, body.Kind)
+	current, _ := auth.UserFromContext(r.Context())
+	a, err := h.service.Create(r.Context(), body.ParentID, body.Name, body.Kind, current.HasAnyRole("admin"))
 	if err != nil {
 		writeError(w, err, "could not add the zone")
 		return

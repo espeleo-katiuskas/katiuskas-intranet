@@ -879,7 +879,8 @@ place keeps who created it and who changed it last (the place or any of its poin
   its communities, provinces and municipalities, all seeded (a territory that is not a state, like
   Gibraltar, is added below the state that administers it); nothing in the code knows the levels,
   which are the text `kind` of each zone, so any country fits. Any member adds a zone that is
-  missing below another; only admin renames, merges (a zone that was added twice) and deletes them.
+  missing below another, except in Spain, whose zones are seeded (only admin adds there); only
+  admin renames, merges (a zone that was added twice) and deletes them.
 - A **system** is a group of cavities that are connected underground, which is one cave as far as
   the underground goes although each entrance is a place of its own: it has a name, a description
   and photos and documents of its own, and its cavities. A cavity is in at most one system, and only

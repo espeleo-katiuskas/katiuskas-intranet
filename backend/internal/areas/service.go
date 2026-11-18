@@ -140,16 +140,32 @@ func cleanText(name, kind string) (string, string, string, error) {
 // Create adds a zone below another, or a country when parentID is nil. Its kind is the one the zones
 // below that one already have, unless it is given; with none below it yet, it has to be given; a country
 // is a "País" unless it is said otherwise.
-func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string) (Area, error) {
+//
+// Only an admin adds a zone in Spain (below it at any depth): they are loaded from the INE's lists.
+func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string, admin bool) (Area, error) {
 	name, kind, normalized, err := cleanText(name, kind)
 	if err != nil {
 		return Area{}, err
 	}
 	if parentID != nil {
-		if _, err := s.repo.Get(ctx, *parentID); errors.Is(err, ErrNotFound) {
+		parent, err := s.repo.Get(ctx, *parentID)
+		if errors.Is(err, ErrNotFound) {
 			return Area{}, ErrUnknownParent
 		} else if err != nil {
 			return Area{}, err
+		}
+		if !admin {
+			root := parent.ID
+			if len(parent.Ancestors) > 0 {
+				root = parent.Ancestors[0].ID
+			}
+			spain, err := s.repo.IDByCode(ctx, "", SpainCode)
+			if err != nil && !errors.Is(err, ErrNotFound) {
+				return Area{}, err
+			}
+			if err == nil && root == spain {
+				return Area{}, ErrSpainAdminOnly
+			}
 		}
 	}
 	if kind == "" {

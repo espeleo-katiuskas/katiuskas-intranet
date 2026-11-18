@@ -3007,7 +3007,8 @@ paths:
       summary: Add a zone below another, or a country
       description: >
         Any baseline role to add a zone below another; without `parent_id` (or with 0) it adds a
-        country, a zone that is in no other one, which only an admin may. The kind is that of the zones
+        country, a zone that is in no other one, which only an admin may; a zone in Spain, at any depth,
+        is only added by an admin too (they are loaded from the INE's lists). The kind is that of the zones
         already below the parent unless it is given; with none below it yet it has to be given; a
         country is a "País" unless it is said otherwise. The name is unique below each zone (among the
         countries, for a country) ignoring case, accents and punctuation.
@@ -3024,7 +3025,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Area" }
         "400": { description: "invalid_body, unknown_area, area_name_required, area_kind_required or area_text_too_long." }
-        "403": { description: "area_root_admin_only — a country, by somebody who is not admin." }
+        "403": { description: "area_root_admin_only (a country) or area_spain_admin_only (a zone in Spain), by somebody who is not admin." }
         "409": { description: "duplicate_area." }
 
   /areas/locate:

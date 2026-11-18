@@ -117,6 +117,8 @@ const texts = {
   unknown_area: 'Esa zona no existe.',
   area_root_admin_only:
     'Solo un administrador puede añadir un país, una zona que no está dentro de otra.',
+  area_spain_admin_only:
+    'Las zonas de España se cargan automáticamente: solo un administrador puede añadir una a mano.',
   area_move_cycle: 'Una zona no se puede mover dentro de sí misma ni de una zona que tiene dentro.',
   area_name_required: 'Escribe el nombre de la zona.',
   area_kind_required:
