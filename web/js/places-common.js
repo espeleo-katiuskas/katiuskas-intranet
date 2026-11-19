@@ -100,7 +100,7 @@ function coordinatesHtml(lat, lon, { altitude = null, guide = null } = {}) {
     `<span class="nowrap">${formatDecimal(lat, lon)}</span>` +
     ` · ${link(googleMapsUrl(lat, lon), 'Google Maps')}` +
     (guide && canGuide()
-      ? ` <a class="btn btn-secondary btn-small" href="/brujula?${escapeHtml(query.toString())}">Guiarme hasta aquí</a>`
+      ? ` <a class="btn btn-secondary btn-small" href="/brujula?${escapeHtml(query.toString())}">Rumbo</a>`
       : '') +
     (altitude != null ? ` <span class="subtitle">${altitude} m</span>` : '')
   );

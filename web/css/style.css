@@ -2282,7 +2282,7 @@ button.heat-cell[aria-pressed='true'] {
 
 #place-details .detail-row > :first-child,
 #osm-data .detail-row > :first-child {
-  flex: 0 0 11rem;
+  flex: 0 0 10rem;
 }
 
 #place-authorship {

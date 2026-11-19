@@ -196,7 +196,7 @@ function setUpCompass() {
 if (!valid) {
   document.getElementById('compass-title').textContent = 'Ir a un punto';
   say(
-    'Falta el punto al que ir. Abre esta página desde el botón «Guiarme hasta aquí» de un lugar.',
+    'Falta el punto al que ir. Abre esta página desde el botón «Rumbo» de un lugar.',
   );
 } else {
   document.getElementById('compass-title').textContent = name ? `Hacia ${name}` : 'Ir a un punto';
