@@ -20,6 +20,8 @@ import {
   currentUser,
   hasAnyRole,
   apiFetch,
+  apiFetchForm,
+  showFeedback,
 } from './api.js';
 import { initOffline } from './offline.js';
 import { initPickerSearch } from './picker-search.js';
@@ -175,7 +177,22 @@ async function initPage({ requireAnyRole } = {}) {
   if (!(await initSession())) {
     return null;
   }
-  initOffline(apiFetch, { offline: isOffline() });
+  initOffline(
+    { apiFetch, apiFetchForm },
+    {
+      offline: isOffline(),
+      login: currentUser().login,
+      onSent: (sent) => {
+        showFeedback(
+          sent.length === 1
+            ? 'Se ha enviado lo que habías guardado sin conexión.'
+            : `Se han enviado las ${sent.length} cosas que habías guardado sin conexión.`,
+        );
+        // A page that shows what was sent draws it again.
+        window.dispatchEvent(new CustomEvent('katiuskas:outbox-sent'));
+      },
+    },
+  );
   applyRoleVisibility();
   document.getElementById('logout-button').addEventListener('click', logout);
   initRoleOverride();

@@ -1,6 +1,8 @@
 // The page's side of working with no connection (the other side is the service worker, /sw.js): it
 // registers it, keeps the list of places and its catalogues fresh in the copy that the worker has, says
-// when the page is a copy, and forgets all of it when the person signs out.
+// when the page is a copy, sends what the person did with no connection (the outbox, js/outbox.js) when
+// there is one, and forgets the copies when the person signs out.
+import { flush } from './outbox.js';
 
 // The cache where the worker keeps the data: the same name as in sw.js.
 const DATA_CACHE = 'katiuskas-data';
@@ -68,17 +70,32 @@ async function refreshPlaces(apiFetch) {
   }
 }
 
-// Called by every page once the session is known. `apiFetch` is the one of api.js; `offline` says the
-// session could not be checked and the page runs on what is kept.
-export function initOffline(apiFetch, { offline }) {
+// Sends what is waiting in the outbox for this person, and tells `onSent` which entries went.
+async function sendOutbox(api, login, onSent) {
+  try {
+    const sent = await flush(login, api);
+    if (sent.length) onSent(sent);
+  } catch {
+    // Without connection or storage: it is tried again with the next page, or when the connection is back.
+  }
+}
+
+// Called by every page once the session is known. `api` is { apiFetch, apiFetchForm } of api.js; `offline`
+// says the session could not be checked and the page runs on what is kept; `login` is the person and
+// `onSent` is called with the entries of the outbox that have just been sent.
+export function initOffline(api, { offline, login, onSent }) {
+  if (offline) {
+    if (supported()) renderOfflineNotice();
+  } else {
+    // What was left in the outbox goes now, and again whenever the connection comes back while the page is
+    // open (a page that was opened off line is loaded again at that moment, and so sends it).
+    setTimeout(() => sendOutbox(api, login, onSent), 1500);
+    window.addEventListener('online', () => sendOutbox(api, login, onSent));
+  }
   if (!supported()) return;
   navigator.serviceWorker.register('/sw.js').catch(() => {});
-  if (offline) {
-    renderOfflineNotice();
-  } else {
-    // After the page has had its own requests, not before: it is a favour to nobody.
-    setTimeout(() => refreshPlaces(apiFetch), 2000);
-  }
+  // After the page has had its own requests, not before: it is a favour to nobody.
+  if (!offline) setTimeout(() => refreshPlaces(api.apiFetch), 2000);
 }
 
 function renderOfflineNotice() {
@@ -86,7 +103,7 @@ function renderOfflineNotice() {
   notice.className = 'offline-notice';
   notice.setAttribute('role', 'status');
   notice.textContent =
-    'Sin conexión: se ven los datos guardados en este móvil y no se puede cambiar nada.';
+    'Sin conexión: se ven los datos guardados en este móvil. Las entradas de la memoria que añadas se enviarán al volver la conexión; lo demás no se puede cambiar.';
   document.body.prepend(notice);
   // When the connection is back, the page is loaded again, with everything on line.
   window.addEventListener('online', () => window.location.reload(), { once: true });
