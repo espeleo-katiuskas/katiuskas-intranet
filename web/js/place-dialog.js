@@ -1,9 +1,19 @@
-import { apiFetch, currentUser, escapeHtml, hasAnyRole, showError } from './api.js';
+import {
+  apiFetch,
+  currentUser,
+  escapeHtml,
+  hasAnyRole,
+  isOffline,
+  showError,
+  showFeedback,
+} from './api.js';
 import { openAreaDialog } from './area-dialog.js';
 import { areaChain, areaPickerField, bindAreaPicker } from './area-picker.js';
 import { formatDecimal, formatUtm, parseCoordinates } from './coordinates.js';
 import { initModal, openModal } from './modal.js';
 import { bindNamesList, namesListField } from './names-list.js';
+import * as outbox from './outbox.js';
+import { describeFields, diffPlace } from './place-body.js';
 import { POINT_KIND_LABELS, STATE_HELP, STATE_LABELS } from './places-common.js';
 
 // The two dialogs to write a place and one of its points, shared by /lugares (a new place) and /lugar
@@ -347,7 +357,8 @@ const whole = (form, name) =>
 
 // Opens the dialog to create a place, or to change `place`. `types` are those of GET /places/types,
 // `subtypes` those of GET /places/subtypes, `systems` those of GET /systems and `geologies` those of
-// GET /places/geologies. `onSaved` is called with the place the API answers with, once it is saved. A new place may start at `coordinates`
+// GET /places/geologies. `onSaved` is called with the place the API answers with, once it is saved (and `onQueued`, with no
+// argument, when an edit was kept to be sent as there is no connection). A new place may start at `coordinates`
 // ({ lat, lon }, from a click on a map): they are written in the form and the zone they are in is asked
 // for at once.
 // What a place made from an element of OpenStreetMap starts with, from its tags: the type that its category
@@ -392,6 +403,27 @@ function osmDefaults(osm, types, subtypes) {
   };
 }
 
+// With no connection the edit of a place is kept in the outbox (js/outbox.js) as the fields that
+// changed, with what each had, so that it can be sent on the place as it is by then.
+async function queuePlaceEdit(place, body) {
+  const { base, changes } = diffPlace(place, body);
+  if (!Object.keys(changes).length) {
+    showFeedback('No hay nada que cambiar.');
+    return;
+  }
+  await outbox.enqueue({
+    kind: 'place-edit',
+    login: currentUser().login,
+    placeId: place.id,
+    placeName: place.name,
+    base,
+    changes,
+  });
+  showFeedback(
+    `Guardado en este móvil (${describeFields(Object.keys(changes))}): se enviará cuando haya conexión.`,
+  );
+}
+
 function openPlaceDialog({
   types,
   subtypes,
@@ -401,6 +433,7 @@ function openPlaceDialog({
   coordinates = null,
   osm = null,
   onSaved,
+  onQueued,
 }) {
   const {
     dialog,
@@ -505,32 +538,47 @@ function openPlaceDialog({
     const submit = form.querySelector('button[type="submit"]');
     submit.disabled = true;
     try {
-      const saved = await apiFetch(place ? `/places/${place.id}` : '/places', {
-        method: place ? 'PUT' : 'POST',
-        body: JSON.stringify({
-          type_id: Number(form.elements.type_id.value),
-          name: form.elements.name.value.trim(),
-          alt_names: namesList.names,
-          // Only a type that has a state gives its places one.
-          state: hasStateOf() ? form.elements.state.value : '',
-          subtype_id: kind === 'cave' ? Number(form.elements.subtype_id.value) : null,
-          system_id: kind === 'cave' ? whole(form, 'system_id') : null,
-          area_id: areaPicker.area.id,
-          lat: found.lat,
-          lon: found.lon,
-          altitude_m: whole(form, 'altitude_m'),
-          access: text(form, 'access'),
-          description: text(form, 'description'),
-          // What the kind of the type does not have is left out, as the API refuses it.
-          depth_m: kind === 'cave' ? whole(form, 'depth_m') : null,
-          horizontal_length_m: kind === 'cave' ? whole(form, 'horizontal_length_m') : null,
-          geology_id: kind === 'cave' ? whole(form, 'geology_id') : null,
-          technical_sheet:
-            kind === 'cave' || kind === 'canyon' ? text(form, 'technical_sheet') : null,
-          // The element of OpenStreetMap it is made from, for a new place only.
-          ...(!place && osm ? { osm_type: osm.type, osm_id: osm.id } : {}),
-        }),
-      });
+      const body = {
+        type_id: Number(form.elements.type_id.value),
+        name: form.elements.name.value.trim(),
+        alt_names: namesList.names,
+        // Only a type that has a state gives its places one.
+        state: hasStateOf() ? form.elements.state.value : '',
+        subtype_id: kind === 'cave' ? Number(form.elements.subtype_id.value) : null,
+        system_id: kind === 'cave' ? whole(form, 'system_id') : null,
+        area_id: areaPicker.area.id,
+        lat: found.lat,
+        lon: found.lon,
+        altitude_m: whole(form, 'altitude_m'),
+        access: text(form, 'access'),
+        description: text(form, 'description'),
+        // What the kind of the type does not have is left out, as the API refuses it.
+        depth_m: kind === 'cave' ? whole(form, 'depth_m') : null,
+        horizontal_length_m: kind === 'cave' ? whole(form, 'horizontal_length_m') : null,
+        geology_id: kind === 'cave' ? whole(form, 'geology_id') : null,
+        technical_sheet:
+          kind === 'cave' || kind === 'canyon' ? text(form, 'technical_sheet') : null,
+        // The element of OpenStreetMap it is made from, for a new place only.
+        ...(!place && osm ? { osm_type: osm.type, osm_id: osm.id } : {}),
+      };
+      let saved = null;
+      if (!(place && isOffline())) {
+        try {
+          saved = await apiFetch(place ? `/places/${place.id}` : '/places', {
+            method: place ? 'PUT' : 'POST',
+            body: JSON.stringify(body),
+          });
+        } catch (err) {
+          // The connection went away after the page opened: an edit waits, a new place does not.
+          if (!(place && err.network)) throw err;
+        }
+      }
+      if (!saved) {
+        await queuePlaceEdit(place, body);
+        dialog.close();
+        await onQueued?.();
+        return;
+      }
       dialog.close();
       await onSaved?.(saved);
     } catch (err) {
@@ -589,7 +637,7 @@ function ensurePointDialog() {
 }
 
 // Opens the dialog to add a point to the place `placeId`, or to change `point`.
-function openPointDialog({ placeId, point = null, coordinates = null, onSaved }) {
+function openPointDialog({ placeId, point = null, coordinates = null, onSaved, onQueued }) {
   const { dialog, form, updateCoordinates } = ensurePointDialog();
   document.getElementById('pt-title').textContent = point ? 'Editar punto' : 'Nuevo punto';
   document.getElementById('pt-submit').textContent = point ? 'Guardar' : 'Añadir punto';
@@ -611,20 +659,38 @@ function openPointDialog({ placeId, point = null, coordinates = null, onSaved })
     const submit = form.querySelector('button[type="submit"]');
     submit.disabled = true;
     try {
-      const saved = await apiFetch(
-        point ? `/places/${placeId}/points/${point.id}` : `/places/${placeId}/points`,
-        {
-          method: point ? 'PUT' : 'POST',
-          body: JSON.stringify({
-            kind: form.elements.kind.value,
-            name: text(form, 'name'),
-            lat: found.lat,
-            lon: found.lon,
-            altitude_m: whole(form, 'altitude_m'),
-            note: text(form, 'note'),
-          }),
-        },
-      );
+      const body = {
+        kind: form.elements.kind.value,
+        name: text(form, 'name'),
+        lat: found.lat,
+        lon: found.lon,
+        altitude_m: whole(form, 'altitude_m'),
+        note: text(form, 'note'),
+      };
+      let saved = null;
+      if (point || !isOffline()) {
+        try {
+          saved = await apiFetch(
+            point ? `/places/${placeId}/points/${point.id}` : `/places/${placeId}/points`,
+            { method: point ? 'PUT' : 'POST', body: JSON.stringify(body) },
+          );
+        } catch (err) {
+          // A new point waits for the connection; changing one needs it.
+          if (point || !err.network) throw err;
+        }
+      }
+      if (!saved) {
+        await outbox.enqueue({
+          kind: 'place-point',
+          login: currentUser().login,
+          placeId,
+          point: body,
+        });
+        showFeedback('Guardado en este móvil: se enviará cuando haya conexión.');
+        dialog.close();
+        await onQueued?.();
+        return;
+      }
       dialog.close();
       await onSaved?.(saved);
     } catch (err) {

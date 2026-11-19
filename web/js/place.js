@@ -18,7 +18,9 @@ import {
 import { initPage } from './layout.js';
 import { bindFiles, fileRowsHtml } from './place-files.js';
 import { copyFromOsm, openOsmLinkDialog, osmChangesHtml, osmDataHtml } from './osm-link.js';
+import { describeFields } from './place-body.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
+import { bindPendingList } from './pending-list.js';
 import {
   coordinatesHtml,
   loadGeologies,
@@ -280,9 +282,13 @@ function render() {
           guide: { name: pointGuideName(point), placeId: place.id },
         })}</td>
         <td>${point.note ? escapeHtml(point.note) : ''}</td>
-        <td class="nowrap">
+        <td class="nowrap">${
+          isOffline()
+            ? ''
+            : `
           <button type="button" class="btn btn-secondary btn-small" data-edit-point="${point.id}">Editar</button>
-          <button type="button" class="btn btn-danger btn-small" data-delete-point="${point.id}">Quitar</button>
+          <button type="button" class="btn btn-danger btn-small" data-delete-point="${point.id}">Quitar</button>`
+        }
         </td>
       </tr>`,
         )
@@ -361,6 +367,20 @@ const osmSection = document.getElementById('osm-section');
 const osmHome = osmSection.parentElement;
 const editDialog = () => document.getElementById('place-dialog');
 
+// What was done with no connection and waits to be sent (js/outbox.js): the changes to this place and
+// the points added to it.
+const renderPending = bindPendingList({
+  container: document.getElementById('place-pending'),
+  login: user.login,
+  matches: (e) => (e.kind === 'place-edit' || e.kind === 'place-point') && e.placeId === placeId,
+  describe: (e) =>
+    e.kind === 'place-edit'
+      ? `Cambios en el lugar: ${describeFields(Object.keys(e.changes))}`
+      : `Punto nuevo: ${POINT_KIND_LABELS[e.point.kind] ?? e.point.kind}${e.point.name ? ` «${e.point.name}»` : ''}`,
+  reload: load,
+});
+const queued = () => renderPending();
+
 document.getElementById('edit-place').addEventListener('click', () => {
   openPlaceDialog({
     types,
@@ -372,7 +392,10 @@ document.getElementById('edit-place').addEventListener('click', () => {
       showFeedback('Lugar guardado.');
       await load();
     },
+    onQueued: queued,
   });
+  // Linking to OpenStreetMap needs the connection (and its mirror).
+  if (isOffline()) return;
   document.getElementById('pd-osm-slot').append(osmSection);
   osmSection.hidden = false;
   editDialog().addEventListener(
@@ -450,6 +473,7 @@ document.getElementById('add-point').addEventListener('click', () => {
       showFeedback('Punto añadido.');
       await load();
     },
+    onQueued: queued,
   });
 });
 
@@ -497,4 +521,9 @@ document.getElementById('delete-place')?.addEventListener('click', async () => {
   }
 });
 
-await load();
+if (isOffline()) {
+  // What needs the connection is not offered.
+  document.getElementById('delete-place')?.setAttribute('hidden', '');
+  document.getElementById('file-form')?.setAttribute('hidden', '');
+}
+await Promise.all([load(), renderPending()]);

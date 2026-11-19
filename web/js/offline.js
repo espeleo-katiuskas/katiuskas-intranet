@@ -103,7 +103,7 @@ function renderOfflineNotice() {
   notice.className = 'offline-notice';
   notice.setAttribute('role', 'status');
   notice.textContent =
-    'Sin conexión: se ven los datos guardados en este móvil. Las entradas de la memoria que añadas se enviarán al volver la conexión; lo demás no se puede cambiar.';
+    'Sin conexión: se ven los datos guardados en este móvil. Lo que añadas a una memoria, los cambios de un lugar y sus puntos nuevos se enviarán al volver la conexión; lo demás no se puede cambiar.';
   document.body.prepend(notice);
   // When the connection is back, the page is loaded again, with everything on line.
   window.addEventListener('online', () => window.location.reload(), { once: true });
