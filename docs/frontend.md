@@ -195,52 +195,53 @@ a space or a control character (browsers drop tabs and line breaks inside an add
 `java<tab>script:` would be a `javascript:` one). A link that leaves the intranet opens in a new tab
 with `noopener noreferrer`. The API stores and returns plain text; nothing about this is in it.
 
-**Places (`/lugares`, `/lugar?id=…`).** `lugares.html`/`places.js` is the list: a table (a card per
-place on a phone) of name — a link, with its other names under it —, type (a cavity by its subtype,
-"Sima"; `placeTypeLabel`), state as a badge (Abierta, Hace falta permiso, Turística (de pago) or
-Cerrada: how the place can be visited, each with a line that explains it, `STATE_HELP` in
-`places-common.js`, under the field of the form and next to the badge on the page; a place whose
-type has no state shows none), where it is (`where`: the zone, the province and the country; the
-search looks in `area_names`, which has the community too, so "Madrid" finds the places of the
-province and of the community), its depth and its horizontal length, each in a column of its own in
-metres (only a cavity has them: a dash for the rest) and in how many activities, not counting the
-cancelled ones, the place is one of those they go to (`activity_count`, a number, "—" when there is
-none). The table is ordered by name, A first, to begin with, and the headers of name, where, depth,
-length and activities order it (`sortable-headers.js`, as in `/admin`; on a phone, where each row is
-a card, they are the buttons "Ordenar por"): a click picks the column and another turns it round,
-the columns that are numbers begin with the greatest, and a place with no value in one (a canyon has
-no depth) goes last either way. When the browser can say where the person is (it has the geolocation
-API and the page is a secure context: `locate()` asks once when the page opens, and the browser asks
-the person), the table gets a column "Distancia" (a straight line from the person to the main
-coordinate, `formatDistance`, after "Dónde") that can be ordered too, starting with the nearest;
-with no position, because it is not there, was refused or does not arrive in 15 s, the table is as
-it was and the column is not drawn. It works with no connection, since it needs only the GPS and the
-coordinates of the list. The table has a search that looks in the name, the other names, the type,
-the state and where it is (accents and case ignored, every word has to appear, the geology of a cave
-included) and three selects, by type, by subtype and by state, of which the subtype is there only
-when the type chosen is Cavidad and the state only when it is "Todos" or a type that has one (a
-filter that is hidden is also cleared, so that it never filters unseen); the type of a row has the
-geology of a cave under it. "Lista" and "Mapa" switch the table for a map of the same places, with
-the same filters (see "The map of the places" below); `/lugares?vista=mapa` opens it, `&lugar=<id>`
-also opens the popup of that place and `&sistema=<id>` starts the view on the cavities of that
-system. Any member gets "+ Nuevo lugar", which opens the dialog of `place-dialog.js` and goes to the
-page of the place once it is saved; admin gets "Tipos y geologías", a dialog with three tables to
-add, rename and delete the general types (Cavidad and Cañón show "Fijo" and cannot be touched; each
-says "Con estado" or "Sin estado", and a new one has the box "Con estado", which cannot be changed
-afterwards), the subtypes of the cavities and the geologies of the caves (none of these two is
-fixed; one that has places cannot be deleted), all with the same code (`bindCatalogue` in
-`places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: under its name, the
-line of what it is and where it is (`where`, the zones it is in from the most specific one to the
-country), and the data (other names, the main coordinate as "41.52016, -3.63606 · Google Maps" (the
-degrees and a link to the map, and, on a phone, the button "Rumbo", see "Finding a point" below; the
-UTM is only in the form, where it is read and shown; `coordinatesHtml`, also used for each point and
-in the page of a system), its altitude above sea level, the geology of a cave, the depth and the
-horizontal length), then "Cómo llegar", "Descripción" and, for a cave or a canyon, "Ficha técnica" —
-all three through `renderRichText` —, and "Otros puntos", a table of the other points with "Editar"
-and "Quitar" on each, "Fotos y documentos" (the files of the place, each with a title, its name,
-size and who attached it, "Descargar" and, for who attached it, admin and board, "Borrar"; an image
-is shown under it; a form attaches a new one), and who added the place and who changed it last. Any
-member has "Editar lugar" and "Añadir punto"; admin and board also "Borrar lugar" (`data-roles`).
+**Places (`/lugares`, `/lugar?id=…`).** `lugares.html`/`places.js` is the list: a table (on a phone
+too: a compact one that scrolls sideways inside its box, and not the cards of `stack-on-phone`) of
+name — a link, with its other names under it —, type (a cavity by its subtype, "Sima";
+`placeTypeLabel`), state as a badge (Abierta, Hace falta permiso, Turística (de pago) or Cerrada:
+how the place can be visited, each with a line that explains it, `STATE_HELP` in `places-common.js`,
+under the field of the form and next to the badge on the page; a place whose type has no state shows
+none), where it is (`where`: the zone, the province and the country; the search looks in
+`area_names`, which has the community too, so "Madrid" finds the places of the province and of the
+community), its depth and its horizontal length, each in a column of its own in metres (only a
+cavity has them: a dash for the rest) and in how many activities, not counting the cancelled ones,
+the place is one of those they go to (`activity_count`, a number, "—" when there is none). The table
+is ordered by name, A first, to begin with, and the headers of name, where, depth, length and
+activities order it (`sortable-headers.js`, as in `/admin`): a click picks the column and another
+turns it round, the columns that are numbers begin with the greatest, and a place with no value in
+one (a canyon has no depth) goes last either way. When the browser can say where the person is (it
+has the geolocation API and the page is a secure context: `locate()` asks once when the page opens,
+and the browser asks the person), the table gets a column "Distancia" (a straight line from the
+person to the main coordinate, `formatDistance`, after "Dónde") that can be ordered too, starting
+with the nearest; with no position, because it is not there, was refused or does not arrive in 15 s,
+the table is as it was and the column is not drawn. It works with no connection, since it needs only
+the GPS and the coordinates of the list. The table has a search that looks in the name, the other
+names, the type, the state and where it is (accents and case ignored, every word has to appear, the
+geology of a cave included) and three selects, by type, by subtype and by state, of which the
+subtype is there only when the type chosen is Cavidad and the state only when it is "Todos" or a
+type that has one (a filter that is hidden is also cleared, so that it never filters unseen); the
+type of a row has the geology of a cave under it. "Lista" and "Mapa" switch the table for a map of
+the same places, with the same filters (see "The map of the places" below); `/lugares?vista=mapa`
+opens it, `&lugar=<id>` also opens the popup of that place and `&sistema=<id>` starts the view on
+the cavities of that system. Any member gets "+ Nuevo lugar", which opens the dialog of
+`place-dialog.js` and goes to the page of the place once it is saved; admin gets "Tipos y
+geologías", a dialog with three tables to add, rename and delete the general types (Cavidad and
+Cañón show "Fijo" and cannot be touched; each says "Con estado" or "Sin estado", and a new one has
+the box "Con estado", which cannot be changed afterwards), the subtypes of the cavities and the
+geologies of the caves (none of these two is fixed; one that has places cannot be deleted), all with
+the same code (`bindCatalogue` in `places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is
+one place: under its name, the line of what it is and where it is (`where`, the zones it is in from
+the most specific one to the country), and the data (other names, the main coordinate as "41.52016,
+-3.63606 · Google Maps" (the degrees and a link to the map, and, on a phone, the button "Rumbo", see
+"Finding a point" below; the UTM is only in the form, where it is read and shown; `coordinatesHtml`,
+also used for each point and in the page of a system), its altitude above sea level, the geology of
+a cave, the depth and the horizontal length), then "Cómo llegar", "Descripción" and, for a cave or a
+canyon, "Ficha técnica" — all three through `renderRichText` —, and "Otros puntos", a table of the
+other points with "Editar" and "Quitar" on each, "Fotos y documentos" (the files of the place, each
+with a title, its name, size and who attached it, "Descargar" and, for who attached it, admin and
+board, "Borrar"; an image is shown under it; a form attaches a new one), and who added the place and
+who changed it last. Any member has "Editar lugar" and "Añadir punto"; admin and board also "Borrar
+lugar" (`data-roles`).
 
 The two dialogs, of a place and of a point, are built the first time they are needed by
 `place-dialog.js` (`openPlaceDialog`, `openPointDialog`) and shared by both pages, so there is one
@@ -594,14 +595,16 @@ the top.
 
 **Tables on a phone.** A table is scrolled sideways inside `.table-wrap` when it does not fit, which
 on a phone hides its last columns — often the buttons. A table with class `stack-on-phone` (those of
-`/admin`, of the library, of `/material` and of the places) is drawn instead, under 640px, as a card
-per row: `js/stacked-tables.js`, started by `initPage`, gives every cell `data-label` with the text
-of its column's header (again whenever the rows are redrawn, with a `MutationObserver`), and
-`style.css` shows each cell as its label above its value; the header keeps only the sortable
-columns, as a row "Ordenar por" of buttons, and the other headers go. A cell that spans the row (the
-"nothing here" message) and an empty one carry no label. The rows of "Estado del sistema" put the
-name above the value under that width, since its fixed column of 20rem left the value no room, and
-`.section-header` lets its button wrap below the title instead of squeezing it.
+`/admin`, of the library and of `/material`) is drawn instead, under 640px, as a card per row:
+`js/stacked-tables.js`, started by `initPage`, gives every cell `data-label` with the text of its
+column's header (again whenever the rows are redrawn, with a `MutationObserver`), and `style.css`
+shows each cell as its label above its value; the header keeps only the sortable columns, as a row
+"Ordenar por" of buttons, and the other headers go. A cell that spans the row (the "nothing here"
+message) and an empty one carry no label. The rows of "Estado del sistema" put the name above the
+value under that width, since its fixed column of 20rem left the value no room, and
+`.section-header` lets its button wrap below the title instead of squeezing it. The list of places
+is on purpose not one of them: it stays a table, compact and scrolled sideways, so that the columns
+can be compared.
 
 **Links.** Every `<a>` is the same colour (`--link`) whether visited or not and is underlined only
 on hover, as the documents of the home page: it is one rule at the top of `style.css`, `:where(a)`,

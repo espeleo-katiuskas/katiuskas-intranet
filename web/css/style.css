@@ -2751,3 +2751,20 @@ html.map-is-expanded {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+/* The list of places is a table on a phone too, a compact one that scrolls sideways inside its box
+   (the name stays readable and the distance, depth and the rest are a swipe away). */
+@media (max-width: 640px) {
+  #list-view table {
+    font-size: 0.85rem;
+  }
+
+  #list-view th,
+  #list-view td {
+    padding: 6px 8px;
+  }
+
+  #list-view td:first-child {
+    min-width: 9rem;
+  }
+}
