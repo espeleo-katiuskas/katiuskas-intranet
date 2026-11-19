@@ -1891,6 +1891,10 @@ h2[id^="section-"] {
     display: block;
   }
 
+  .stack-on-phone th[hidden] {
+    display: none;
+  }
+
   .stack-on-phone th:not([data-sort-key]),
   .stack-on-phone thead tr:not(:has(th[data-sort-key])) {
     display: none;

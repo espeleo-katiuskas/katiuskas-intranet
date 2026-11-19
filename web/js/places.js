@@ -7,6 +7,7 @@ import {
   showFeedback,
 } from './api.js';
 import { initAreasManager } from './areas-manager.js';
+import { distanceM, formatDistance } from './bearing.js';
 import { bindPlaceInfo, createMap, mapLegend, offerOnMapClick, placeMarker } from './map-common.js';
 import { initPage } from './layout.js';
 import { createOsmLayer } from './osm-layer.js';
@@ -72,7 +73,12 @@ function metres(value) {
 // How the table is ordered: by name, A first, to begin with; the columns that are numbers start with the
 // greatest. A place with no value in a numeric column (a canyon has no depth) goes last either way.
 const sort = { key: 'name', desc: false };
+// Where the person is, when the browser says (null until it does): the column "Distancia" is only there
+// then, and it starts with the nearest.
+let position = null;
 const NUMBER_OF = {
+  distance: (place) =>
+    position ? distanceM(position.lat, position.lon, place.lat, place.lon) : null,
   depth: (place) => place.depth_m,
   length: (place) => place.horizontal_length_m,
   activities: (place) => place.activity_count,
@@ -114,6 +120,7 @@ function renderPlace(place) {
       }</td>
       <td>${stateBadge(place.state)}</td>
       <td>${escapeHtml(place.where)}</td>
+      ${position ? `<td class="nowrap">${formatDistance(NUMBER_OF.distance(place))}</td>` : ''}
       <td class="nowrap">${metres(place.depth_m)}</td>
       <td class="nowrap">${metres(place.horizontal_length_m)}</td>
       <td>${place.activity_count || '—'}</td>
@@ -344,7 +351,7 @@ async function load() {
 searchInput.addEventListener('input', renderPlaces);
 initSortableHeaders(document.getElementById('places-head'), {
   sort,
-  defaultDesc: (key) => key in NUMBER_OF,
+  defaultDesc: (key) => key !== 'distance' && key in NUMBER_OF,
   onChange: renderPlaces,
 });
 typeFilter.addEventListener('change', () => {
@@ -461,3 +468,20 @@ if (isAdmin) {
 
 applyView(mapView);
 await load();
+locate();
+
+// Asks the browser where the person is, once (it is the browser that asks the person, and remembers the
+// answer). With a position the list gets its column "Distancia" and can be ordered by it; with none
+// (no permission, no signal of the GPS, no secure context) the list is as it was.
+function locate() {
+  if (!navigator.geolocation || !window.isSecureContext) return;
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      position = { lat: coords.latitude, lon: coords.longitude };
+      document.getElementById('distance-head').hidden = false;
+      renderPlaces();
+    },
+    () => {},
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: 5 * 60 * 1000 },
+  );
+}

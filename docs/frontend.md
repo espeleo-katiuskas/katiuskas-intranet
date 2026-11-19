@@ -209,10 +209,16 @@ none). The table is ordered by name, A first, to begin with, and the headers of 
 length and activities order it (`sortable-headers.js`, as in `/admin`; on a phone, where each row is
 a card, they are the buttons "Ordenar por"): a click picks the column and another turns it round,
 the columns that are numbers begin with the greatest, and a place with no value in one (a canyon has
-no depth) goes last either way. The table has a search that looks in the name, the other names, the
-type, the state and where it is (accents and case ignored, every word has to appear, the geology of
-a cave included) and three selects, by type, by subtype and by state, of which the subtype is there
-only when the type chosen is Cavidad and the state only when it is "Todos" or a type that has one (a
+no depth) goes last either way. When the browser can say where the person is (it has the geolocation
+API and the page is a secure context: `locate()` asks once when the page opens, and the browser asks
+the person), the table gets a column "Distancia" (a straight line from the person to the main
+coordinate, `formatDistance`, after "Dónde") that can be ordered too, starting with the nearest;
+with no position, because it is not there, was refused or does not arrive in 15 s, the table is as
+it was and the column is not drawn. It works with no connection, since it needs only the GPS and the
+coordinates of the list. The table has a search that looks in the name, the other names, the type,
+the state and where it is (accents and case ignored, every word has to appear, the geology of a cave
+included) and three selects, by type, by subtype and by state, of which the subtype is there only
+when the type chosen is Cavidad and the state only when it is "Todos" or a type that has one (a
 filter that is hidden is also cleared, so that it never filters unseen); the type of a row has the
 geology of a cave under it. "Lista" and "Mapa" switch the table for a map of the same places, with
 the same filters (see "The map of the places" below); `/lugares?vista=mapa` opens it, `&lugar=<id>`
