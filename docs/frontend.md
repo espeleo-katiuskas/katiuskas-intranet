@@ -792,14 +792,14 @@ What a person does with no connection and has to reach the server is kept on the
 
 #### Kinds of entry
 
-Three kinds go through it so far:
+Four kinds of entry go through it so far:
 
 - The text and files of memoria entries, from the form of `/actividad`. When the page is a copy, or
   when sending fails with `err.network`, `queueMemoria` queues the entry instead of showing an
   error, and says "Guardado en este móvil: se enviará cuando haya conexión".
-- The edit of a place (`place-edit`) and a point added to one (`place-point`), both from the dialogs
-  of `/lugar` (`place-dialog.js`: "Usar mi ubicación" works with no connection, it only needs the
-  GPS).
+- The edit of a place (`place-edit`) and a point added to one (`place-point`): two kinds, both from
+  the dialogs of `/lugar` (`place-dialog.js`: "Usar mi ubicación" works with no connection, it
+  only needs the GPS).
 - A photo or file attached to a place (`place-file`), from the form of `/lugar` through `bindFiles`'
   `queue` option. The page of a system has no queue.
 
@@ -2624,7 +2624,8 @@ is fast).
 - `/socios` asks for `/users`, `/board-members` and, for an admin, `/roles` at once and draws the
   table when the board positions are in too (`loadUsers(ready)`: only the drawing waits, not the
   slow `/users` request).
-- `/admin` loads its five sections with one `Promise.all` (the sessions are drawn again with the
+- `/admin` loads all its sections (Estado del sistema, Actividad, Roles, Sesiones, Festivos, Datos
+  de interés and Tipos de material) with one `Promise.all` (the sessions are drawn again with the
   names if the directory arrives after them).
 - That is the convention for a page's first load, and the rest follow it: `/actividades`,
   `/actividad`, `/material`, `/socio`, `/cuenta` and the distribution pages start every independent

@@ -124,9 +124,9 @@ are for that person themselves (who sees and closes their own sessions from `/pe
 
 `PATCH` (the expiry), `GET /tokens` and `POST /users/{login}/impersonate` are admin-only.
 
-- `GET /tokens` lists everyone's — the active ones by default, `?status=all` for the history, paged
-  by `limit`/`offset` — which marks the caller's own session `current`, found by the hash of its
-  bearer token) to audit, re-expire, or revoke any token.
+- `GET /tokens` lists everyone's tokens, to audit, re-expire or revoke any of them: the active
+  ones by default, `?status=all` for the history, paged by `limit`/`offset`. It marks the caller's
+  own session `current`, found by the hash of its bearer token.
 - `POST /users/{login}/impersonate` (admin-only) issues a short-lived token —
   `config.ImpersonationTokenTTL` — that resolves as the target person in every way except
   `AuthenticatedUser.ImpersonatedBy`, which names the admin.
@@ -268,8 +268,8 @@ automatic-role check above.
 - `roles.Service.Remove` rejects (`ErrLastAdmin`, 409 `last_admin`) taking it from the last person
   who holds it — someone has to be left who can still manage people and roles at all.
 - Checked first, since it's the more specific rule and doesn't depend on how many other admins
-  exist: (`ErrSelfAdminRemoval`, 409 `self_admin_removal`) an admin trying to remove their own admin
-  role, full stop.
+  exist: an admin trying to remove their own admin role is refused, full stop
+  (`ErrSelfAdminRemoval`, 409 `self_admin_removal`).
 
 Losing your own admin access has to be something another admin does to you, not a mistake you make
 removing it yourself. A stray click on your own row's "×" on `/socio` (`web/js/member.js`'s own
@@ -386,7 +386,7 @@ the whole list — `roles.ListNamesForUsers`, `memberships.ListByUsers`/`OnLeave
 
 #### Filters on `/socios`
 
-`/socios` (`web/js/members.js`) filters on those two for everyone:
+`/socios` (`web/js/members.js`) filters on two of the data of that overlay, for everyone:
 
 - "A corriente de pago" is `last_due_year` ≥ the current year;
 - "Federado" is having a `license_type`.
@@ -532,7 +532,8 @@ uploaded file (title + the file itself, typically a photo or PDF).
   type-specific fields.
 - Metadata lives in Postgres (`Repository`).
 - A file resource's bytes live on disk instead (`Storage`, `config.ActivityResourcesRoot` — a
-  *named Docker volume*, not a host bind mount like `archive`/`userfiles`, since files arrive
+  *named Docker volume* in the Docker stack (a plain directory in production), not a host bind
+  mount like `archive`/`userfiles`, since files arrive
   exclusively through `POST /activities/{id}/resources` rather than being dropped in by hand),
   keyed by the row's own id rather than any caller-given path, so unlike `archive`/`userfiles`
   there's no directory tree to browse and no path-escape risk to guard against.
@@ -592,8 +593,9 @@ its name too (`place_name`, joined from `places`).
 ## Distributions
 
 Distributions (`internal/distributions`, migration `00021_distributions.sql`) are things the club
-hands out to its members (shirts, buffs, a rope, mugs). Each distribution is a single article — two
-things to handle separately are two distributions.
+hands out to its members (shirts, buffs, a rope, mugs). A distribution is one thing handed out — two
+things to handle separately are two distributions — except a distribution with articles (see
+"Distribution articles" below), which has several.
 
 ### What a distribution has
 
@@ -734,8 +736,9 @@ Migration `00032_distribution_accounts.sql`.
   `not_income_for_distributions`), as is taking the `income` type off an account some
   distribution names.
 - The default is at most one account (a partial unique index; marking one in
-  `accounting.Repository.Create`/`UpdateAccount` unmarks the other). Having none of the two is
-  409 `no_distribution_account`.
+  `accounting.Repository.Create`/`UpdateAccount` unmarks the other).
+- A payment on a distribution with no account of its own, while no account is marked as the
+  default, is 409 `no_distribution_account`.
 
 #### What a payment writes
 
@@ -1100,8 +1103,8 @@ That is what `/socio` and `/perfil` show.
 - `/perfil` shows the very same timeline, only without the buttons: `js/timeline.js`
   (`loadTimelineData`, `renderTimelineRow`) builds and renders it for both pages, `member.js`
   adding its action buttons to each row.
-- That needed `GET /users/{login}/leaves` to open to the person themselves, like their
-  memberships, licenses and dues.
+- The timeline also shows the person's temporary leaves, which needed `GET /users/{login}/leaves`
+  to open to the person themselves, like their memberships, licenses and dues.
 
 ### Removing a due and the transaction link
 
@@ -1739,7 +1742,7 @@ anything but letters and digits as one space.
   index `idx_areas_parent_name` guarantees and `Service` checks first (as a violated constraint
   would abort the transaction the tests run in).
 - The script that writes the seed has the same function in Python, and `TestSeed` checks that the
-  two agree on all the 8,398 zones.
+  two agree on every seeded zone.
 
 ### The search
 
@@ -3312,8 +3315,8 @@ stands for one or more accounts.
   into cents).
 - The item has at least one account.
 - Every account exists, is a leaf (a group is `account_not_budgetable`), has the part's effective
-  type (`account_effective_type`: income in `income`, expense in `expenses`) and is in only one
-  item.
+  type (`account_effective_type`: an `income` account goes in the `income` part, an `expense`
+  account in the `expenses` part) and is in only one item.
 - **Every leaf account of effective type income or expense that is not hidden is in some item**
   (`accounts_missing`, naming them). Hidden accounts may be left out or put in.
 - The two parts add up to the same (`unbalanced`, with both totals).

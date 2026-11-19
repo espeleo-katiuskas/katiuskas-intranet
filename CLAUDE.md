@@ -310,7 +310,7 @@ long-polls; a linked chat does **not** log in on any message — it must prove t
 and a shared contact is checked to be the sender's own (`isOwnContact`), both security rules.
 
 **Testing helpers.** `internal/testutil`: `NewTx`, `InsertUser`/`InsertActivity`,
-`InsertTransaction*`, `RoleID`/`LicenseTypeID`/`MaterialCategoryID`, `UniqueEmail`, and
+`InsertTransaction*`, `RoleID`/`LicenseTypeID`/`MaterialTypeID`, `UniqueEmail`, and
 `FakeResolver` + `NewTestAuthenticator`/ `TokenFor` to mint bearer tokens for any role without the
 real `tokens` table.
 
