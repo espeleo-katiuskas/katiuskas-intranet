@@ -236,8 +236,6 @@ function render() {
 
   const rows = [
     ['Otros nombres', place.alt_names.length ? escapeHtml(place.alt_names.join(' · ')) : null],
-    // Where it is: each zone, from the country down, under the name of its level.
-    ...place.area_path.map((zone) => [escapeHtml(zone.kind), escapeHtml(zone.name)]),
     [
       'Coordenadas',
       coordinatesHtml(place.lat, place.lon, { guide: { name: place.name, placeId: place.id } }),

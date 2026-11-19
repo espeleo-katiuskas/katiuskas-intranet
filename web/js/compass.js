@@ -195,9 +195,7 @@ function setUpCompass() {
 
 if (!valid) {
   document.getElementById('compass-title').textContent = 'Ir a un punto';
-  say(
-    'Falta el punto al que ir. Abre esta página desde el botón «Rumbo» de un lugar.',
-  );
+  say('Falta el punto al que ir. Abre esta página desde el botón «Rumbo» de un lugar.');
 } else {
   document.getElementById('compass-title').textContent = name ? `Hacia ${name}` : 'Ir a un punto';
   document.title = `${name ? `Hacia ${name}` : 'Ir a un punto'} — Club de Espeleología Katiuskas`;
