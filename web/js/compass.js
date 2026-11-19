@@ -201,8 +201,8 @@ if (!valid) {
 } else {
   document.getElementById('compass-title').textContent = name ? `Hacia ${name}` : 'Ir a un punto';
   document.title = `${name ? `Hacia ${name}` : 'Ir a un punto'} — Club de Espeleología Katiuskas`;
-  document.getElementById('compass-subtitle').textContent =
-    `Coordenadas del destino: ${formatDecimal(target.lat, target.lon)}`;
+  document.getElementById('compass-destination').textContent =
+    `Coordenadas del destino: ${formatDecimal(target.lat, target.lon)}.`;
   if (!navigator.geolocation || !window.isSecureContext) {
     say('Este navegador no puede decir dónde estás (hace falta GPS y una conexión segura).');
   } else {

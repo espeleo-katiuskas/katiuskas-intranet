@@ -5,6 +5,8 @@
   --ink: #1c211e;
   --ink-muted: #5b625c;
   --accent: #b4732e;
+  /* How far down the title of a page with no link back goes, for it to be where the one of a page with it is. */
+  --first-title-offset: 36px;
   --line: #dcded7;
   --danger: #a1453d;
   --success: #4c7a52;
@@ -310,6 +312,20 @@ body {
 .content > :is(h1, p, .section-header):first-child,
 .content > [hidden]:first-child + :is(h1, p, .section-header) {
   margin-top: 0;
+}
+
+/* The header of a section right under the link back (Sistemas, la Junta, a ledger...) is the title of that
+   page: it is as far from the link as a plain title is, not 32 px like a header in the middle of a page. */
+.content > p:first-child + .section-header {
+  margin-top: 17px;
+}
+
+/* A page of the first level has no link back above its title, which would sit higher than the title of a
+   page below it (the one that has it): it gets the room that the link takes, so the titles of the two are
+   at the same height. */
+.content > :is(h1, .section-header):first-child,
+.content > [hidden]:first-child + :is(h1, .section-header) {
+  margin-top: var(--first-title-offset);
 }
 
 /* What is meant to be read or filled in keeps a measure of its own, whatever the width of the page:
@@ -2598,7 +2614,14 @@ html.map-is-expanded {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+/* On a phone the distance and the circle have to be on the first screen, not under a big title: the title
+   of this page is smaller than the others, and the circle is as high as half the screen at most. */
+.compass-title {
+  margin: 8px 0 12px;
+  font-size: 1.25rem;
 }
 
 .compass-message {
@@ -2606,15 +2629,15 @@ html.map-is-expanded {
 }
 
 .compass-distance {
-  margin: 8px 0 0;
-  font-size: 2.6rem;
+  margin: 0;
+  font-size: 2.4rem;
   font-weight: 700;
   line-height: 1.1;
 }
 
 .compass-dial {
   width: min(80vw, 340px);
-  height: auto;
+  max-height: 46vh;
 }
 
 .compass-ring {

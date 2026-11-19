@@ -24,22 +24,27 @@ the narrow layout, `style.css` keeps the two rules alike — and remembers it in
 brings the normal layout back instead of overlaying the menu (`NARROW_SCREEN` there has to match the
 media query). The content is at most 1400px wide (`.content`), the full width up to there so that
 tables use it; running text keeps 75 characters and the panels of filters and forms 960px, whatever
-the width. Its own `requireAnyRole` option additionally redirects home if the signed-in user holds
-none of the listed roles — the whole-page gates of `member.js` (admin/board), of
-`accounting.js`/`account.js` (admin/board/money) and of `admin.js` (admin), tighter than the
-ordinary baseline check every API route already enforces. Which sidebar link reads as "active" is
-computed from `location.pathname` (`ACTIVE_ALIASES` mapping a detail page like `/actividad` or
-`/socio` to the listing it was reached from, `/actividades`/`/socios`) rather than a per-page
-`class="active"` written by hand — one less thing a new page could forget. `login.html` is the one
-page with no shell and no session yet, and never calls `initPage()`. `404.html` (`js/notfound.js`)
-is what Caddy serves, with a 404 status and without changing the address, for anything that isn't a
-page (`handle_errors` in `deploy/Caddyfile`, which is why `root` is declared at the site level there
-— an error handler can't see one set inside the `handle`; API responses are untouched). It can't
-assume who is looking: with a session token it becomes an ordinary page (`initPage()`, menu
-included), imported only then because `api.js` reads the token as soon as it loads; without one it
-shows a plain panel linking to `/login`. Everything it loads is by absolute path, since it is served
-at whatever address was asked for, however deep — which is also why `layout.js`'s topbar logo is
-`/images/…` and not relative.
+the width. The gap under the topbar is the padding of `.content` (20px) and nothing else: the first
+element of a page has no margin above it. A page of the first level has no link back above its
+title, so it gets `--first-title-offset` (36px) to put the title at the height of the one of a page
+below it, which has the link; the home page, which has columns and no title, is left as it is. When
+the title of a page below is the header of a section (Sistemas, la Junta, a ledger), it is as far
+from the link as a plain title is (17px, not the 32px of a header in the middle of a page). Its own
+`requireAnyRole` option additionally redirects home if the signed-in user holds none of the listed
+roles — the whole-page gates of `member.js` (admin/board), of `accounting.js`/`account.js`
+(admin/board/money) and of `admin.js` (admin), tighter than the ordinary baseline check every API
+route already enforces. Which sidebar link reads as "active" is computed from `location.pathname`
+(`ACTIVE_ALIASES` mapping a detail page like `/actividad` or `/socio` to the listing it was reached
+from, `/actividades`/`/socios`) rather than a per-page `class="active"` written by hand — one less
+thing a new page could forget. `login.html` is the one page with no shell and no session yet, and
+never calls `initPage()`. `404.html` (`js/notfound.js`) is what Caddy serves, with a 404 status and
+without changing the address, for anything that isn't a page (`handle_errors` in `deploy/Caddyfile`,
+which is why `root` is declared at the site level there — an error handler can't see one set inside
+the `handle`; API responses are untouched). It can't assume who is looking: with a session token it
+becomes an ordinary page (`initPage()`, menu included), imported only then because `api.js` reads
+the token as soon as it loads; without one it shows a plain panel linking to `/login`. Everything it
+loads is by absolute path, since it is served at whatever address was asked for, however deep —
+which is also why `layout.js`'s topbar logo is `/images/…` and not relative.
 
 **Managing material.** `/material` is for looking at the material and its movements: each row only
 shows "Movimientos" and "+ Movimiento". What is needed now and then — "+ Nuevo material" in the
@@ -314,10 +319,13 @@ direction of movement that the GPS gives (`coords.heading`, taken only above 0.7
 assumed to point where the person walks, and the last one stays when they stop for eight seconds),
 and, with neither, the north is up and the page says to walk a few steps. A compass reading older
 than two and a half seconds is not used. The page says which of the two is in use and how precise
-the GPS is. The maths (`distanceM`, `bearingDeg`, `angleDiff`, `deviceHeading`, `cardinal`) is in
-`js/bearing.js`, with no dependencies. The compass is taken as it comes (magnetic north, which
-differs from the true one by a degree or so in Spain), a phone held in portrait is assumed, and the
-screen is not kept awake. It is part of "Lugares" in the menu (`ACTIVE_ALIASES`).
+the GPS is. The title is smaller than the others, the coordinates of the destination go at the end
+and the circle is half the height of the screen at most (`46vh`), so that the distance, the circle
+and where the point is all fit on the first screen of a phone. The maths (`distanceM`, `bearingDeg`,
+`angleDiff`, `deviceHeading`, `cardinal`) is in `js/bearing.js`, with no dependencies. The compass
+is taken as it comes (magnetic north, which differs from the true one by a degree or so in Spain), a
+phone held in portrait is assumed, and the screen is not kept awake. It is part of "Lugares" in the
+menu (`ACTIVE_ALIASES`).
 
 **Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
 (see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the
