@@ -1,13 +1,15 @@
 // The outbox: what a person did with no connection and has to be sent when there is one. Today it is the
-// entries that are added to the memoria of an activity (a text, or a file such as a photo); the place
-// of an entry is `kind`, so what comes later (the changes to a place, the photos of a place) goes in the
-// same queue. It lives in IndexedDB, which keeps a file as it is (localStorage cannot), and an entry
+// entries that are added to the memoria of an activity (a text, or a file such as a photo), the changes
+// to a place and the points added to one; the place of an entry is `kind`, so what comes later (the
+// photos of a place) goes in the same queue. It lives in IndexedDB, which keeps a file as it is (localStorage cannot), and an entry
 // stays there until it is sent or the person discards it: closing the page, the browser or the phone
 // loses nothing.
 //
 // An entry is { kind, login, queuedAt, …what that kind needs, error? }: `login` is who made it (it is only
 // sent as that person, never as whoever signs in next on that phone) and `error`, if there is one, is why
 // the server refused it, which has to be looked at by the person (retried or discarded).
+
+import { describeFields, placeBody, sameValue } from './place-body.js';
 
 const DB_NAME = 'katiuskas-offline';
 const STORE = 'outbox';
@@ -89,6 +91,33 @@ const SENDERS = {
     else form.set('file', entry.file, entry.fileName);
     await apiFetchForm(`/activities/${entry.activityId}/resources`, form);
   },
+  // The edit of a place is made on the place as it is now, not as it was when the person edited it, so
+  // that what others changed meanwhile is not lost: only the fields the person changed are put in, and
+  // if somebody changed one of those too (it is not what the person saw, nor what they want) it is not
+  // sent: the person decides, with the place in front.
+  'place-edit': async (entry, { apiFetch }) => {
+    const fresh = placeBody(await apiFetch(`/places/${entry.placeId}`));
+    const fields = Object.keys(entry.changes);
+    if (fields.every((f) => sameValue(fresh[f], entry.changes[f]))) return; // Already there.
+    const clash = fields.filter(
+      (f) => !sameValue(fresh[f], entry.base[f]) && !sameValue(fresh[f], entry.changes[f]),
+    );
+    if (clash.length) {
+      throw new Error(
+        `El lugar ha cambiado mientras tanto (${describeFields(clash)}). Mira cómo está ahora y, si hace falta, vuelve a hacer el cambio.`,
+      );
+    }
+    await apiFetch(`/places/${entry.placeId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...fresh, ...entry.changes }),
+    });
+  },
+  'place-point': async (entry, { apiFetch }) => {
+    await apiFetch(`/places/${entry.placeId}/points`, {
+      method: 'POST',
+      body: JSON.stringify(entry.point),
+    });
+  },
 };
 
 // Whether the entry is already there: a request that failed for want of a connection may have reached the
@@ -106,6 +135,18 @@ const ALREADY_SENT = {
         Date.parse(r.created_at) >= entry.queuedAt - 5 * 60 * 1000,
     );
   },
+  'place-point': async (entry, { apiFetch }) => {
+    const { points } = await apiFetch(`/places/${entry.placeId}`);
+    const p = entry.point;
+    return (points ?? []).some(
+      (x) =>
+        x.kind === p.kind &&
+        (x.name ?? null) === (p.name ?? null) &&
+        (x.note ?? null) === (p.note ?? null) &&
+        sameValue(x.lat, p.lat) &&
+        sameValue(x.lon, p.lon),
+    );
+  },
 };
 
 // Sends what is in the outbox of this person, in order. It stops at the first request that finds no
@@ -118,7 +159,7 @@ export async function flush(login, api) {
     const sent = [];
     for (const entry of await entries((e) => e.login === login && !e.error)) {
       try {
-        if (!(await ALREADY_SENT[entry.kind](entry, api))) await SENDERS[entry.kind](entry, api);
+        if (!(await ALREADY_SENT[entry.kind]?.(entry, api))) await SENDERS[entry.kind](entry, api);
         await discard(entry.id);
         sent.push(entry);
       } catch (err) {

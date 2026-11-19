@@ -3,6 +3,7 @@ import { formatDecimal } from './coordinates.js';
 import { openModal } from './modal.js';
 import { CATEGORY_LABELS, facts } from './osm-layer.js';
 import { buildDialog } from './place-dialog.js';
+import { placeBody } from './place-body.js';
 
 // The dialog to say which element of OpenStreetMap a place of the catalogue is: the elements near it that
 // are not yet a place, those whose name looks like the place's first and then the nearest, for a person to
@@ -217,24 +218,7 @@ function osmAltNames(tags) {
 // ones are added), "position", "ele" (the altitude) and "description" (only into a place that has none).
 function copyFromOsm(place, element, field) {
   const tags = element.tags ?? {};
-  const body = {
-    type_id: place.type_id,
-    name: place.name,
-    alt_names: [...place.alt_names],
-    state: place.state ?? '',
-    subtype_id: place.subtype_id ?? null,
-    system_id: place.system_id ?? null,
-    area_id: place.area_id,
-    lat: place.lat,
-    lon: place.lon,
-    altitude_m: place.altitude_m ?? null,
-    access: place.access ?? null,
-    description: place.description ?? null,
-    depth_m: place.depth_m ?? null,
-    horizontal_length_m: place.horizontal_length_m ?? null,
-    geology_id: place.geology_id ?? null,
-    technical_sheet: place.technical_sheet ?? null,
-  };
+  const body = placeBody(place);
   const has = (list, name) => list.some((n) => normalizeForSearch(n) === normalizeForSearch(name));
   if (field === 'name') {
     body.name = (tags.name || tags['name:es']).trim();

@@ -21,6 +21,7 @@ import {
 } from './api.js';
 import { initPage } from './layout.js';
 import * as outbox from './outbox.js';
+import { bindPendingList } from './pending-list.js';
 import { initModal, openModal } from './modal.js';
 import { itemLabel, itemPickerText } from './material-common.js';
 import { renderMarkdown } from './markdown.js';
@@ -1191,59 +1192,12 @@ async function queueMemoria(formData) {
   await renderMemoriaPending();
 }
 
-async function renderMemoriaPending() {
-  const container = document.getElementById('memoria-pending');
-  if (!container) return;
-  let pending = [];
-  try {
-    pending = await outbox.entries(
-      (e) => e.kind === 'memoria' && e.login === viewer.login && e.activityId === activityId,
-    );
-  } catch {
-    // No storage (private window): nothing is waiting.
-  }
-  container.innerHTML = pending
-    .map(
-      (e) => `
-    <div class="outbox-row" data-outbox-id="${e.id}">
-      <div><span class="badge">Pendiente de enviar</span> <strong>${escapeHtml(e.title)}</strong></div>
-      ${e.error ? `<p class="form-hint">No se pudo enviar: ${escapeHtml(e.error)}</p>` : ''}
-      <div class="outbox-actions">
-        <button type="button" class="btn btn-secondary btn-small" data-outbox-retry="${e.id}"${
-          isOffline() ? ' hidden' : ''
-        }>Reintentar</button>
-        <button type="button" class="btn btn-secondary btn-small" data-outbox-discard="${e.id}">Descartar</button>
-      </div>
-    </div>`,
-    )
-    .join('');
-}
-
-document.getElementById('memoria-pending')?.addEventListener('click', async (event) => {
-  const retry = event.target.closest('[data-outbox-retry]');
-  const discard = event.target.closest('[data-outbox-discard]');
-  if (discard) {
-    if (!confirm('¿Descartar esta entrada sin enviarla?')) return;
-    await outbox.discard(Number(discard.dataset.outboxDiscard));
-  } else if (retry) {
-    await outbox.update(Number(retry.dataset.outboxRetry), { error: null });
-    try {
-      const sent = await outbox.flush(viewer.login, { apiFetch, apiFetchForm });
-      if (sent.length) showFeedback('Añadido a la memoria.');
-    } catch (err) {
-      showError(err.message);
-    }
-    await loadMemoria();
-  } else {
-    return;
-  }
-  await renderMemoriaPending();
-});
-
-// layout.js sends the outbox when the page opens; when something went, show it.
-window.addEventListener('katiuskas:outbox-sent', () => {
-  renderMemoriaPending();
-  loadMemoria();
+const renderMemoriaPending = bindPendingList({
+  container: document.getElementById('memoria-pending'),
+  login: viewer.login,
+  matches: (e) => e.kind === 'memoria' && e.activityId === activityId,
+  describe: (e) => e.title,
+  reload: () => loadMemoria(),
 });
 
 const directoryLoaded = loadDirectory();
