@@ -298,10 +298,18 @@ body {
 }
 
 .content {
-  padding: 28px;
+  padding: 20px 28px 28px;
   /* Wide enough for the widest tables; past this the columns of a table end up too far from each
      other to follow a line across. */
   max-width: 1400px;
+}
+
+/* The gap under the topbar is the padding of the content and nothing else: the first thing of a page (the
+   link back, the title or the header of a section, after at most a hidden banner) has no margin above it,
+   where it used to add its own, 16 to 32 px, depending on what it was. */
+.content > :is(h1, p, .section-header):first-child,
+.content > [hidden]:first-child + :is(h1, p, .section-header) {
+  margin-top: 0;
 }
 
 /* What is meant to be read or filled in keeps a measure of its own, whatever the width of the page:
