@@ -1,6 +1,6 @@
 // The outbox: what a person did with no connection and has to be sent when there is one. Today it is the
 // entries that are added to the memoria of an activity (a text, or a file such as a photo), the changes
-// to a place and the points added to one; the place of an entry is `kind`, so what comes later (the
+// to a place, the points added to one and the photos and files of one; the place of an entry is `kind`, so what comes later (the
 // photos of a place) goes in the same queue. It lives in IndexedDB, which keeps a file as it is (localStorage cannot), and an entry
 // stays there until it is sent or the person discards it: closing the page, the browser or the phone
 // loses nothing.
@@ -112,6 +112,12 @@ const SENDERS = {
       body: JSON.stringify({ ...fresh, ...entry.changes }),
     });
   },
+  'place-file': async (entry, { apiFetchForm }) => {
+    const form = new FormData();
+    form.set('file', entry.file, entry.fileName);
+    if (entry.title) form.set('title', entry.title);
+    await apiFetchForm(`/places/${entry.placeId}/files`, form);
+  },
   'place-point': async (entry, { apiFetch }) => {
     await apiFetch(`/places/${entry.placeId}/points`, {
       method: 'POST',
@@ -133,6 +139,16 @@ const ALREADY_SENT = {
         r.title === entry.title &&
         (entry.type !== 'text' || r.description === entry.description) &&
         Date.parse(r.created_at) >= entry.queuedAt - 5 * 60 * 1000,
+    );
+  },
+  'place-file': async (entry, { apiFetch }) => {
+    const files = await apiFetch(`/places/${entry.placeId}/files`);
+    return files.some(
+      (f) =>
+        f.uploaded_by === entry.login &&
+        f.file_name === entry.fileName &&
+        f.file_size === entry.file.size &&
+        Date.parse(f.created_at) >= entry.queuedAt - 5 * 60 * 1000,
     );
   },
   'place-point': async (entry, { apiFetch }) => {

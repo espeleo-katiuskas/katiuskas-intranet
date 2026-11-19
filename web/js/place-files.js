@@ -4,10 +4,13 @@ import {
   apiFetchForm,
   escapeHtml,
   formatDateTime,
+  isOffline,
   showError,
   showFeedback,
 } from './api.js';
 import { formatSize } from './file-browser.js';
+import { shrinkImage } from './image-resize.js';
+import * as outbox from './outbox.js';
 
 // The photos and documents of a place and of a system are the same thing with another address: `base`
 // is "/places/3" or "/systems/4", and under it are the files (GET and POST /files, the bytes at
@@ -44,14 +47,37 @@ function fileRowsHtml(files, { base, canRemove = () => false, personLink }) {
     .join('');
 }
 
-// Makes the form to add a file and the buttons "Borrar" inside `list` work, then calls `reload`.
-function bindFiles({ list, form, base, reload }) {
+// Makes the form to add a file and the buttons "Borrar" inside `list` work, then calls `reload`. A
+// picture is made smaller first (image-resize.js). With `queue` ({ login, placeId, onQueued }), for a
+// place, a file that cannot be sent for lack of connection waits in the outbox instead.
+function bindFiles({ list, form, base, reload, queue = null }) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const submit = form.querySelector('button[type="submit"]');
     submit.disabled = true;
     try {
-      await apiFetchForm(`${base}/files`, new FormData(form));
+      const data = new FormData(form);
+      const original = data.get('file');
+      const file = original instanceof File ? await shrinkImage(original) : original;
+      data.set('file', file, file.name);
+      try {
+        if (queue && isOffline()) throw Object.assign(new Error('offline'), { network: true });
+        await apiFetchForm(`${base}/files`, data);
+      } catch (err) {
+        if (!queue || !err.network) throw err;
+        await outbox.enqueue({
+          kind: 'place-file',
+          login: queue.login,
+          placeId: queue.placeId,
+          file,
+          fileName: file.name,
+          title: (data.get('title') ?? '').toString().trim(),
+        });
+        form.reset();
+        showFeedback('Guardado en este móvil: se enviará cuando haya conexión.');
+        await queue.onQueued?.();
+        return;
+      }
       form.reset();
       showFeedback('Fichero añadido.');
       await reload();

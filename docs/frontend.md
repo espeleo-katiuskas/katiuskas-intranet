@@ -380,21 +380,22 @@ when the page is a copy, or when sending fails with `err.network`, `queueMemoria
 instead of showing an error, and says "Guardado en este móvil: se enviará cuando haya conexión"),
 the edit of a place (`place-edit`) and a point added to one (`place-point`), both from the dialogs
 of `/lugar` (`place-dialog.js`: "Usar mi ubicación" works with no connection, it only needs the
-GPS). An entry is `{ kind, login, queuedAt, … }`; it belongs to the person who made it and is only
-ever sent as them, never as whoever signs in next on that phone. The queue of a page is drawn by
-`bindPendingList` (`pending-list.js`: above the memoria in `#memoria-pending`, below the buttons of
-a place in `#place-pending`), each entry as "Pendiente de enviar", with "Reintentar" and
-"Descartar". `flush(login, api)` sends them in order: a page does it 1.5 s after it opens on line
-(`initOffline`, called from `initPage` with `apiFetch` and `apiFetchForm`, so that `outbox.js` does
-not import `api.js`) and when the browser says `online`; only one page does it at a time (Web
-Locks); it stops at the first request that finds no connection or a refused session, and an entry
-that the server refuses stays with its `error` (shown, never retried by itself, so one bad entry
-does not block the others) until the person retries or discards it. Before sending, `ALREADY_SENT`
-looks at what the server has, so a request that arrived but whose answer was lost does not add the
-entry twice. When something was sent, a message says so and the event `katiuskas:outbox-sent` makes
-the page draw its lists again. Signing out does not empty the queue: it is the person's work, and
-waits for their next session. A new kind of entry needs its `SENDERS` and, if sending twice would
-show, its `ALREADY_SENT` in `outbox.js`.
+GPS), and a photo or file attached to a place (`place-file`, the form of `/lugar` through
+`bindFiles`' `queue` option; the page of a system has no queue). An entry is `{ kind, login,
+queuedAt, … }`; it belongs to the person who made it and is only ever sent as them, never as whoever
+signs in next on that phone. The queue of a page is drawn by `bindPendingList` (`pending-list.js`:
+above the memoria in `#memoria-pending`, below the buttons of a place in `#place-pending`), each
+entry as "Pendiente de enviar", with "Reintentar" and "Descartar". `flush(login, api)` sends them in
+order: a page does it 1.5 s after it opens on line (`initOffline`, called from `initPage` with
+`apiFetch` and `apiFetchForm`, so that `outbox.js` does not import `api.js`) and when the browser
+says `online`; only one page does it at a time (Web Locks); it stops at the first request that finds
+no connection or a refused session, and an entry that the server refuses stays with its `error`
+(shown, never retried by itself, so one bad entry does not block the others) until the person
+retries or discards it. Before sending, `ALREADY_SENT` looks at what the server has, so a request
+that arrived but whose answer was lost does not add the entry twice. When something was sent, a
+message says so and the event `katiuskas:outbox-sent` makes the page draw its lists again. Signing
+out does not empty the queue: it is the person's work, and waits for their next session. A new kind
+of entry needs its `SENDERS` and, if sending twice would show, its `ALREADY_SENT` in `outbox.js`.
 
 The edit of a place is kept as the fields that changed (`diffPlace` in `place-body.js`), with what
 each had when the person edited (`base`) and what they want (`changes`), never as the whole place:
@@ -405,8 +406,15 @@ says "El lugar ha cambiado mientras tanto (…)" until the person looks and retr
 no connection the dialog works with the catalogues that the phone has (types, subtypes, systems,
 geologies), the zone stays the one the place has (the search of zones and the proposal from the
 coordinates need the API), only an edit of an existing place and a new point are kept (a new place,
-changing or removing a point, the link with OpenStreetMap, deleting a place and photos still need
-the connection, and their buttons are not offered).
+changing or removing a point, the link with OpenStreetMap and deleting a place still need the
+connection, and their buttons are not offered).
+
+A picture attached to a place, on line or not, is made smaller first (`image-resize.js`: at most
+1600 px on its longest side, as a JPEG, turned the way the phone took it, kept as it was if it is
+not a JPEG, PNG or WebP, is already small or would not get smaller), so that it is quick to send
+over a weak signal and fits the 10 MiB of the API. The file waits in IndexedDB as a `File`; to avoid
+sending it twice, `ALREADY_SENT` looks for a file of the same person, name and size attached after
+the entry was queued.
 
 **Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
 (see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the

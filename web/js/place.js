@@ -372,11 +372,13 @@ const editDialog = () => document.getElementById('place-dialog');
 const renderPending = bindPendingList({
   container: document.getElementById('place-pending'),
   login: user.login,
-  matches: (e) => (e.kind === 'place-edit' || e.kind === 'place-point') && e.placeId === placeId,
+  matches: (e) => e.kind.startsWith('place-') && e.placeId === placeId,
   describe: (e) =>
     e.kind === 'place-edit'
       ? `Cambios en el lugar: ${describeFields(Object.keys(e.changes))}`
-      : `Punto nuevo: ${POINT_KIND_LABELS[e.point.kind] ?? e.point.kind}${e.point.name ? ` «${e.point.name}»` : ''}`,
+      : e.kind === 'place-file'
+        ? `${e.file.type.startsWith('image/') ? 'Foto' : 'Fichero'}: ${e.title || e.fileName}`
+        : `Punto nuevo: ${POINT_KIND_LABELS[e.point.kind] ?? e.point.kind}${e.point.name ? ` «${e.point.name}»` : ''}`,
   reload: load,
 });
 const queued = () => renderPending();
@@ -508,6 +510,7 @@ bindFiles({
   form: document.getElementById('file-form'),
   base: `/places/${placeId}`,
   reload: load,
+  queue: { login: user.login, placeId, onQueued: queued },
 });
 
 // Only admin and board have the button (data-roles removes it for the rest).
@@ -524,6 +527,5 @@ document.getElementById('delete-place')?.addEventListener('click', async () => {
 if (isOffline()) {
   // What needs the connection is not offered.
   document.getElementById('delete-place')?.setAttribute('hidden', '');
-  document.getElementById('file-form')?.setAttribute('hidden', '');
 }
 await Promise.all([load(), renderPending()]);
