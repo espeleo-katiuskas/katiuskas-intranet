@@ -48,13 +48,65 @@ function bindCoordinates(input, preview) {
   return update;
 }
 
+// Whether the browser can say where the person is: it has the geolocation API and the page is a secure
+// context (https, or localhost), which is the only place a browser answers it.
+function canLocate() {
+  return Boolean(navigator.geolocation) && window.isSecureContext;
+}
+
 function coordinatesField(id, label) {
   return `
     <div class="field span-2">
       <label for="${id}">${label}</label>
       <input id="${id}" name="coordinates" type="text" required autocomplete="off" placeholder="${COORDINATES_PLACEHOLDER}">
-      <p class="hint coordinates-preview" id="${id}-preview"></p>
+      <p class="hint coordinates-preview" id="${id}-preview"></p>${
+        canLocate()
+          ? `
+      <p class="coordinates-locate">
+        <button type="button" class="btn btn-secondary btn-small" id="${id}-locate">Usar mi ubicación</button>
+        <span class="hint" id="${id}-locate-status" role="status"></span>
+      </p>`
+          : ''
+      }
     </div>`;
+}
+
+const LOCATE_ERRORS = {
+  1: 'No se ha dado permiso para usar la ubicación.',
+  2: 'No se ha podido saber dónde estás.',
+  3: 'Se ha tardado demasiado en saber dónde estás.',
+};
+
+// The button "Usar mi ubicación" of a field of coordinates (when the browser has one): it asks the browser
+// where the person is, writes it in the field as decimal degrees and lets the field's own listeners see it
+// (the preview, and the zone that is proposed from the coordinates), and says how precise it is. The
+// altitude is not taken: the browser gives it over the ellipsoid and the form asks for it over the sea.
+function bindLocate(input, id) {
+  const button = document.getElementById(`${id}-locate`);
+  if (!button) return;
+  const status = document.getElementById(`${id}-locate-status`);
+  button.addEventListener('click', () => {
+    button.disabled = true;
+    status.textContent = 'Buscando tu posición…';
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        input.value = formatDecimal(coords.latitude, coords.longitude);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        status.textContent = `Precisión de unos ${Math.round(coords.accuracy)} m.`;
+        button.disabled = false;
+      },
+      (error) => {
+        status.textContent = LOCATE_ERRORS[error.code] ?? LOCATE_ERRORS[2];
+        button.disabled = false;
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+    );
+  });
+  // A dialog opened again starts without what was said the last time.
+  input.closest('dialog')?.addEventListener('close', () => {
+    status.textContent = '';
+    button.disabled = false;
+  });
 }
 
 let placeDialog = null;
@@ -186,6 +238,7 @@ function ensurePlaceDialog() {
     form.elements.coordinates,
     document.getElementById('pd-coordinates-preview'),
   );
+  bindLocate(form.elements.coordinates, 'pd-coordinates');
   const areaPicker = bindAreaPicker(dialog.querySelector('[data-area-picker]'), {
     onChange: () => {
       // A person's own choice, or an emptied field, is no longer the proposal.
@@ -529,6 +582,7 @@ function ensurePointDialog() {
     form.elements.coordinates,
     document.getElementById('pt-coordinates-preview'),
   );
+  bindLocate(form.elements.coordinates, 'pt-coordinates');
   dialog.addEventListener('close', updateCoordinates);
   pointDialog = { dialog, form, updateCoordinates };
   return pointDialog;

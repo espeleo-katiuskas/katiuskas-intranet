@@ -247,11 +247,19 @@ when the form is sent). The field of **coordinates** is one text box that reads 
 understood — the decimals and the UTM — or that it does not understand it, in which case the form
 cannot be sent. `js/coordinates.js` does it, with no dependencies: Krüger's series to the sixth
 order, exact to far less than a millimetre inside a zone (ETRS89, the datum of the Spanish UTM, is
-taken as WGS84, which differs by centimetres); the API only ever sees latitude and longitude. The
-altitude, in metres above sea level, is a field of its own (optional, between -500 and 9000) next to
-the coordinates, in the dialog of a place and in that of a point, and shows after the coordinates of
-a point and as its own row in the place. The shared labels and helpers (states, kinds of point, the
-coordinates as a link) are in `places-common.js`.
+taken as WGS84, which differs by centimetres); the API only ever sees latitude and longitude. If the
+browser can say where the person is (it has `navigator.geolocation` and the page is a secure
+context: https, or localhost), the field, in the dialog of a place and in that of a point, has a
+button "Usar mi ubicación" (`bindLocate` in `place-dialog.js`) that asks for the position
+(`getCurrentPosition`, with high accuracy, 20 seconds at most), writes it in the field as decimal
+degrees, fires the field's own `input` event (so the page shows the UTM and a new place is proposed
+its zone) and says "Precisión de unos N m"; a refusal, a position that cannot be known or a delay is
+said under the field too. The altitude is not taken from it, since a browser gives it over the
+ellipsoid and the form asks for it over sea level. The altitude, in metres above sea level, is a
+field of its own (optional, between -500 and 9000) next to the coordinates, in the dialog of a place
+and in that of a point, and shows after the coordinates of a point and as its own row in the place.
+The shared labels and helpers (states, kinds of point, the coordinates as a link) are in
+`places-common.js`.
 
 **Where it is** is chosen with `area-picker.js`: one text box where a person types part of a name (a
 municipality, a province, a country) and chooses among what `GET /areas?search=` finds, each shown
