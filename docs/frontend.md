@@ -372,16 +372,17 @@ intranet"). Signing out, or a session that is refused, deletes the copies of the
 `katiuskas:me` (`clearOfflineData`). With no connection the menu has only "Inicio", "Actividades"
 and "Lugares" (`keepOfflineMenu` in `layout.js`: the other pages need the API), and the home page
 shows the data of interest from the copy and "No disponible sin conexión" for the Junta and the
-documents, which are not kept. So, with no connection: the activities that are active are listed and
-the page of one of the next ones opens ("Esta actividad no está guardada en este móvil…" for
-another, and the material is not loaded, without a modal about it), the list of places works, each
-row of it with its "Rumbo" button on a phone (it needs only the coordinates, which the list has, so
-it works for places that have never been opened), the page of a place opened lately works with its
-"Rumbo" buttons, and `/brujula` needs nothing but the phone (the GPS and the compass); the map has
-no tiles, and a place not opened lately says so ("Este lugar no está guardado en este móvil…",
-`err.network` with `isOffline()`). Nothing can be changed, except what goes through the outbox (next
-paragraph): any other change with no connection fails as it always did. The Caddy of the intranet
-serves `/sw.js` with `no-cache` (`docs/deployment.md`), the rest with `max-age=3600` as before.
+documents, which are not kept (the link to the history of the Junta is not there either). So, with
+no connection: the activities that are active are listed and the page of one of the next ones opens
+("Esta actividad no está guardada en este móvil…" for another, and the material is not loaded,
+without a modal about it), the list of places works, each row of it with its "Rumbo" button on a
+phone (it needs only the coordinates, which the list has, so it works for places that have never
+been opened), the page of a place opened lately works with its "Rumbo" buttons, and `/brujula` needs
+nothing but the phone (the GPS and the compass); the map has no tiles, and a place not opened lately
+says so ("Este lugar no está guardado en este móvil…", `err.network` with `isOffline()`). Nothing
+can be changed, except what goes through the outbox (next paragraph): any other change with no
+connection fails as it always did. The Caddy of the intranet serves `/sw.js` with `no-cache`
+(`docs/deployment.md`), the rest with `max-age=3600` as before.
 
 **The outbox (`js/outbox.js`).** What a person does with no connection and has to reach the server
 is kept on the phone, in IndexedDB (`katiuskas-offline`, store `outbox`), and sent when it can be.

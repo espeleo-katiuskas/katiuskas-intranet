@@ -47,6 +47,9 @@ function unavailable(message) {
   return isOffline() ? 'No disponible sin conexión.' : message;
 }
 
+// The history of the Junta is a page that needs the connection.
+if (isOffline()) document.getElementById('board-history-link').hidden = true;
+
 async function loadBoardMembers() {
   const grid = document.getElementById('board-grid');
   try {
