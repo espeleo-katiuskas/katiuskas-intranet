@@ -20,6 +20,7 @@ import {
   stopAsNotFound,
 } from './api.js';
 import { initPage } from './layout.js';
+import * as outbox from './outbox.js';
 import { initModal, openModal } from './modal.js';
 import { itemLabel, itemPickerText } from './material-common.js';
 import { renderMarkdown } from './markdown.js';
@@ -1151,15 +1152,98 @@ memoriaAddForm?.addEventListener('submit', async (event) => {
   const submitButton = form.querySelector('button[type="submit"]');
   submitButton.disabled = true;
   try {
-    await apiFetchForm(`/activities/${activityId}/resources`, formData);
-    showFeedback('Añadido a la memoria.');
+    if (isOffline()) {
+      await queueMemoria(formData);
+    } else {
+      try {
+        await apiFetchForm(`/activities/${activityId}/resources`, formData);
+        showFeedback('Añadido a la memoria.');
+        await loadMemoria();
+      } catch (err) {
+        // The connection went away after the page opened (in a cave it does): keep it for later.
+        if (!err.network) throw err;
+        await queueMemoria(formData);
+      }
+    }
     memoriaAddDialog.close();
-    await loadMemoria();
   } catch (err) {
     showError(err.message);
   } finally {
     submitButton.disabled = false;
   }
+});
+
+// Memoria entries added with no connection wait in the outbox (js/outbox.js) until they can be sent.
+async function queueMemoria(formData) {
+  const file = formData.get('file');
+  await outbox.enqueue({
+    kind: 'memoria',
+    login: viewer.login,
+    activityId,
+    type: formData.get('type'),
+    title: formData.get('title'),
+    placeId: formData.get('place_id') || null,
+    description: formData.get('description') || '',
+    file: file instanceof File ? file : null,
+    fileName: file instanceof File ? file.name : null,
+  });
+  showFeedback('Guardado en este móvil: se enviará cuando haya conexión.');
+  await renderMemoriaPending();
+}
+
+async function renderMemoriaPending() {
+  const container = document.getElementById('memoria-pending');
+  if (!container) return;
+  let pending = [];
+  try {
+    pending = await outbox.entries(
+      (e) => e.kind === 'memoria' && e.login === viewer.login && e.activityId === activityId,
+    );
+  } catch {
+    // No storage (private window): nothing is waiting.
+  }
+  container.innerHTML = pending
+    .map(
+      (e) => `
+    <div class="outbox-row" data-outbox-id="${e.id}">
+      <div><span class="badge">Pendiente de enviar</span> <strong>${escapeHtml(e.title)}</strong></div>
+      ${e.error ? `<p class="form-hint">No se pudo enviar: ${escapeHtml(e.error)}</p>` : ''}
+      <div class="outbox-actions">
+        <button type="button" class="btn btn-secondary btn-small" data-outbox-retry="${e.id}"${
+          isOffline() ? ' hidden' : ''
+        }>Reintentar</button>
+        <button type="button" class="btn btn-secondary btn-small" data-outbox-discard="${e.id}">Descartar</button>
+      </div>
+    </div>`,
+    )
+    .join('');
+}
+
+document.getElementById('memoria-pending')?.addEventListener('click', async (event) => {
+  const retry = event.target.closest('[data-outbox-retry]');
+  const discard = event.target.closest('[data-outbox-discard]');
+  if (discard) {
+    if (!confirm('¿Descartar esta entrada sin enviarla?')) return;
+    await outbox.discard(Number(discard.dataset.outboxDiscard));
+  } else if (retry) {
+    await outbox.update(Number(retry.dataset.outboxRetry), { error: null });
+    try {
+      const sent = await outbox.flush(viewer.login, { apiFetch, apiFetchForm });
+      if (sent.length) showFeedback('Añadido a la memoria.');
+    } catch (err) {
+      showError(err.message);
+    }
+    await loadMemoria();
+  } else {
+    return;
+  }
+  await renderMemoriaPending();
+});
+
+// layout.js sends the outbox when the page opens; when something went, show it.
+window.addEventListener('katiuskas:outbox-sent', () => {
+  renderMemoriaPending();
+  loadMemoria();
 });
 
 const directoryLoaded = loadDirectory();
@@ -1177,4 +1261,5 @@ await Promise.all([
   itemsLoaded,
   loadActivityLoans(itemsLoaded),
   loadMemoria(Promise.all([directoryLoaded, participantsLoaded])),
+  renderMemoriaPending(),
 ]);

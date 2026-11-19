@@ -2519,7 +2519,7 @@ html.map-is-expanded {
 .osm-block {
   margin: 20px 0 8px;
   padding-top: 12px;
-  border-top: 1px solid var(--border, #ddd);
+  border-top: 1px solid var(--line);
 }
 
 /* The elements of OpenStreetMap that a place may be linked to: one row each, with its button. */
@@ -2729,4 +2729,21 @@ html.map-is-expanded {
 .compass-panel .hint {
   margin: 0;
   max-width: 34rem;
+}
+
+/* A memoria entry that waits in the outbox to be sent */
+.outbox-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.outbox-row p {
+  margin: 0;
+}
+.outbox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }

@@ -357,20 +357,40 @@ on line. **The session** is the other half: `initSession` keeps the last answer 
 (`katiuskas:me`) and, if the network is not there (a failed request, which is told from a refusal:
 only a "no" from the server ends a session) and the person is known from that, the page opens as a
 copy (`isOffline()`): the roles come from the copy, a strip at the top says "Sin conexión: se ven
-los datos guardados en este móvil y no se puede cambiar nada", and the page is loaded again when the
-connection is back (`online`). It waits four seconds for `/auth/me` in that case (a person who has
-never signed in on that phone waits for it as before, and sees "No se puede conectar con la
-intranet"). Signing out, or a session that is refused, deletes the copies of the data and
-`katiuskas:me` (`clearOfflineData`). So, with no connection: the activities that are active are
-listed and the page of one of the next ones opens ("Esta actividad no está guardada en este móvil…"
-for another, and the material is not loaded, without a modal about it), the list of places works,
-each row of it with its "Rumbo" button on a phone (it needs only the coordinates, which the list
-has, so it works for places that have never been opened), the page of a place opened lately works
-with its "Rumbo" buttons, and `/brujula` needs nothing but the phone (the GPS and the compass); the
-map has no tiles, and a place not opened lately says so ("Este lugar no está guardado en este
-móvil…", `err.network` with `isOffline()`). Nothing can be changed yet, adding to the memoria of an
-activity included: a change with no connection fails as it always did. The Caddy of the intranet
-serves `/sw.js` with `no-cache` (`docs/deployment.md`), the rest with `max-age=3600` as before.
+los datos guardados en este móvil…" (and that memoria entries are sent when the connection is back),
+and the page is loaded again when the connection is back (`online`). It waits four seconds for
+`/auth/me` in that case (a person who has never signed in on that phone waits for it as before, and
+sees "No se puede conectar con la intranet"). Signing out, or a session that is refused, deletes the
+copies of the data and `katiuskas:me` (`clearOfflineData`). So, with no connection: the activities
+that are active are listed and the page of one of the next ones opens ("Esta actividad no está
+guardada en este móvil…" for another, and the material is not loaded, without a modal about it), the
+list of places works, each row of it with its "Rumbo" button on a phone (it needs only the
+coordinates, which the list has, so it works for places that have never been opened), the page of a
+place opened lately works with its "Rumbo" buttons, and `/brujula` needs nothing but the phone (the
+GPS and the compass); the map has no tiles, and a place not opened lately says so ("Este lugar no
+está guardado en este móvil…", `err.network` with `isOffline()`). Nothing can be changed, except
+what goes through the outbox (next paragraph): any other change with no connection fails as it
+always did. The Caddy of the intranet serves `/sw.js` with `no-cache` (`docs/deployment.md`), the
+rest with `max-age=3600` as before.
+
+**The outbox (`js/outbox.js`).** What a person does with no connection and has to reach the server
+is kept on the phone, in IndexedDB (`katiuskas-offline`, store `outbox`), and sent when it can be.
+Only the text and the files of memoria entries go through it so far (the form of `/actividad`: when
+the page is a copy, or when sending fails with `err.network`, `queueMemoria` queues the entry
+instead of showing an error, and says "Guardado en este móvil: se enviará cuando haya conexión"). An
+entry is `{ kind, login, queuedAt, … }`; it belongs to the person who made it and is only ever sent
+as them, never as whoever signs in next on that phone. The queue of the activity is drawn above its
+memoria (`#memoria-pending`, "Pendiente de enviar", with "Reintentar" and "Descartar").
+`flush(login, api)` sends them in order: a page does it 1.5 s after it opens on line (`initOffline`,
+called from `initPage` with `apiFetch` and `apiFetchForm`, so that `outbox.js` does not import
+`api.js`) and when the browser says `online`; only one page does it at a time (Web Locks); it stops
+at the first request that finds no connection or a refused session, and an entry that the server
+refuses stays with its `error` (shown, never retried by itself, so one bad entry does not block the
+others) until the person retries or discards it. Before sending, `ALREADY_SENT` looks at what the
+server has, so a request that arrived but whose answer was lost does not add the entry twice. When
+something was sent, a message says so and the event `katiuskas:outbox-sent` makes the page draw its
+lists again. Signing out does not empty the queue: it is the person's work, and waits for their next
+session. A new kind of entry needs its `SENDERS` and `ALREADY_SENT` in `outbox.js`.
 
 **Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
 (see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the
