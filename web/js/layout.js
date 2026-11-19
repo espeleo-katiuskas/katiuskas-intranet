@@ -105,6 +105,7 @@ const NAV_ITEMS = [
 const ACTIVE_ALIASES = {
   '/actividad': '/actividades',
   '/lugar': '/lugares',
+  '/brujula': '/lugares',
   '/sistemas': '/lugares',
   '/sistema': '/lugares',
   '/socio': '/socios',

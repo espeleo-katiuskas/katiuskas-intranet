@@ -221,16 +221,16 @@ fixed; one that has places cannot be deleted), all with the same code (`bindCata
 `places.js`), and "Zonas" (see below). `lugar.html`/`place.js` is one place: the data (other names,
 one row per zone from the country down — "País España", "Comunidad autónoma Comunidad de Madrid",
 "Provincia Madrid", "Municipio Valdemanco": the name of the level is the `kind` of the zone —, the
-main coordinate as "41.52016, -3.63606 · Google Maps · OpenStreetMap" (the degrees and a link to
-each map; the UTM is only in the form, where it is read and shown; `coordinatesHtml`, also used for
-each point and in the page of a system), its altitude above sea level, the geology of a cave, the
-depth and the horizontal length), then "Cómo llegar", "Descripción" and, for a cave or a canyon,
-"Ficha técnica" — all three through `renderRichText` —, and "Otros puntos", a table of the other
-points with "Editar" and "Quitar" on each, "Fotos y documentos" (the files of the place, each with a
-title, its name, size and who attached it, "Descargar" and, for who attached it, admin and board,
-"Borrar"; an image is shown under it; a form attaches a new one), and who added the place and who
-changed it last. Any member has "Editar lugar" and "Añadir punto"; admin and board also "Borrar
-lugar" (`data-roles`).
+main coordinate as "41.52016, -3.63606 · Google Maps" (the degrees and a link to the map, and, on a
+phone, the button "Guiarme hasta aquí", see "Finding a point" below; the UTM is only in the form,
+where it is read and shown; `coordinatesHtml`, also used for each point and in the page of a
+system), its altitude above sea level, the geology of a cave, the depth and the horizontal length),
+then "Cómo llegar", "Descripción" and, for a cave or a canyon, "Ficha técnica" — all three through
+`renderRichText` —, and "Otros puntos", a table of the other points with "Editar" and "Quitar" on
+each, "Fotos y documentos" (the files of the place, each with a title, its name, size and who
+attached it, "Descargar" and, for who attached it, admin and board, "Borrar"; an image is shown
+under it; a form attaches a new one), and who added the place and who changed it last. Any member
+has "Editar lugar" and "Añadir punto"; admin and board also "Borrar lugar" (`data-roles`).
 
 The two dialogs, of a place and of a point, are built the first time they are needed by
 `place-dialog.js` (`openPlaceDialog`, `openPointDialog`) and shared by both pages, so there is one
@@ -293,6 +293,31 @@ that says that all it has goes with it), "Añadir una zona dentro" and "Borrar z
 disabled for a zone with something in it (and says why). There is no way to merge two zones here, on
 purpose: it moves everything in one to the other and cannot be undone, so it is only done through
 the API (`POST /areas/{id}/merge`).
+
+**Finding a point (`/brujula`).** `brujula.html`/`compass.js` says how far a point is and which way,
+for walking to a cave: `/brujula?lat=…&lon=…&nombre=…&lugar=<id>`, with the point, what to call it
+and the place that "Volver al lugar" goes back to. It is reached from the button "Guiarme hasta
+aquí" that `coordinatesHtml` puts after the coordinates of a place, of each of its points and of the
+cavities of a system, only on a phone: the browser has geolocation, the page is a secure context and
+its main pointer is a finger (`(pointer: coarse)`, `canGuide` in `places-common.js`; a laptop has
+the API too and nobody walks with it). The page watches the GPS (`watchPosition`, high accuracy) and
+shows the distance (`formatDistance`: metres, or kilometres from a thousand) with, under it, a
+circle drawn in SVG with two marks, the north (a red triangle and an upright "N") and the
+destination (a dot at the end of a line from the centre), and a line that says in words where it is
+("al NE (42°)") and, within 15 metres or what the GPS cannot tell, that the person is there. The
+circle is turned so that its top is the way the phone points, which comes from the compass if there
+is one (`deviceorientationabsolute`, of Chrome on Android, with `deviceHeading`; and
+`webkitCompassHeading` of Safari on an iPhone, for which a button "Activar la brújula" asks the
+permission, and which shows too when no reading has come in a second and a half, since a Chrome that
+has the function may also need it), smoothed round the short side of the circle, and else from the
+direction of movement that the GPS gives (`coords.heading`, taken only above 0.7 m/s: the phone is
+assumed to point where the person walks, and the last one stays when they stop for eight seconds),
+and, with neither, the north is up and the page says to walk a few steps. A compass reading older
+than two and a half seconds is not used. The page says which of the two is in use and how precise
+the GPS is. The maths (`distanceM`, `bearingDeg`, `angleDiff`, `deviceHeading`, `cardinal`) is in
+`js/bearing.js`, with no dependencies. The compass is taken as it comes (magnetic north, which
+differs from the true one by a degree or so in Spain), a phone held in portrait is assumed, and the
+screen is not kept awake. It is part of "Lugares" in the menu (`ACTIVE_ALIASES`).
 
 **Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
 (see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the

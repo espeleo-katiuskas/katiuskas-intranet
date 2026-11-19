@@ -56,7 +56,10 @@ const detailRow = (label, html) =>
 function cavityCard(p) {
   const rows = [
     detailRow('Dónde', escapeHtml(p.where)),
-    detailRow('Coordenadas', coordinatesHtml(p.lat, p.lon)),
+    detailRow(
+      'Coordenadas',
+      coordinatesHtml(p.lat, p.lon, { guide: { name: p.name, placeId: p.id } }),
+    ),
     detailRow('Altitud', p.altitude_m != null ? `${p.altitude_m} m sobre el nivel del mar` : ''),
     detailRow('Geología', p.geology ? escapeHtml(p.geology) : ''),
     detailRow('Profundidad', p.depth_m != null ? `${p.depth_m} m` : ''),

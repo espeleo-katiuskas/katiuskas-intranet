@@ -1,5 +1,5 @@
 import { apiFetch, escapeHtml } from './api.js';
-import { formatDecimal, googleMapsUrl, mapUrl } from './coordinates.js';
+import { formatDecimal, googleMapsUrl } from './coordinates.js';
 
 // What the pages of the places (/lugares and /lugar) share.
 
@@ -71,12 +71,37 @@ function loadGeologies() {
 // A coordinate for reading: the decimal degrees, "41.52016, -3.63606", with links that show it on
 // Google Maps and on OpenStreetMap ("41.52016, -3.63606 · Google Maps · OpenStreetMap") and, if it is
 // known, its altitude in metres above sea level.
-function coordinatesHtml(lat, lon, altitude = null) {
+// Whether the browser is on a phone that can say where the person is: it has the geolocation API, the page
+// is a secure context (the only place a browser answers it) and its main way of pointing is a finger. A
+// laptop has the API too, but nobody walks to a cave with it.
+function canGuide() {
+  return (
+    Boolean(navigator.geolocation) &&
+    window.isSecureContext &&
+    window.matchMedia('(pointer: coarse)').matches
+  );
+}
+
+// The coordinates of a place or a point with a link to Google Maps, and, on a phone, a button to the page that
+// says how far it is and which way (/brujula). `guide` is { name, placeId }: what the page calls the point
+// and the place it goes back to. The altitude, if there is one, goes after.
+function coordinatesHtml(lat, lon, { altitude = null, guide = null } = {}) {
   const link = (url, name) =>
     `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>`;
+  const query = guide
+    ? new URLSearchParams({
+        lat,
+        lon,
+        nombre: guide.name,
+        ...(guide.placeId ? { lugar: guide.placeId } : {}),
+      })
+    : null;
   return (
     `<span class="nowrap">${formatDecimal(lat, lon)}</span>` +
-    ` · ${link(googleMapsUrl(lat, lon), 'Google Maps')} · ${link(mapUrl(lat, lon), 'OpenStreetMap')}` +
+    ` · ${link(googleMapsUrl(lat, lon), 'Google Maps')}` +
+    (guide && canGuide()
+      ? ` <a class="btn btn-secondary btn-small" href="/brujula?${escapeHtml(query.toString())}">Guiarme hasta aquí</a>`
+      : '') +
     (altitude != null ? ` <span class="subtitle">${altitude} m</span>` : '')
   );
 }

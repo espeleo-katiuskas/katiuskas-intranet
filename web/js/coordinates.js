@@ -196,23 +196,9 @@ function formatUtm(lat, lon) {
   return `${utm.zone}${utm.band} ${Math.round(utm.easting)} ${Math.round(utm.northing)}`;
 }
 
-// A link that shows the place on a map, in OpenStreetMap.
-function mapUrl(lat, lon) {
-  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`;
-}
-
 // A link that shows the place on a map, in Google Maps.
 function googleMapsUrl(lat, lon) {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 }
 
-export {
-  formatDecimal,
-  formatUtm,
-  fromUtm,
-  googleMapsUrl,
-  mapUrl,
-  parseCoordinates,
-  toUtm,
-  zoneOf,
-};
+export { formatDecimal, formatUtm, fromUtm, googleMapsUrl, parseCoordinates, toUtm, zoneOf };

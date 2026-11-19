@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ir a un punto — Club de Espeleología Katiuskas</title>
+<link rel="icon" type="image/png" href="/images/logo-katiuskas.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-column">
+    <header class="topbar" id="topbar"></header>
+    <main class="content">
+      <p><a id="back-link" href="/lugares">&larr; Volver a los lugares</a></p>
+
+      <h1 id="compass-title">Ir a un punto</h1>
+      <p class="subtitle" id="compass-subtitle"></p>
+
+      <p id="compass-message" class="compass-message" hidden></p>
+
+      <section id="compass-panel" class="compass-panel" hidden>
+        <p class="compass-distance" id="compass-distance" aria-live="polite">—</p>
+        <svg id="compass-dial" class="compass-dial" viewBox="-110 -110 220 220" role="img" aria-labelledby="compass-direction">
+          <circle class="compass-ring" r="90"></circle>
+          <path class="compass-notch" d="M0 -100 L7 -112 L-7 -112 Z"></path>
+          <g id="compass-north-mark">
+            <path class="compass-north" d="M0 -90 L9 -72 L-9 -72 Z"></path>
+          </g>
+          <text id="compass-north-letter" class="compass-north-letter" y="-52" text-anchor="middle" dominant-baseline="central">N</text>
+          <g id="compass-target-mark">
+            <line class="compass-target-line" x1="0" y1="0" x2="0" y2="-76"></line>
+            <circle class="compass-target" cy="-90" r="11"></circle>
+          </g>
+          <circle class="compass-center" r="4"></circle>
+        </svg>
+        <p class="compass-direction" id="compass-direction"></p>
+        <ul class="compass-legend" aria-hidden="true">
+          <li><span class="compass-key compass-key-north"></span> Norte</li>
+          <li><span class="compass-key compass-key-target"></span> Destino</li>
+        </ul>
+        <p class="hint" id="compass-source"></p>
+        <p class="hint" id="compass-accuracy"></p>
+        <button id="compass-enable" type="button" class="btn btn-secondary btn-small" hidden>Activar la brújula</button>
+      </section>
+    </main>
+  </div>
+</div>
+<script type="module" src="js/compass.js"></script>
+</body>
+</html>

@@ -170,6 +170,11 @@ async function renderMap() {
   map.fitBounds(group.getBounds(), { padding: [30, 30], maxZoom: 16 });
 }
 
+// What the page that guides to a point calls it: its own name, or what it is, and the place it belongs to.
+function pointGuideName(point) {
+  return `${point.name || (POINT_KIND_LABELS[point.kind] ?? point.kind)} — ${place.name}`;
+}
+
 const OSM_TYPE_NAMES = { node: 'nodo', way: 'vía', relation: 'relación' };
 
 // Whether the place is an element of OpenStreetMap, and the buttons to say it is or that it is not.
@@ -233,7 +238,10 @@ function render() {
     ['Otros nombres', place.alt_names.length ? escapeHtml(place.alt_names.join(' · ')) : null],
     // Where it is: each zone, from the country down, under the name of its level.
     ...place.area_path.map((zone) => [escapeHtml(zone.kind), escapeHtml(zone.name)]),
-    ['Coordenadas', coordinatesHtml(place.lat, place.lon)],
+    [
+      'Coordenadas',
+      coordinatesHtml(place.lat, place.lon, { guide: { name: place.name, placeId: place.id } }),
+    ],
     ['Altitud', place.altitude_m != null ? `${place.altitude_m} m sobre el nivel del mar` : null],
     ['Geología', place.geology ? escapeHtml(place.geology) : null],
     ['Profundidad', place.depth_m != null ? `${place.depth_m} m` : null],
@@ -268,7 +276,10 @@ function render() {
       <tr>
         <td>${escapeHtml(POINT_KIND_LABELS[point.kind] ?? point.kind)}</td>
         <td>${point.name ? escapeHtml(point.name) : '—'}</td>
-        <td>${coordinatesHtml(point.lat, point.lon, point.altitude_m)}</td>
+        <td>${coordinatesHtml(point.lat, point.lon, {
+          altitude: point.altitude_m,
+          guide: { name: pointGuideName(point), placeId: place.id },
+        })}</td>
         <td>${point.note ? escapeHtml(point.note) : ''}</td>
         <td class="nowrap">
           <button type="button" class="btn btn-secondary btn-small" data-edit-point="${point.id}">Editar</button>

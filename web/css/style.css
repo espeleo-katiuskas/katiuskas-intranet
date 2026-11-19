@@ -2582,3 +2582,108 @@ html.map-is-expanded {
   flex: 1 1 14rem;
   max-width: 28rem;
 }
+
+/* The page that says how far a point is and which way (/brujula): the distance, and a circle with two marks,
+   the north and the point, turned so that its top is the way the phone points. */
+.compass-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.compass-message {
+  color: var(--ink-muted);
+}
+
+.compass-distance {
+  margin: 8px 0 0;
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.compass-dial {
+  width: min(80vw, 340px);
+  height: auto;
+}
+
+.compass-ring {
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 3;
+}
+
+.compass-notch {
+  fill: var(--ink);
+}
+
+.compass-north {
+  fill: var(--danger);
+}
+
+.compass-north-letter {
+  fill: var(--danger);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.compass-target {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 3;
+}
+
+.compass-target-line {
+  stroke: var(--accent);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.compass-center {
+  fill: var(--ink);
+}
+
+.compass-direction {
+  margin: 0;
+  font-weight: 600;
+}
+
+.compass-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.compass-key {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.compass-key-north {
+  width: 0;
+  height: 0;
+  border-right: 6px solid transparent;
+  border-bottom: 11px solid var(--danger);
+  border-left: 6px solid transparent;
+}
+
+.compass-key-target {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.compass-panel .hint {
+  margin: 0;
+  max-width: 34rem;
+}
