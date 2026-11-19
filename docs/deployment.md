@@ -267,6 +267,10 @@ intranet.tudominio.org {
 		reverse_proxy 127.0.0.1:64711
 	}
 	root * /opt/katiuskas-intranet/web
+	handle /sw.js {
+		header Cache-Control "no-cache"
+		file_server
+	}
 	handle {
 		header Cache-Control "max-age=3600"
 		try_files {path} {path}.html
@@ -303,6 +307,10 @@ for up to an hour, and mix them with new files (sections that never appear, form
 new fields...): whoever needs to see the change at once forces a refresh (how depends on the browser
 and the device, and on a phone or a tablet there is no easy way: hence an hour and not a day). If
 another period is needed, that is the number to change.
+
+The block `handle /sw.js` is for the service worker of the intranet (what lets some pages work with
+no connection: [`frontend.md`](frontend.md), "Working without a connection"): it is served with
+`no-cache`, so that a new version is found at once and not an hour later.
 
 The line `encode zstd gzip` compresses what travels as text (the scripts, the styles and the API's
 JSON: `GET /users` alone goes from over 100 KB) and leaves images and PDFs as they are, since they
@@ -347,6 +355,10 @@ sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
 		reverse_proxy 127.0.0.1:64711
 	}
 	root * /opt/katiuskas-intranet/web
+	handle /sw.js {
+		header Cache-Control "no-cache"
+		file_server
+	}
 	handle {
 		header Cache-Control "max-age=3600"
 		try_files {path} {path}.html

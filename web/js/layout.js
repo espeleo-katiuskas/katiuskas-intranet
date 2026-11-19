@@ -12,13 +12,16 @@
 // yet, and never calls this.
 import {
   initSession,
+  isOffline,
   logout,
   applyRoleVisibility,
   initSidebarToggle,
   loadTopbarGreeting,
   currentUser,
   hasAnyRole,
+  apiFetch,
 } from './api.js';
+import { initOffline } from './offline.js';
 import { initPickerSearch } from './picker-search.js';
 import { initStackedTables } from './stacked-tables.js';
 import { initRoleOverride } from './role-override.js';
@@ -172,6 +175,7 @@ async function initPage({ requireAnyRole } = {}) {
   if (!(await initSession())) {
     return null;
   }
+  initOffline(apiFetch, { offline: isOffline() });
   applyRoleVisibility();
   document.getElementById('logout-button').addEventListener('click', logout);
   initRoleOverride();

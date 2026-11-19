@@ -8,6 +8,12 @@
 	}
 	# At the site level, not inside the handle below, so handle_errors can use it too.
 	root * /srv
+	# The service worker is never kept: a new one has to be found at once (the browser checks it on
+	# every visit anyway, but not through a cache that says an hour).
+	handle /sw.js {
+		header Cache-Control "no-cache"
+		file_server
+	}
 	handle {
 		# No Cache-Control at all leaves browsers to guess how long a file
 		# stays fresh (a tenth of its age) — so one unchanged for weeks can

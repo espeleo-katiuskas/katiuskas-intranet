@@ -14,6 +14,7 @@ import {
   showFeedback,
   showError,
   isNotFound,
+  isOffline,
   queryId,
   showNotFound,
   stopAsNotFound,
@@ -146,7 +147,13 @@ async function loadActivity(ready = Promise.resolve()) {
     }
     document.getElementById('activity-title').textContent =
       'No se ha podido cargar esta actividad.';
-    showError(err.message);
+    // With no connection, an activity that has not been opened lately (or is not one of the next ones) is
+    // not on the phone.
+    showError(
+      err.network && isOffline()
+        ? 'Esta actividad no está guardada en este móvil para verla sin conexión.'
+        : err.message,
+    );
   }
 }
 
@@ -609,7 +616,8 @@ async function loadItems() {
     }));
     refreshLoanChoices();
   } catch {
-    showError('No se pudo cargar la lista de material.');
+    // With no connection the material is not on the phone, and the page says so once (the strip at the top).
+    if (!isOffline()) showError('No se pudo cargar la lista de material.');
   }
 }
 

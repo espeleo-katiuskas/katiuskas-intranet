@@ -1843,6 +1843,18 @@ h2[id^="section-"] {
 
 /* The notice that covers the page when the intranet cannot be reached but the session is fine (js/api.js,
    showConnectionProblem). */
+/* The page is a copy that a service worker had kept, because there is no connection (js/offline.js). */
+.offline-notice {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  padding: 8px 16px;
+  background: var(--warn-bg, #f6e7c1);
+  color: var(--warn-ink, #7a5a12);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 .connection-problem {
   position: fixed;
   inset: 0;

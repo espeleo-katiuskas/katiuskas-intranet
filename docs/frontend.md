@@ -325,6 +325,53 @@ the first screen of a phone. The maths (`distanceM`, `bearingDeg`, `angleDiff`, 
 north, which differs from the true one by a degree or so in Spain), a phone held in portrait is
 assumed, and the screen is not kept awake. It is part of "Lugares" in the menu (`ACTIVE_ALIASES`).
 
+**Working without a connection (`sw.js`, `js/offline.js`).** Near a cave there is often no signal,
+so some pages work with none; the intranet can be installed on a phone ("Añadir a la pantalla de
+inicio": `manifest.webmanifest` and the icons of `images/`, linked from every page) but nothing
+needs an app. It is a service worker, `/sw.js` (scope `/`, registered by every authenticated page
+through `initOffline`), that answers from copies when the network does not, or takes more than three
+seconds. **The files of the site** (pages, scripts, styles, images) are fetched network first, so on
+line everything is as fresh as ever, and each answer is kept; at install, the pages in `SEED_PAGES`
+(home, login, `/lugares`, `/lugar`, `/brujula`, `/actividades`, `/actividad`) and everything they
+load are fetched too, found by reading them (`src` and `href` of a page, the `import`s and the
+`/vendor/` and `/images/` paths of a script, the `url()`s of a style), so that a page works with no
+connection even if nobody has opened it yet and nothing has to be listed by hand: a page that has to
+work off line goes in `SEED_PAGES`. A page is one file whatever its query (`/lugar?id=3` and
+`/lugar?id=4`). **The data** is kept in the cache `katiuskas-data`, also network first (`dataKind`
+says what, `LIMITS` how many): the list of places and the catalogues the pages ask for (`GET
+/places`, `/places/types`, `/places/subtypes`, `/places/geologies`, `/systems`, `/holidays`), of
+each place that is opened, itself and what its page asks of it (`/places/{id}`, its files and
+activities and its system), and of each activity, itself and its participants, places, guests and
+memoria entries (`/activities/{id}…`), and the pages of the list of activities (`/activities?…`, the
+query is part of the question); but only the last 20 places, the last 20 activities, 160 of those
+answers and 12 lists; the oldest go. Nothing else of the API is kept (not the people, not the bytes
+of a file, so the text and the files of a memoria entry are not there, not the material, not
+anything written), and nothing is ever sent from the worker. The list of places, the catalogues and
+the first page of the active activities, with the pages of the next ten of them
+(`PRELOAD_ACTIVITIES`), are refreshed by `initOffline` (`refreshPlaces`) at most every six hours,
+two seconds after a page opens, so that **the list is always there**, the activities that are about
+to take place too and the places opened lately, with nothing to save by hand; the same call asks the
+worker to look at its files again (`refresh-files`, with a conditional request: a file that did not
+change costs a 304), since what the install kept would otherwise only be renewed when a file is used
+on line. **The session** is the other half: `initSession` keeps the last answer of `GET /auth/me`
+(`katiuskas:me`) and, if the network is not there (a failed request, which is told from a refusal:
+only a "no" from the server ends a session) and the person is known from that, the page opens as a
+copy (`isOffline()`): the roles come from the copy, a strip at the top says "Sin conexión: se ven
+los datos guardados en este móvil y no se puede cambiar nada", and the page is loaded again when the
+connection is back (`online`). It waits four seconds for `/auth/me` in that case (a person who has
+never signed in on that phone waits for it as before, and sees "No se puede conectar con la
+intranet"). Signing out, or a session that is refused, deletes the copies of the data and
+`katiuskas:me` (`clearOfflineData`). So, with no connection: the activities that are active are
+listed and the page of one of the next ones opens ("Esta actividad no está guardada en este móvil…"
+for another, and the material is not loaded, without a modal about it), the list of places works,
+each row of it with its "Rumbo" button on a phone (it needs only the coordinates, which the list
+has, so it works for places that have never been opened), the page of a place opened lately works
+with its "Rumbo" buttons, and `/brujula` needs nothing but the phone (the GPS and the compass); the
+map has no tiles, and a place not opened lately says so ("Este lugar no está guardado en este
+móvil…", `err.network` with `isOffline()`). Nothing can be changed yet, adding to the memoria of an
+activity included: a change with no connection fails as it always did. The Caddy of the intranet
+serves `/sw.js` with `no-cache` (`docs/deployment.md`), the rest with `max-age=3600` as before.
+
 **Systems (`/sistemas`, `/sistema?id=…`).** A system is a group of cavities connected underground
 (see `backend-internals.md`, "Systems"). `sistemas.html`/`systems.js` lists them: a table with the
 name (a link) and the cavities of each (links, with their subtype), a search by the name of a system

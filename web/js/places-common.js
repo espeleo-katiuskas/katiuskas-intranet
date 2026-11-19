@@ -82,32 +82,38 @@ function canGuide() {
   );
 }
 
+// The address of the page that says how far a point is and which way (/brujula): `name` is what the page
+// calls the point and `placeId` the place it goes back to.
+function guideUrl(lat, lon, name, placeId) {
+  const query = new URLSearchParams({
+    lat,
+    lon,
+    nombre: name,
+    ...(placeId ? { lugar: placeId } : {}),
+  });
+  return `/brujula?${query}`;
+}
+
 // The coordinates of a place or a point with a link to Google Maps, and, on a phone, a button to the page that
 // says how far it is and which way (/brujula). `guide` is { name, placeId }: what the page calls the point
 // and the place it goes back to. The altitude, if there is one, goes after.
 function coordinatesHtml(lat, lon, { altitude = null, guide = null } = {}) {
   const link = (url, name) =>
     `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>`;
-  const query = guide
-    ? new URLSearchParams({
-        lat,
-        lon,
-        nombre: guide.name,
-        ...(guide.placeId ? { lugar: guide.placeId } : {}),
-      })
-    : null;
   return (
     `<span class="nowrap">${formatDecimal(lat, lon)}</span>` +
     ` · ${link(googleMapsUrl(lat, lon), 'Google Maps')}` +
     (guide && canGuide()
-      ? ` <a class="btn btn-secondary btn-small" href="/brujula?${escapeHtml(query.toString())}">Rumbo</a>`
+      ? ` <a class="btn btn-secondary btn-small" href="${escapeHtml(guideUrl(lat, lon, guide.name, guide.placeId))}">Rumbo</a>`
       : '') +
     (altitude != null ? ` <span class="subtitle">${altitude} m</span>` : '')
   );
 }
 
 export {
+  canGuide,
   coordinatesHtml,
+  guideUrl,
   loadGeologies,
   loadSubtypes,
   loadSystems,

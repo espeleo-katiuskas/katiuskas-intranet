@@ -338,6 +338,11 @@ Every file name in `web/` is kebab-case, scripts included (`js/library-item.js`,
 - Dates and amounts of a table stay on one line (`.nowrap`, `.balance-cell`); money is
   `formatCurrency`, dates `formatDate`.
 - Search boxes normalize accents and case (`normalizeForSearch` in `api.js`).
+- **Some pages work with no connection** (a cave has none): the service worker `web/sw.js` serves
+  copies when the network does not answer (`docs/frontend.md`, "Working without a connection"). A
+  page that has to work off line goes in its `SEED_PAGES`, what it asks of the API goes in its
+  `dataKind` (only GETs of places, their catalogues and systems are kept, never people or files),
+  and the page must do without the rest. Nothing is written from the worker.
 - All user-visible text in Spanish; identifiers in English.
 - **After any significant change to the frontend, check that it looks right on a desktop and on a
   phone.** Drive headless Chromium (see Commands) at about 1280 px wide and at about 390 px

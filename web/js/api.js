@@ -4,6 +4,7 @@
 // signed-in identity from /auth/me on every page load, since an opaque
 // token has nothing a client can decode locally.
 import { errorText } from './error-texts.js';
+import { clearOfflineData } from './offline.js';
 
 const API_BASE = '/api/v1';
 
@@ -16,6 +17,42 @@ let cachedUser = null;
 const ORIGINAL_TOKEN_KEY = 'katiuskas:original-token';
 // A message for the next page, across the navigation that follows (sessionStorage, so it dies with the tab).
 const FLASH_KEY = 'katiuskas:flash';
+
+// What /auth/me answered the last time, so that a page can open with no connection: with it the person is
+// known (and what they may see) without asking, and the token, which is still there, is what is trusted. It
+// is forgotten when the session is refused or ended (see forgetSavedSession).
+const ME_KEY = 'katiuskas:me';
+// True when the session could not be checked because there is no network and the page runs on that copy.
+let offline = false;
+
+function saveMe(me) {
+  try {
+    localStorage.setItem(ME_KEY, JSON.stringify(me));
+  } catch {
+    // Without storage, no page opens off line: the rest is as ever.
+  }
+}
+
+function savedMe() {
+  try {
+    return JSON.parse(localStorage.getItem(ME_KEY) ?? 'null');
+  } catch {
+    return null;
+  }
+}
+
+function forgetSavedSession() {
+  try {
+    localStorage.removeItem(ME_KEY);
+  } catch {
+    // Nothing to forget.
+  }
+  clearOfflineData();
+}
+
+function isOffline() {
+  return offline;
+}
 
 // The page somebody asked for when they had no session, kept (in localStorage, so it survives the
 // trip through the magic link, which may open in another tab) to take them back to it after signing
@@ -68,17 +105,24 @@ async function initSession() {
   let me;
   try {
     me = await checkSession();
+    saveMe(me);
   } catch (err) {
-    if (isTransientFailure(err)) {
+    if (err.network && savedMe()) {
+      // No network, and the person is known from the last time: the page opens as a copy of what was kept.
+      me = savedMe();
+      offline = true;
+    } else if (isTransientFailure(err)) {
       // The session was not rejected: the server could not be asked (no network, restarting, busy). The
       // token stays, and the page waits and tries again instead of signing anybody out.
       showConnectionProblem();
       return new Promise(() => {});
+    } else {
+      localStorage.removeItem('token');
+      token = null;
+      forgetSavedSession();
+      redirectToLogin();
+      return false;
     }
-    localStorage.removeItem('token');
-    token = null;
-    redirectToLogin();
-    return false;
   }
   try {
     cachedUser = {
@@ -120,11 +164,20 @@ function isTransientFailure(err) {
 }
 
 async function checkSession() {
+  // Somebody known from the last time does not wait for a network that is not there: four seconds, and the
+  // page opens as a copy (see initSession).
+  const known = savedMe() !== null;
   for (let attempt = 0; ; attempt++) {
     try {
-      return await apiFetch('/auth/me');
+      return await apiFetch('/auth/me', known ? { signal: AbortSignal.timeout(4000) } : {});
     } catch (err) {
-      if (!isTransientFailure(err) || attempt >= SESSION_RETRY_DELAYS_MS.length) throw err;
+      if (
+        !isTransientFailure(err) ||
+        (err.network && known) ||
+        attempt >= SESSION_RETRY_DELAYS_MS.length
+      ) {
+        throw err;
+      }
       await new Promise((resolve) => setTimeout(resolve, SESSION_RETRY_DELAYS_MS[attempt]));
     }
   }
@@ -403,7 +456,7 @@ function encodeFilePath(relPath) {
   return relPath.split('/').map(encodeURIComponent).join('/');
 }
 
-function logout() {
+async function logout() {
   // Signing out while impersonating ends the admin's own session too, not only the impersonation.
   const sessions = [token, localStorage.getItem(ORIGINAL_TOKEN_KEY)].filter(Boolean);
   localStorage.removeItem('token');
@@ -412,6 +465,11 @@ function logout() {
   localStorage.removeItem(RETURN_TO_KEY);
   token = null;
   cachedUser = null;
+  try {
+    localStorage.removeItem(ME_KEY);
+  } catch {
+    // Nothing to forget.
+  }
   for (const session of sessions) {
     fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',
@@ -419,6 +477,8 @@ function logout() {
       body: JSON.stringify({ token: session }),
     }).catch(() => {});
   }
+  // The copies of the data are the signed-out person's: they go before the page does.
+  await clearOfflineData();
   window.location.href = '/login';
 }
 
@@ -873,6 +933,7 @@ export {
   apiFetchBlob,
   apiFetchForm,
   initSession,
+  isOffline,
   logout,
   currentUser,
   hasAnyRole,

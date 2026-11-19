@@ -7,6 +7,7 @@ import {
   formatDate,
   formatDateTime,
   isNotFound,
+  isOffline,
   queryId,
   showError,
   showFeedback,
@@ -341,6 +342,13 @@ async function load() {
   } catch (err) {
     if (isNotFound(err)) {
       showNotFound();
+      return;
+    }
+    // With no connection, a place that has not been opened lately is not on the phone.
+    if (err.network && isOffline()) {
+      showError(
+        'Este lugar no está guardado en este móvil para verlo sin conexión. Desde «Lugares» puedes ponerle rumbo igualmente.',
+      );
       return;
     }
     showError(err.message);
