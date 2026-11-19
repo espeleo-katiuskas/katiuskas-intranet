@@ -8,7 +8,8 @@
 //    fresh as ever; every answer is kept for the next time there is none. At install, the pages in SEED_PAGES
 //    and everything they load (found by reading them: scripts, imports, styles) are fetched, so that they
 //    work off line even if nobody has opened them yet.
-//  * The data (GET of the places, the catalogues of their types, the systems and the activities): network
+//  * The data (GET of the places, the catalogues of their types, the systems, the activities and the
+//    data of interest of the club that the home page shows): network
 //    first with a copy of the last answer; the list of places is kept whole, and of the places and of the
 //    activities that are opened only the last few (with what the page asks about each) and the last few
 //    lists of activities: LIMITS says how many. Nothing else of the API is kept: not the people, not the
@@ -50,7 +51,8 @@ const ACTIVITY = /^\/api\/v1\/activities\/\d+$/;
 const RELATED =
   /^\/api\/v1\/(?:places\/\d+\/(?:files|activities)|systems\/\d+(?:\/files)?|activities\/\d+\/(?:participants|places|guests|resources))$/;
 const LIST = /^\/api\/v1\/(?:activities|holidays)$/;
-const CATALOGUE = /^\/api\/v1\/(?:places(?:\/types|\/subtypes|\/geologies)?|systems)$/;
+const CATALOGUE =
+  /^\/api\/v1\/(?:places(?:\/types|\/subtypes|\/geologies)?|systems|club-info)$/;
 
 function dataKind(url) {
   const plain = !url.search;

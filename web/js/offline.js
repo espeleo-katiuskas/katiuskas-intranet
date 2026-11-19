@@ -9,8 +9,8 @@ const DATA_CACHE = 'katiuskas-data';
 const REFRESH_KEY = 'katiuskas:offline-refresh';
 // The list of places is kept up to date at most this often, whatever pages are opened.
 const REFRESH_EVERY_MS = 6 * 60 * 60 * 1000;
-// What the page of the places and the page of one place need besides the places themselves, and the
-// holidays that the calendar of the activities marks.
+// What the page of the places and the page of one place need besides the places themselves, the
+// holidays that the calendar of the activities marks and the data of interest of the home page.
 const PRELOAD = [
   '/places',
   '/places/types',
@@ -18,6 +18,7 @@ const PRELOAD = [
   '/places/geologies',
   '/systems',
   '/holidays',
+  '/club-info',
 ];
 // The first page of the activities that are still active, as the page of the activities asks for it (it
 // has to be the very same question to be answered from the copy).

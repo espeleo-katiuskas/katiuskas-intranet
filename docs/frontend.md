@@ -346,39 +346,42 @@ connection even if nobody has opened it yet and nothing has to be listed by hand
 work off line goes in `SEED_PAGES`. A page is one file whatever its query (`/lugar?id=3` and
 `/lugar?id=4`). **The data** is kept in the cache `katiuskas-data`, also network first (`dataKind`
 says what, `LIMITS` how many): the list of places and the catalogues the pages ask for (`GET
-/places`, `/places/types`, `/places/subtypes`, `/places/geologies`, `/systems`, `/holidays`), of
-each place that is opened, itself and what its page asks of it (`/places/{id}`, its files and
-activities and its system), and of each activity, itself and its participants, places, guests and
-memoria entries (`/activities/{id}…`), and the pages of the list of activities (`/activities?…`, the
-query is part of the question); but only the last 20 places, the last 20 activities, 160 of those
-answers and 12 lists; the oldest go. Nothing else of the API is kept (not the people, not the bytes
-of a file, so the text and the files of a memoria entry are not there, not the material, not
-anything written), and nothing is ever sent from the worker. The list of places, the catalogues and
-the first page of the active activities, with the pages of the next ten of them
-(`PRELOAD_ACTIVITIES`), are refreshed by `initOffline` (`refreshPlaces`) at most every six hours,
-two seconds after a page opens, so that **the list is always there**, the activities that are about
-to take place too and the places opened lately, with nothing to save by hand; the same call asks the
-worker to look at its files again (`refresh-files`, with a conditional request: a file that did not
-change costs a 304), since what the install kept would otherwise only be renewed when a file is used
-on line. **The session** is the other half: `initSession` keeps the last answer of `GET /auth/me`
-(`katiuskas:me`) and, if the network is not there (a failed request, which is told from a refusal:
-only a "no" from the server ends a session) and the person is known from that, the page opens as a
-copy (`isOffline()`): the roles come from the copy, a strip at the top says "Sin conexión: se ven
-los datos guardados en este móvil…" (and that memoria entries are sent when the connection is back),
-and the page is loaded again when the connection is back (`online`). It waits four seconds for
-`/auth/me` in that case (a person who has never signed in on that phone waits for it as before, and
-sees "No se puede conectar con la intranet"). Signing out, or a session that is refused, deletes the
-copies of the data and `katiuskas:me` (`clearOfflineData`). So, with no connection: the activities
-that are active are listed and the page of one of the next ones opens ("Esta actividad no está
-guardada en este móvil…" for another, and the material is not loaded, without a modal about it), the
-list of places works, each row of it with its "Rumbo" button on a phone (it needs only the
-coordinates, which the list has, so it works for places that have never been opened), the page of a
-place opened lately works with its "Rumbo" buttons, and `/brujula` needs nothing but the phone (the
-GPS and the compass); the map has no tiles, and a place not opened lately says so ("Este lugar no
-está guardado en este móvil…", `err.network` with `isOffline()`). Nothing can be changed, except
-what goes through the outbox (next paragraph): any other change with no connection fails as it
-always did. The Caddy of the intranet serves `/sw.js` with `no-cache` (`docs/deployment.md`), the
-rest with `max-age=3600` as before.
+/places`, `/places/types`, `/places/subtypes`, `/places/geologies`, `/systems`, `/holidays`, and
+`/club-info`, the "Datos de interés" of the home page), of each place that is opened, itself and
+what its page asks of it (`/places/{id}`, its files and activities and its system), and of each
+activity, itself and its participants, places, guests and memoria entries (`/activities/{id}…`), and
+the pages of the list of activities (`/activities?…`, the query is part of the question); but only
+the last 20 places, the last 20 activities, 160 of those answers and 12 lists; the oldest go.
+Nothing else of the API is kept (not the people, not the bytes of a file, so the text and the files
+of a memoria entry are not there, not the material, not anything written), and nothing is ever sent
+from the worker. The list of places, the catalogues and the first page of the active activities,
+with the pages of the next ten of them (`PRELOAD_ACTIVITIES`), are refreshed by `initOffline`
+(`refreshPlaces`) at most every six hours, two seconds after a page opens, so that **the list is
+always there**, the activities that are about to take place too and the places opened lately, with
+nothing to save by hand; the same call asks the worker to look at its files again (`refresh-files`,
+with a conditional request: a file that did not change costs a 304), since what the install kept
+would otherwise only be renewed when a file is used on line. **The session** is the other half:
+`initSession` keeps the last answer of `GET /auth/me` (`katiuskas:me`) and, if the network is not
+there (a failed request, which is told from a refusal: only a "no" from the server ends a session)
+and the person is known from that, the page opens as a copy (`isOffline()`): the roles come from the
+copy, a strip at the top says "Sin conexión: se ven los datos guardados en este móvil…" (and that
+memoria entries are sent when the connection is back), and the page is loaded again when the
+connection is back (`online`). It waits four seconds for `/auth/me` in that case (a person who has
+never signed in on that phone waits for it as before, and sees "No se puede conectar con la
+intranet"). Signing out, or a session that is refused, deletes the copies of the data and
+`katiuskas:me` (`clearOfflineData`). With no connection the menu has only "Inicio", "Actividades"
+and "Lugares" (`keepOfflineMenu` in `layout.js`: the other pages need the API), and the home page
+shows the data of interest from the copy and "No disponible sin conexión" for the Junta and the
+documents, which are not kept. So, with no connection: the activities that are active are listed and
+the page of one of the next ones opens ("Esta actividad no está guardada en este móvil…" for
+another, and the material is not loaded, without a modal about it), the list of places works, each
+row of it with its "Rumbo" button on a phone (it needs only the coordinates, which the list has, so
+it works for places that have never been opened), the page of a place opened lately works with its
+"Rumbo" buttons, and `/brujula` needs nothing but the phone (the GPS and the compass); the map has
+no tiles, and a place not opened lately says so ("Este lugar no está guardado en este móvil…",
+`err.network` with `isOffline()`). Nothing can be changed, except what goes through the outbox (next
+paragraph): any other change with no connection fails as it always did. The Caddy of the intranet
+serves `/sw.js` with `no-cache` (`docs/deployment.md`), the rest with `max-age=3600` as before.
 
 **The outbox (`js/outbox.js`).** What a person does with no connection and has to reach the server
 is kept on the phone, in IndexedDB (`katiuskas-offline`, store `outbox`), and sent when it can be.

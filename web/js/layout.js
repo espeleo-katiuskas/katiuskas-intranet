@@ -153,6 +153,16 @@ function renderShell() {
   document.getElementById('topbar').innerHTML = TOPBAR_HTML;
 }
 
+// What the menu offers with no connection: only the pages that work then (the home page, the
+// activities and the places, which the compass belongs to).
+const OFFLINE_NAV = ['/', '/actividades', '/lugares'];
+
+function keepOfflineMenu() {
+  for (const link of document.querySelectorAll('#sidebar-nav a')) {
+    if (!OFFLINE_NAV.includes(link.getAttribute('href'))) link.remove();
+  }
+}
+
 // The one call every authenticated page's own <page>.js makes before
 // anything else. requireAnyRole additionally redirects home if the
 // signed-in user holds none of the listed roles — for the couple of
@@ -194,6 +204,7 @@ async function initPage({ requireAnyRole } = {}) {
     },
   );
   applyRoleVisibility();
+  if (isOffline()) keepOfflineMenu();
   document.getElementById('logout-button').addEventListener('click', logout);
   initRoleOverride();
   initSidebarToggle();

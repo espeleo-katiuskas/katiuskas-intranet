@@ -5,6 +5,7 @@ import {
   encodeFilePath,
   positionLabels,
   hasAnyRole,
+  isOffline,
 } from './api.js';
 import { initPage } from './layout.js';
 
@@ -40,6 +41,12 @@ function whatsappLink(phone) {
   return `https://wa.me/34${phone.replace(/\D/g, '')}`;
 }
 
+// What a section that could not be loaded says: with no connection that is the reason (only the data of
+// interest below is kept on the phone).
+function unavailable(message) {
+  return isOffline() ? 'No disponible sin conexión.' : message;
+}
+
 async function loadBoardMembers() {
   const grid = document.getElementById('board-grid');
   try {
@@ -68,7 +75,7 @@ async function loadBoardMembers() {
           .join('')
       : '<p class="subtitle">Ahora mismo no hay nadie en la Junta Directiva.</p>';
   } catch {
-    grid.innerHTML = '<p class="subtitle">No se pudo cargar la Junta Directiva.</p>';
+    grid.innerHTML = `<p class="subtitle">${unavailable('No se pudo cargar la Junta Directiva.')}</p>`;
   }
 }
 
@@ -159,7 +166,7 @@ async function loadDocumentos() {
           .join('')
       : '<li>No hay documentos disponibles.</li>';
   } catch {
-    list.innerHTML = '<li>No se pudieron cargar los documentos.</li>';
+    list.innerHTML = `<li>${unavailable('No se pudieron cargar los documentos.')}</li>`;
   }
 }
 
@@ -209,7 +216,7 @@ async function loadActas() {
     renderSelectedYear();
   } catch {
     yearSelect.innerHTML = '';
-    list.innerHTML = '<li>No se pudieron cargar las actas.</li>';
+    list.innerHTML = `<li>${unavailable('No se pudieron cargar las actas.')}</li>`;
   }
 }
 
@@ -221,7 +228,7 @@ async function loadMemorias() {
       ? files.map((f) => fileLink('Memorias', f.name, stripExtension(f.name))).join(' · ')
       : 'No hay memorias disponibles.';
   } catch {
-    container.innerHTML = 'No se pudieron cargar las memorias.';
+    container.innerHTML = unavailable('No se pudieron cargar las memorias.');
   }
 }
 
