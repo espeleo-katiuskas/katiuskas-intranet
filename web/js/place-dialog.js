@@ -196,17 +196,17 @@ function ensurePlaceDialog() {
           escrito las coordenadas, se propone una.
           <button type="button" class="link-button" id="pd-area-add">¿No está? Añade una zona</button>
         </p>
-        <div class="field span-2">
+        <div class="field span-2" data-new-only>
           <label for="pd-access">Cómo llegar <span class="optional">(opcional)</span></label>
           <textarea id="pd-access" name="access"></textarea>
           ${HINT}
         </div>
-        <div class="field span-2">
+        <div class="field span-2" data-new-only>
           <label for="pd-description">Descripción <span class="optional">(opcional)</span></label>
           <textarea id="pd-description" name="description"></textarea>
           ${HINT}
         </div>
-        <div class="field span-2" data-kind-field="cave,canyon">
+        <div class="field span-2" data-kind-field="cave,canyon" data-new-only>
           <label for="pd-sheet">Ficha técnica: qué instalación falta <span class="optional">(opcional)</span></label>
           <textarea id="pd-sheet" name="technical_sheet"></textarea>
           ${HINT}
@@ -226,8 +226,12 @@ function ensurePlaceDialog() {
   // sheet of a cavity or a canyon) is only in the form for those, and the state only for the types that
   // have one. The subtype is required when it is there.
   const syncKind = () => {
-    form.querySelectorAll('[data-kind-field]').forEach((el) => {
-      el.hidden = !el.dataset.kindField.split(',').includes(kindOf());
+    // The long texts (how to get there, the description, the technical sheet) are only in the form of
+    // a new place: an existing one has them edited one by one from its page (place-text-edit.js).
+    form.querySelectorAll('[data-kind-field], [data-new-only]').forEach((el) => {
+      const kinds = el.dataset.kindField;
+      const fits = kinds === undefined || kinds.split(',').includes(kindOf());
+      el.hidden = !fits || (form.dataset.editing === 'true' && el.dataset.newOnly !== undefined);
     });
     form.elements.subtype_id.required = kindOf() === 'cave';
     // A cavity starts as a Cueva (the first subtype) unless it already is something else.
@@ -405,7 +409,7 @@ function osmDefaults(osm, types, subtypes) {
 
 // With no connection the edit of a place is kept in the outbox (js/outbox.js) as the fields that
 // changed, with what each had, so that it can be sent on the place as it is by then.
-async function queuePlaceEdit(place, body) {
+export async function queuePlaceEdit(place, body) {
   const { base, changes } = diffPlace(place, body);
   if (!Object.keys(changes).length) {
     showFeedback('No hay nada que cambiar.');
@@ -448,6 +452,7 @@ function openPlaceDialog({
     proposeArea,
     proposeKnownArea,
   } = ensurePlaceDialog();
+  form.dataset.editing = place ? 'true' : 'false';
   document.getElementById('pd-title').textContent = place ? 'Editar lugar' : 'Nuevo lugar';
   const osmNote = document.getElementById('pd-osm-note');
   osmNote.hidden = !osm;
@@ -562,11 +567,26 @@ function openPlaceDialog({
         ...(!place && osm ? { osm_type: osm.type, osm_id: osm.id } : {}),
       };
       let saved = null;
+      let changes = null;
+      if (place) {
+        // An edit names only what changed (PATCH). The long texts are not in this form, and a place that
+        // becomes of a kind with no technical sheet must lose the one it has.
+        delete body.access;
+        delete body.description;
+        delete body.technical_sheet;
+        if (kind === 'general' && place.technical_sheet != null) body.technical_sheet = null;
+        changes = diffPlace(place, body).changes;
+        if (!Object.keys(changes).length) {
+          dialog.close();
+          showFeedback('No hay nada que cambiar.');
+          return;
+        }
+      }
       if (!(place && isOffline())) {
         try {
           saved = await apiFetch(place ? `/places/${place.id}` : '/places', {
-            method: place ? 'PUT' : 'POST',
-            body: JSON.stringify(body),
+            method: place ? 'PATCH' : 'POST',
+            body: JSON.stringify(place ? changes : body),
           });
         } catch (err) {
           // The connection went away after the page opened: an edit waits, a new place does not.

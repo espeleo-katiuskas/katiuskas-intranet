@@ -493,7 +493,7 @@ specific one to the country), and the data:
 Then:
 
 - "Cómo llegar", "Descripción" and, for a cave or a canyon, "Ficha técnica" — all three through
-  `renderRichText`;
+  `renderRichText`, each with its own "Editar" (see "The long texts" below);
 - "Otros puntos", a table of the other points with "Editar" and "Quitar" on each;
 - "Fotos y documentos": the files of the place, each with a title, its name, size and who attached
   it, "Descargar" and, for who attached it, admin and board, "Borrar"; an image is shown under it;
@@ -516,10 +516,26 @@ The fields that depend on the chosen type are in the form only for the types tha
 the form of material:
 
 - for a cavity the subtype (required, "Cueva" to begin with), the measures and the geology;
-- for a cavity or a canyon the technical sheet;
+- for a cavity or a canyon the technical sheet (only in the form of a new place, see "The long
+  texts");
 - the state only for a type that has one (`data-has-state` on the options of the type).
 
 What a type does not have is sent as null, or empty for the state, which is what the API accepts.
+
+#### The long texts
+
+How to get there, the description and the technical sheet are often very long in a cave, so the form
+of an existing place does not have them (`data-new-only` in `place-dialog.js`): only the form of a
+new place does. Each has its own "Editar" button in its section of `/lugar`, which opens a form with
+just that text in a large box, as wide as the page allows (`place-text-edit.js`, `openTextEdit`),
+so that it can be read whole. It saves with `PATCH /places/{id}` naming only that field (an empty
+text clears it); with no connection it is kept in the outbox as an edit of the place, like any
+other (see "Place edits" under "The outbox"). The buttons are not on the partial page of a place
+that was not opened recently.
+
+"Editar lugar" itself also sends a `PATCH`, with only the fields that changed, so saving it never
+touches the long texts. If the type becomes one with no technical sheet, the sheet is cleared in
+the same request.
 
 #### Other names
 
@@ -581,8 +597,8 @@ told apart.
   already).
 - Typing again undoes the choice, and the box is invalid until a zone is chosen, which the form
   needs.
-- In the form the zone ("Dónde está") comes just before "Cómo llegar", after the coordinates, the
-  measures, the altitude and the geology.
+- In the form the zone ("Dónde está") comes after the coordinates, the measures, the altitude and
+  the geology, and (in the form of a new place) just before "Cómo llegar".
 
 #### Proposing a zone from the coordinates
 

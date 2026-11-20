@@ -21,6 +21,7 @@ import { copyFromOsm, openOsmLinkDialog, osmChangesHtml, osmDataHtml } from './o
 import { describeFields } from './place-body.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import { openQuickEdit } from './place-quick-edit.js';
+import { openTextEdit } from './place-text-edit.js';
 import { bindPendingList } from './pending-list.js';
 import {
   coordinatesHtml,
@@ -314,6 +315,9 @@ function render() {
 // of the place has (how to get there, the description, the points, the files, the activities) is not
 // there, and the page says so. The full edit of the place is not offered (it would clear the fields that
 // are not here); the short one (name, coordinate, altitude) is, and so are a point or a file, which only add.
+// The buttons "Editar" of the long texts: not on the partial page, which does not have them.
+const TEXT_BUTTONS = ['edit-access', 'edit-description', 'edit-sheet'];
+
 async function loadPartial() {
   try {
     const item = (await apiFetch('/places')).find((p) => p.id === placeId);
@@ -343,6 +347,7 @@ async function loadPartial() {
     document.getElementById('partial-note').hidden = false;
     document.getElementById('edit-place').hidden = true;
     document.getElementById('quick-edit-place').hidden = false;
+    for (const id of TEXT_BUTTONS) document.getElementById(id).hidden = true;
     return true;
   } catch {
     return false;
@@ -353,6 +358,7 @@ async function load() {
   document.getElementById('partial-note').hidden = true;
   document.getElementById('edit-place').hidden = false;
   document.getElementById('quick-edit-place').hidden = true;
+  for (const id of TEXT_BUTTONS) document.getElementById(id).hidden = false;
   try {
     const [
       loaded,
@@ -427,6 +433,26 @@ const renderPending = bindPendingList({
   reload: load,
 });
 const queued = () => renderPending();
+
+// The long texts are edited one at a time, each in a form of its own (place-text-edit.js).
+for (const [button, field, title] of [
+  ['edit-access', 'access', 'Cómo llegar'],
+  ['edit-description', 'description', 'Descripción'],
+  ['edit-sheet', 'technical_sheet', 'Ficha técnica'],
+]) {
+  document.getElementById(button).addEventListener('click', () => {
+    openTextEdit({
+      place,
+      field,
+      title,
+      onSaved: async () => {
+        showFeedback('Lugar guardado.');
+        await load();
+      },
+      onQueued: queued,
+    });
+  });
+}
 
 // The short edit of the partial page (see loadPartial): the name, the coordinate and the altitude.
 document.getElementById('quick-edit-place').addEventListener('click', () => {
