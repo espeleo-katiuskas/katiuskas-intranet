@@ -780,8 +780,15 @@ Signing out, or a session that is refused, deletes the copies of the data and `k
   coordinates, which the list has, so it works for places that have never been opened).
 - The page of a place opened lately works with its "Rumbo" buttons.
 - `/brujula` needs nothing but the phone (the GPS and the compass).
-- The map has no tiles, and a place not opened lately says so ("Este lugar no está guardado en este
-  móvil…", `err.network` with `isOffline()`).
+- The map has no tiles.
+- The page of a place that was not opened recently is a partial one (`loadPartial` in `place.js`,
+  `err.network` with `isOffline()`): it is made of what the list of places has, which is always
+  kept (name, type, state, where, coordinates, altitude and measures), with a note, "Datos
+  parciales…", and "No se guarda en este móvil…" where the rest would be (how to get there, the
+  description, the technical sheet, the points, the files and the activities). "Editar lugar" is
+  not offered, because an edit replaces every field and the missing ones would be cleared;
+  "Añadir punto" and the form of files are, as they only add. If the place is not even in the list,
+  the page says "Este lugar no está guardado en este móvil…".
 - Nothing can be changed, except what goes through the outbox (see "The outbox" below): any other
   change with no connection fails as it always did.
 

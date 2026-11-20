@@ -308,7 +308,48 @@ function render() {
   renderMap();
 }
 
+// With no connection and a place that was not opened lately, the page is made of what the list of places
+// has (that is kept always): the name, type, state, where, coordinates and measures. What only the page
+// of the place has (how to get there, the description, the points, the files, the activities) is not
+// there, and the page says so. The edit of the place is not offered (it replaces every field, and the
+// fields that are not here would be cleared); a point or a file can still be added, as they only add.
+async function loadPartial() {
+  try {
+    const item = (await apiFetch('/places')).find((p) => p.id === placeId);
+    if (!item) return false;
+    place = {
+      ...item,
+      alt_names: item.alt_names ?? [],
+      access: null,
+      description: null,
+      technical_sheet: null,
+      points: [],
+    };
+    system = null;
+    systemFiles = [];
+    files = [];
+    activities = [];
+    render();
+    const missing = '<p class="subtitle">No se guarda en este móvil para verlo sin conexión.</p>';
+    for (const id of ['place-access', 'place-description', 'place-sheet', 'place-files']) {
+      document.getElementById(id).innerHTML = missing;
+    }
+    document.getElementById('points-table-body').innerHTML =
+      '<tr><td colspan="5">No se guardan en este móvil para verlos sin conexión.</td></tr>';
+    document.getElementById('place-activities-body').innerHTML =
+      '<tr><td colspan="4">No se guardan en este móvil para verlas sin conexión.</td></tr>';
+    document.getElementById('place-authorship').textContent = '';
+    document.getElementById('partial-note').hidden = false;
+    document.getElementById('edit-place').hidden = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function load() {
+  document.getElementById('partial-note').hidden = true;
+  document.getElementById('edit-place').hidden = false;
   try {
     const [
       loaded,
@@ -352,6 +393,7 @@ async function load() {
     }
     // With no connection, a place that has not been opened lately is not on the phone.
     if (err.network && isOffline()) {
+      if (await loadPartial()) return;
       showError(
         'Este lugar no está guardado en este móvil para verlo sin conexión. Desde «Lugares» puedes ponerle rumbo igualmente.',
       );
