@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -57,6 +58,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/places", a.Protect(h.create))
 	mux.Handle("GET /api/v1/places/{id}", a.Protect(h.get))
 	mux.Handle("PUT /api/v1/places/{id}", a.Protect(h.update))
+	mux.Handle("PATCH /api/v1/places/{id}", a.Protect(h.patch))
 	mux.Handle("DELETE /api/v1/places/{id}", a.Protect(h.delete, "admin", "board"))
 	mux.Handle("PUT /api/v1/places/{id}/links/osm", a.Protect(h.linkOsm))
 	mux.Handle("DELETE /api/v1/places/{id}/links/osm", a.Protect(h.unlinkOsm))
@@ -105,6 +107,7 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 	}
 	for _, m := range []mapping{
 		{ErrNotFound, http.StatusNotFound, "not_found"},
+		{ErrConcurrentUpdate, http.StatusConflict, "concurrent_update"},
 		{ErrPointNotFound, http.StatusNotFound, "not_found"},
 		{ErrFileNotFound, http.StatusNotFound, "not_found"},
 		{ErrEmptyFile, http.StatusBadRequest, "file_required"},
@@ -493,6 +496,68 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.WriteJSON(w, http.StatusOK, p)
 }
+
+// patchFields are the fields of a place that a partial edit may name: those of an edit, but not the
+// OpenStreetMap element (a place is linked with its own routes).
+var patchFields = map[string]bool{
+	"type_id": true, "name": true, "alt_names": true, "state": true, "subtype_id": true,
+	"system_id": true, "area_id": true, "lat": true, "lon": true, "altitude_m": true, "access": true,
+	"description": true, "depth_m": true, "horizontal_length_m": true, "geology_id": true,
+	"technical_sheet": true,
+}
+
+// patch (PATCH /places/{id}) changes only the fields the body names and leaves the rest of the place as
+// it is: a field that is not there is not touched, and one that is there as null is cleared. The result
+// has to be a valid place, exactly as for a whole edit.
+func (h *Handler) patch(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	raw, err := io.ReadAll(r.Body)
+	var named map[string]json.RawMessage
+	if err != nil || json.Unmarshal(raw, &named) != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	if len(named) == 0 {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "no field to change")
+		return
+	}
+	for field := range named {
+		if !patchFields[field] {
+			httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "unknown field "+field)
+			return
+		}
+	}
+	before, beforeErr := h.service.GetPlace(r.Context(), id)
+	p, err := h.service.PatchPlace(r.Context(), id, actorID(r.Context()), func(current Input) (Input, error) {
+		// Decoding into a body that already has the place's values changes only what the JSON names.
+		body := placeBody(current)
+		if err := json.Unmarshal(raw, &body); err != nil {
+			return Input{}, errInvalidBody
+		}
+		return body.input(), nil
+	})
+	if errors.Is(err, errInvalidBody) {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "a field has the wrong type")
+		return
+	}
+	if err != nil {
+		writeError(w, err, "could not edit the place")
+		return
+	}
+	if beforeErr == nil {
+		if diff := httpapi.DiffFields(before, p, placeAuditFields...); len(diff) > 0 {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("✏️ %s ha editado el lugar «%s»%s:\n%s",
+				h.actorLogin(r.Context()), before.Name, inWhere(before.Where), strings.Join(diff, "\n")))
+		}
+	}
+	httpapi.WriteJSON(w, http.StatusOK, p)
+}
+
+// errInvalidBody is a field of a partial edit with a value of the wrong type.
+var errInvalidBody = errors.New("invalid body")
 
 // linkOsm (PUT /places/{id}/links/osm: not /places/{id}/osm, which the routes of the types would clash with) says which element of the OpenStreetMap mirror a place is ({osm_type, osm_id}), instead of the one
 // it was; it answers with the place.

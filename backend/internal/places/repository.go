@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -246,15 +247,27 @@ func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in I
 
 // UpdatePlace replaces every field of a place (and who changed it, and when).
 func (r *Repository) UpdatePlace(ctx context.Context, id, userID int64, t Type, in Input) (Place, error) {
+	return r.updatePlace(ctx, id, userID, t, in, nil)
+}
+
+// UpdatePlaceIfUnchanged is UpdatePlace for a place that is still as it was when `at` was its
+// updated_at: if somebody changed it since, nothing is written and the answer is
+// ErrConcurrentUpdate (a partial edit is made on what was read, so it must not overwrite what
+// somebody saved in between).
+func (r *Repository) UpdatePlaceIfUnchanged(ctx context.Context, id, userID int64, t Type, in Input, at time.Time) (Place, error) {
+	return r.updatePlace(ctx, id, userID, t, in, &at)
+}
+
+func (r *Repository) updatePlace(ctx context.Context, id, userID int64, t Type, in Input, unchangedSince *time.Time) (Place, error) {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE places SET type_id = $2, kind = $3, has_state = $4, name = $5, alt_names = $6,
 			state = NULLIF($7, ''), subtype_id = $8, system_id = $9, area_id = $10, lat = $11, lon = $12,
 			altitude_m = $13, access = $14, description = $15, depth_m = $16, horizontal_length_m = $17,
-			geology_id = $18, technical_sheet = $19, updated_by = $20, updated_at = now()
-		WHERE id = $1
+			geology_id = $18, technical_sheet = $19, updated_by = $20, updated_at = clock_timestamp()
+		WHERE id = $1 AND ($21::timestamptz IS NULL OR updated_at = $21)
 	`, id, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.SystemID,
 		in.AreaID, *in.Lat, *in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM,
-		in.HorizontalLengthM, in.GeologyID, in.TechnicalSheet, userID)
+		in.HorizontalLengthM, in.GeologyID, in.TechnicalSheet, userID, unchangedSince)
 	if isForeignKeyViolation(err) {
 		return Place{}, ErrUnknownType
 	}
@@ -262,6 +275,13 @@ func (r *Repository) UpdatePlace(ctx context.Context, id, userID int64, t Type, 
 		return Place{}, err
 	}
 	if tag.RowsAffected() == 0 {
+		var exists bool
+		if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM places WHERE id = $1)`, id).Scan(&exists); err != nil {
+			return Place{}, err
+		}
+		if exists {
+			return Place{}, ErrConcurrentUpdate
+		}
 		return Place{}, ErrNotFound
 	}
 	return r.GetPlace(ctx, id)

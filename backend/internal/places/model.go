@@ -62,9 +62,12 @@ const (
 )
 
 var (
-	ErrNotFound      = errors.New("place not found")
-	ErrPointNotFound = errors.New("point not found")
-	ErrTypeNotFound  = errors.New("type of place not found")
+	ErrNotFound = errors.New("place not found")
+	// ErrConcurrentUpdate is a partial edit that kept finding the place changed by somebody else
+	// between reading it and writing it.
+	ErrConcurrentUpdate = errors.New("the place was changed by somebody else meanwhile, try again")
+	ErrPointNotFound    = errors.New("point not found")
+	ErrTypeNotFound     = errors.New("type of place not found")
 	// ErrUnknownOsmElement is a place given an OpenStreetMap element that is not in the mirror, or only
 	// the type or only the id of one.
 	ErrUnknownOsmElement = errors.New("there is no such OpenStreetMap element in the mirror: osm_type (node, way or relation) and osm_id go together")

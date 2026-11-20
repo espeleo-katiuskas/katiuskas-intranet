@@ -206,6 +206,51 @@ func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (
 	return s.repo.UpdatePlace(ctx, id, userID, t, in)
 }
 
+// patchAttempts is how many times a partial edit starts again when somebody saves the place between
+// its read and its write.
+const patchAttempts = 3
+
+// PatchPlace changes some fields of a place and leaves the rest as they are: it reads the place,
+// gives its fields as an Input to `apply`, which changes what the edit says, and saves the result
+// with the same checks as a whole edit. It writes only if the place is as it was read (when it
+// is not, it starts again with the new one), so what somebody saved meanwhile is never overwritten.
+func (s *Service) PatchPlace(ctx context.Context, id, userID int64, apply func(Input) (Input, error)) (Place, error) {
+	for range patchAttempts {
+		current, err := s.repo.GetPlace(ctx, id)
+		if err != nil {
+			return Place{}, err
+		}
+		in, err := apply(inputOf(current))
+		if err != nil {
+			return Place{}, err
+		}
+		in, err = clean(in)
+		if err != nil {
+			return Place{}, err
+		}
+		t, in, err := s.typeOf(ctx, in)
+		if err != nil {
+			return Place{}, err
+		}
+		p, err := s.repo.UpdatePlaceIfUnchanged(ctx, id, userID, t, in, current.UpdatedAt)
+		if errors.Is(err, ErrConcurrentUpdate) {
+			continue
+		}
+		return p, err
+	}
+	return Place{}, ErrConcurrentUpdate
+}
+
+// inputOf is the Input that a place is as it stands: what an edit that changes nothing would send.
+func inputOf(p Place) Input {
+	return Input{
+		TypeID: p.TypeID, Name: p.Name, AltNames: p.AltNames, State: string(p.State),
+		SubtypeID: p.SubtypeID, SystemID: p.SystemID, AreaID: p.AreaID, Lat: &p.Lat, Lon: &p.Lon,
+		AltitudeM: p.AltitudeM, Access: p.Access, Description: p.Description, DepthM: p.DepthM,
+		HorizontalLengthM: p.HorizontalLengthM, GeologyID: p.GeologyID, TechnicalSheet: p.TechnicalSheet,
+	}
+}
+
 // LinkOsm makes a place the OpenStreetMap element of the mirror that osmType and osmID name, instead of
 // the one it was, if any. Only the pair and the place are read: nothing of the place is changed with it.
 func (s *Service) LinkOsm(ctx context.Context, id, userID int64, osmType string, osmID int64) (Place, error) {

@@ -861,6 +861,17 @@ known, in metres above sea level.
   - body: the same as creating
   - returns: 200 `Place`
   - errors: as creating, plus 400 `invalid_id`; 404 `not_found`
+- **PATCH** `/places/{id}` — *Any baseline role*. Changes only the fields the body names and leaves
+  the rest as it is: a field that is left out is not touched, and one given as `null` is cleared (if
+  it may be empty). The place that results has to be valid, with the same checks as a whole edit
+  (so taking the subtype off a cavity is refused, and so is a new type whose kind does not fit the
+  fields that stay). It is made on the place as it is when it is saved: if somebody saves the place
+  between the read and the write, it starts again on the new one, up to three times. No `osm_type`
+  or `osm_id` (the element is changed with its own routes).
+  - body: any of the fields of creating, at least one
+  - returns: 200 `Place`
+  - errors: as creating, plus 400 `invalid_id`, `invalid_body` (malformed, no field, an unknown
+    field or one of the wrong type); 404 `not_found`; 409 `concurrent_update`
 - **DELETE** `/places/{id}` — *Admin or board*. Deletes a place with its points and its files,
   unless an activity went to it.
   - returns: 204

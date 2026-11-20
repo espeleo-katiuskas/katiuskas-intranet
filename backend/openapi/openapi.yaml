@@ -2625,6 +2625,29 @@ paths:
               schema: { $ref: "#/components/schemas/Place" }
         "400": { description: "invalid_id and everything creating can answer." }
         "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Edit some fields of a place
+      description: >
+        Any baseline role. Changes only the fields the body names and leaves the rest as it is (null
+        clears a field that may be empty); the result has to be a valid place, with the same checks as a
+        whole edit. It is made on the place as it is when it is saved: if somebody saves it in between
+        it starts again on the new one (409 concurrent_update after three tries). Nothing changes if no
+        field differs.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlacePatch" }
+      responses:
+        "200":
+          description: The place as edited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Place" }
+        "400": { description: "invalid_id, invalid_body (malformed, no field, an unknown field or one of the wrong type) and everything creating can answer." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "concurrent_update." }
     delete:
       summary: Delete a place
       description: Admin or board. With its points and its files. 409 place_has_activities when an activity went to it.
@@ -7059,6 +7082,32 @@ components:
         technical_sheet: { type: string, nullable: true, description: "What has to be installed to go through it. Only for a cavity or a canyon." }
         osm_type: { type: string, enum: [node, way, relation], nullable: true, description: "With osm_id, the element of the OpenStreetMap mirror the place is (GET /osm/elements). Only creating reads it; an edit leaves it as it was." }
         osm_id: { type: integer, format: int64, nullable: true }
+
+    PlacePatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: >
+        Some of the fields of PlaceInput, and only those named change. A field that is left out is not
+        touched and one given as null is cleared (if it may be empty). The place that results has to be
+        valid, as for a whole edit. The element of OpenStreetMap is not a field here.
+      properties:
+        type_id: { type: integer, description: "A type of GET /places/types." }
+        name: { type: string }
+        alt_names: { type: array, items: { type: string, maxLength: 200 }, maxItems: 20, description: "Other names it is known by: trimmed, without blanks or repeats (ignoring case)." }
+        state: { type: string, enum: [open, permit_required, tourist, closed], default: open, description: "How it can be visited: freely, only with a permit, as a paid attraction, or not at all. Only for a type that has a state (has_state); refused for any other." }
+        subtype_id: { type: integer, nullable: true, description: "What a cavity is (of GET /places/subtypes). Required for a place whose type is a cave (Cavidad), refused for any other." }
+        system_id: { type: integer, nullable: true, description: "The system a cavity is in (of GET /systems). Only for a cavity." }
+        area_id: { type: integer, description: "The most specific zone it is in (of GET /areas): at least the country." }
+        lat: { type: number, minimum: -90, maximum: 90, description: "WGS84 latitude of the main coordinate, in degrees." }
+        lon: { type: number, minimum: -180, maximum: 180, description: "WGS84 longitude of the main coordinate, in degrees." }
+        altitude_m: { type: integer, minimum: -500, maximum: 9000, nullable: true, description: "Altitude of the main coordinate, in metres above sea level." }
+        access: { type: string, nullable: true, description: "How to get there." }
+        description: { type: string, nullable: true }
+        depth_m: { type: integer, minimum: 0, maximum: 20000, nullable: true, description: "Only for a cavity (a place whose type is of the cave kind)." }
+        horizontal_length_m: { type: integer, minimum: 0, maximum: 2000000, nullable: true, description: "Only for a cavity (a place whose type is of the cave kind)." }
+        geology_id: { type: integer, nullable: true, description: "What a cave is formed in (of GET /places/geologies). Only for a cavity." }
+        technical_sheet: { type: string, nullable: true, description: "What has to be installed to go through it. Only for a cavity or a canyon." }
 
     VisitedPlace:
       type: object

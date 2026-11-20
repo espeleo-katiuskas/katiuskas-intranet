@@ -1445,6 +1445,26 @@ for the files (migration `00063_place_files.sql`).
   repository fills by joining `users`, so the handler needs no lookup for them).
 - Only admin and board delete a place, and only admin manages the types.
 
+### Partial edit
+
+`PUT /places/{id}` replaces every field, so a client that only knows some of them would clear the
+rest. `PATCH /places/{id}` (`Handler.patch`, `Service.PatchPlace`) changes only the fields the body
+names.
+
+- The handler checks that the body names at least one field and only fields of an edit
+  (`patchFields`: not `osm_type` or `osm_id`), else 400 `invalid_body`.
+- `PatchPlace` reads the place, gives it as an `Input` (`inputOf`) to a function that decodes the
+  body onto it, so what the JSON does not name keeps its value and a `null` clears it, and then
+  saves it through the same `clean` and `typeOf` checks as `PUT`, so the result is as valid as any
+  place.
+- The write is `Repository.UpdatePlaceIfUnchanged`: `updated_at` has to be what was read. If it
+  is not, somebody saved in between, nothing is written and the edit starts again on the new place
+  (three tries, then 409 `concurrent_update`). That is how a change made from a phone with no signal
+  cannot overwrite what others did meanwhile, with no lock held across the reads.
+- `updated_at` is `clock_timestamp()`, not the start of the transaction, so that two writes in one
+  transaction (the tests run in one) still differ.
+- The notice on Telegram is the one of an edit, with the same diff.
+
 Every change is announced on Telegram (`httpapi.NotifyAsync`), a place edit with the `DiffFields` of
 what changed (`placeAuditFields`) as the other resources do. A notice that names a place, whether it
 is of the place, of one of its points or of one of its files, ends the name with where it is

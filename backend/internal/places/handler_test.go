@@ -229,6 +229,7 @@ func TestPermissions(t *testing.T) {
 	writers := []call{
 		{"POST", "/api/v1/places", body(e.cavidad, "Otra", nil)},
 		{"PUT", placePath(place, ""), body(e.cavidad, "Cambiada", nil)},
+		{"PATCH", placePath(place, ""), map[string]any{"name": "Cambiada"}},
 		{"POST", placePath(place, "/points"), map[string]any{"kind": "parking", "lat": 40.0, "lon": -3.0}},
 	}
 	deleters := []call{{"DELETE", "/api/v1/places/987654", nil}}
