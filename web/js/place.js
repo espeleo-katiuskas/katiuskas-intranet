@@ -23,6 +23,7 @@ import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import { openQuickEdit } from './place-quick-edit.js';
 import { openTextEdit } from './place-text-edit.js';
 import { bindPendingList } from './pending-list.js';
+import { overlayPlace, pendingEntries } from './pending-overlay.js';
 import {
   coordinatesHtml,
   loadGeologies,
@@ -51,6 +52,8 @@ let files = [];
 let system = null; // The system the cavity is in, with its cavities, or null.
 let systemFiles = [];
 let activities = [];
+let pendingFiles = []; // The files attached with no connection that are still to be sent.
+const PENDING_KINDS = ['place-edit', 'place-point', 'place-file'];
 // Admin and board remove any file; anybody else only their own.
 const canManageFiles = hasAnyRole(user, ['admin', 'board']);
 
@@ -130,12 +133,43 @@ function renderSystemFiles() {
   });
 }
 
+// The pictures of the files that wait to be sent are shown from the phone itself.
+let pendingUrls = [];
+
+function pendingFileRows() {
+  for (const url of pendingUrls) URL.revokeObjectURL(url);
+  pendingUrls = [];
+  return pendingFiles
+    .map((e) => {
+      const label = e.title || e.fileName;
+      let preview = '';
+      if (e.file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(e.file);
+        pendingUrls.push(url);
+        preview = `<img src="${url}" alt="${escapeHtml(label)}" class="resource-image">`;
+      }
+      return `
+        <div class="comment">
+          <div class="comment-head">
+            <span><strong>${escapeHtml(label)}</strong>
+              <span class="badge">Pendiente de enviar</span></span>
+          </div>
+          ${preview}
+        </div>`;
+    })
+    .join('');
+}
+
 function renderFiles() {
-  document.getElementById('place-files').innerHTML = fileRowsHtml(files, {
-    base: `/places/${placeId}`,
-    canRemove: (f) => f.uploaded_by === user.login || canManageFiles,
-    personLink,
-  });
+  const own =
+    files.length || !pendingFiles.length
+      ? fileRowsHtml(files, {
+          base: `/places/${placeId}`,
+          canRemove: (f) => f.uploaded_by === user.login || canManageFiles,
+          personLink,
+        })
+      : '';
+  document.getElementById('place-files').innerHTML = own + pendingFileRows();
 }
 
 // The small map: the main coordinate, in the colour of the state, and the other points in grey, each
@@ -283,9 +317,11 @@ function render() {
           altitude: point.altitude_m,
           guide: { name: pointGuideName(point), placeId: place.id },
         })}</td>
-        <td>${point.note ? escapeHtml(point.note) : ''}</td>
+        <td>${point.note ? escapeHtml(point.note) : ''}${
+          point.pending ? ' <span class="badge">Pendiente de enviar</span>' : ''
+        }</td>
         <td class="nowrap">${
-          isOffline()
+          isOffline() || point.pending
             ? ''
             : `
           <button type="button" class="btn btn-secondary btn-small" data-edit-point="${point.id}">Editar</button>
@@ -322,14 +358,22 @@ async function loadPartial() {
   try {
     const item = (await apiFetch('/places')).find((p) => p.id === placeId);
     if (!item) return false;
-    place = {
-      ...item,
-      alt_names: item.alt_names ?? [],
-      access: null,
-      description: null,
-      technical_sheet: null,
-      points: [],
-    };
+    const pending = (await pendingEntries(user.login, PENDING_KINDS)).filter(
+      (e) => e.placeId === placeId,
+    );
+    pendingFiles = pending.filter((e) => e.kind === 'place-file');
+    place = overlayPlace(
+      {
+        ...item,
+        alt_names: item.alt_names ?? [],
+        access: null,
+        description: null,
+        technical_sheet: null,
+        points: [],
+      },
+      pending,
+      {},
+    );
     system = null;
     systemFiles = [];
     files = [];
@@ -339,8 +383,12 @@ async function loadPartial() {
     for (const id of ['place-access', 'place-description', 'place-sheet', 'place-files']) {
       document.getElementById(id).innerHTML = missing;
     }
-    document.getElementById('points-table-body').innerHTML =
-      '<tr><td colspan="5">No disponible sin conexión.</td></tr>';
+    // The points added with no connection are shown (render drew them), after what is not there.
+    const pendingPoints = document.getElementById('points-table-body');
+    pendingPoints.innerHTML =
+      '<tr><td colspan="5">No disponible sin conexión.</td></tr>' +
+      (place.points.length ? pendingPoints.innerHTML : '');
+    document.getElementById('place-files').innerHTML = missing + pendingFileRows();
     document.getElementById('place-activities-body').innerHTML =
       '<tr><td colspan="4">No disponible sin conexión.</td></tr>';
     document.getElementById('place-authorship').textContent = '';
@@ -379,7 +427,17 @@ async function load() {
       loadGeologies(),
       loadNames(),
     ]);
-    place = loaded;
+    // What was done with no connection and is still to be sent shows as if it were done.
+    const pending = (await pendingEntries(user.login, PENDING_KINDS)).filter(
+      (e) => e.placeId === placeId,
+    );
+    pendingFiles = pending.filter((e) => e.kind === 'place-file');
+    place = overlayPlace(loaded, pending, {
+      types: loadedTypes,
+      subtypes: loadedSubtypes,
+      geologies: loadedGeologies,
+      systems: loadedSystems,
+    });
     // The system it is in, with its files: its description and documents are shown here too.
     [system, systemFiles] = loaded.system_id
       ? await Promise.all([
@@ -430,7 +488,7 @@ const renderPending = bindPendingList({
         : `Punto nuevo: ${POINT_KIND_LABELS[e.point.kind] ?? e.point.kind}${e.point.name ? ` «${e.point.name}»` : ''}`,
   reload: load,
 });
-const queued = () => renderPending();
+const queued = () => Promise.all([load(), renderPending()]);
 
 // The long texts are edited one at a time, each in a form of its own (place-text-edit.js).
 for (const [button, field, title] of [

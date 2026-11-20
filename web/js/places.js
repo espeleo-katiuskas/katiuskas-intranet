@@ -16,6 +16,7 @@ import { initModal, openModal } from './modal.js';
 import { openChooseArea } from './place-choose-area.js';
 import { openPlaceDialog } from './place-dialog.js';
 import { bindPendingList } from './pending-list.js';
+import { overlayList, pendingEntries } from './pending-overlay.js';
 import { initSortableHeaders } from './sortable-headers.js';
 import {
   loadGeologies,
@@ -111,9 +112,11 @@ function compareBy(key, desc) {
 function renderPlace(place) {
   return `
     <tr>
-      <td><a href="/lugar?id=${place.id}"><strong>${escapeHtml(place.name)}</strong></a>${
-        place.osm_changed ? ' <span class="badge osm-diff">OSM ha cambiado</span>' : ''
-      }${
+      <td>${
+        place.pending
+          ? `<strong>${escapeHtml(place.name)}</strong> <span class="badge">Pendiente de enviar</span>`
+          : `<a href="/lugar?id=${place.id}"><strong>${escapeHtml(place.name)}</strong></a>`
+      }${place.osm_changed ? ' <span class="badge osm-diff">OSM ha cambiado</span>' : ''}${
         place.alt_names.length
           ? `<br><span class="subtitle">${escapeHtml(place.alt_names.join(' · '))}</span>`
           : ''
@@ -202,7 +205,8 @@ async function renderMap(shown) {
   const { L, map, cluster, markers } = state;
   cluster.clearLayers();
   markers.clear();
-  for (const place of shown) {
+  // A place made with no connection has no page to link to yet: it is only in the table.
+  for (const place of shown.filter((p) => !p.pending)) {
     const marker = bindPlaceInfo(placeMarker(L, place), place);
     markers.set(place.id, marker);
   }
@@ -335,7 +339,13 @@ async function load() {
     const [places, loadedTypes, loadedSubtypes, loadedSystems, loadedGeologies] = await Promise.all(
       [apiFetch('/places'), loadTypes(), loadSubtypes(), loadSystems(), loadGeologies()],
     );
-    allPlaces = places;
+    // What was done with no connection and is still to be sent shows as if it were done.
+    allPlaces = overlayList(places, await pendingEntries(user.login, ['place-edit', 'place-new']), {
+      types: loadedTypes,
+      subtypes: loadedSubtypes,
+      geologies: loadedGeologies,
+      systems: loadedSystems,
+    });
     types = loadedTypes;
     subtypes = loadedSubtypes;
     systems = loadedSystems;
@@ -375,7 +385,7 @@ document.getElementById('toggle-new-place').addEventListener('click', () => {
     onSaved: (place) => {
       window.location.href = `/lugar?id=${place.id}`;
     },
-    onQueued: () => renderPending(),
+    onQueued: () => Promise.all([load(), renderPending()]),
   });
 });
 

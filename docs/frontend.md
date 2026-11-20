@@ -884,6 +884,28 @@ from the coordinates need the API). Only an edit of an existing place and a new 
 Changing or removing a point, the link with OpenStreetMap and deleting a place still need the
 connection, and their buttons are not offered.
 
+#### What is pending is shown
+
+What was done with no connection shows on the phone as if it were done (`pending-overlay.js`), until
+it is sent. A page draws the data it has just loaded with the person's pending entries on top; the
+overlay is never saved, so once an entry is sent and the page loads again the server's own data is
+what shows.
+
+- On `/lugar`, the edits of the place (`place-edit`, from the full form, the long texts and
+  "Corregir datos") are applied to its fields, the pending points are added to the table and the
+  pending files to the list, with a "Pendiente de enviar" badge and, for a picture, shown from the
+  phone itself. They have no "Editar" or "Quitar" yet. Pending edits and points show on the partial
+  page too.
+- On `/lugares`, the pending edits are applied to the rows, and the new places (`place-new`) are
+  added as rows with the badge, with no link and not on the map (they have no page yet). Their zone
+  is the guess of the form, or "Zona por determinar". Search, filters, order and the column
+  "Distancia" work on them as on any other.
+- A new edit made on top of what is shown takes what is shown as what the person saw (`base`), so
+  the clash check of the outbox tells a real change by somebody else from the person's own earlier
+  entries, which are sent first and in order.
+- The memoria entries of `/actividad` show in its own list of pending entries, not among the
+  entries of the memoria.
+
 #### New places
 
 "+ Nuevo lugar" works with no connection (`openPlaceDialog` with `nearby`, the list of places, and

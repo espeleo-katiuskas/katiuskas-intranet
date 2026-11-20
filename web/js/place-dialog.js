@@ -443,6 +443,7 @@ async function queueNewPlace(body, near) {
     body: rest,
     areaId,
     guessAreaId: near?.place.area_id ?? null,
+    guessWhere: near?.place.where ?? '',
   });
   showFeedback('Guardado: se enviará al haber conexión.');
 }
