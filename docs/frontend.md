@@ -792,9 +792,9 @@ Signing out, or a session that is refused, deletes the copies of the data and `k
 - The activities that are active are listed and the page of one of the next ones opens ("Esta
   actividad no está guardada en este móvil…" for another, and the material is not loaded, without a
   modal about it).
-- The list of places works, each row of it with its "Rumbo" button on a phone (it needs only the
-  coordinates, which the list has, so it works for places that have never been opened).
-- The page of a place opened lately works with its "Rumbo" buttons.
+- The list of places works, and so does the page of every place in it (a partial one if it was not
+  opened recently, see below), each with its "Rumbo" button on a phone.
+- The page of a place opened lately works in full, with its "Rumbo" buttons.
 - `/brujula` needs nothing but the phone (the GPS and the compass).
 - The map has no tiles.
 - The page of a place that was not opened recently is a partial one (`loadPartial` in `place.js`,

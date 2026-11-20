@@ -403,9 +403,7 @@ async function load() {
     // With no connection, a place that has not been opened lately is not on the phone.
     if (err.network && isOffline()) {
       if (await loadPartial()) return;
-      showError(
-        'Este lugar no está guardado en este móvil para verlo sin conexión. Desde «Lugares» puedes ponerle rumbo igualmente.',
-      );
+      showError('Este lugar no está guardado en este móvil para verlo sin conexión.');
       return;
     }
     showError(err.message);

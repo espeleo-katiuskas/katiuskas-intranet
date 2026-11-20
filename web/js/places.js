@@ -15,8 +15,6 @@ import { initModal, openModal } from './modal.js';
 import { openPlaceDialog } from './place-dialog.js';
 import { initSortableHeaders } from './sortable-headers.js';
 import {
-  canGuide,
-  guideUrl,
   loadGeologies,
   loadSubtypes,
   loadSystems,
@@ -107,12 +105,6 @@ function renderPlace(place) {
       }${
         place.alt_names.length
           ? `<br><span class="subtitle">${escapeHtml(place.alt_names.join(' · '))}</span>`
-          : ''
-      }${
-        // On a phone, the way to the place from the list itself: it needs nothing but the coordinates, which
-        // the list has, so it also works with no connection and for places that have never been opened.
-        canGuide()
-          ? `<br><a class="btn btn-secondary btn-small" href="${escapeHtml(guideUrl(place.lat, place.lon, place.name, place.id))}">Rumbo</a>`
           : ''
       }</td>
       <td>${escapeHtml(placeTypeLabel(place))}${
