@@ -785,8 +785,8 @@ Signing out, or a session that is refused, deletes the copies of the data and `k
 
 #### What works with no connection
 
-- The menu has only "Inicio", "Actividades" and "Lugares" (`keepOfflineMenu` in `layout.js`: the
-  other pages need the API).
+- The menu has only "Inicio", "Actividades" and "Lugares", and the top bar has no "Ver como…"
+  (`keepOfflineMenu` in `layout.js`: the other pages and that button need the API).
 - The home page shows the data of interest from the copy and "No disponible sin conexión" for the
   Junta and the documents, which are not kept (the link to the history of the Junta is not there
   either).

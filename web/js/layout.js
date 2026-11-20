@@ -161,6 +161,8 @@ function keepOfflineMenu() {
   for (const link of document.querySelectorAll('#sidebar-nav a')) {
     if (!OFFLINE_NAV.includes(link.getAttribute('href'))) link.remove();
   }
+  // "Ver como…" asks the API for the roles to see the intranet as.
+  document.getElementById('role-override-button').hidden = true;
 }
 
 // The one call every authenticated page's own <page>.js makes before
