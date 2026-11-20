@@ -293,10 +293,17 @@ body {
 .topbar-user {
   display: flex;
   align-items: center;
-  gap: 14px;
-  flex-shrink: 0;
+  /* A long name must not make the bar wider than the screen: what does not fit goes to the next line. */
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  max-width: 100%;
   margin-left: auto;
   font-size: 0.9rem;
+}
+
+.topbar-user > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .content {

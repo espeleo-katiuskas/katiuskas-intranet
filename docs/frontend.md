@@ -65,6 +65,9 @@ near-identical lines re-typed at the top of every `<page>.js`):
   first, and says that with no connection there is no way back in);
 - it returns the signed-in user same as `currentUser()` would.
 
+`.topbar-user` (the greeting and the two buttons) wraps and may shrink to the width of the bar, so a
+very long name goes onto more lines instead of making the whole page wider than a phone screen.
+
 Its own `requireAnyRole` option additionally redirects home if the signed-in user holds none of the
 listed roles. These are the whole-page gates of `member.js` (admin/board), of
 `accounting.js`/`account.js` (admin/board/money) and of `admin.js` (admin), tighter than the
