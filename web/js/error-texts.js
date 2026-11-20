@@ -134,6 +134,7 @@ const texts = {
   unknown_place_type: 'Ese tipo de lugar no existe.',
   place_type_required: 'Elige el tipo de lugar.',
   place_name_required: 'Escribe el nombre del lugar.',
+  concurrent_update: 'Otra persona ha cambiado el lugar a la vez. Vuelve a intentarlo.',
   invalid_place_state: 'El estado del lugar no es válido.',
   invalid_coordinates:
     'Las coordenadas no son válidas: latitud entre -90 y 90, longitud entre -180 y 180.',

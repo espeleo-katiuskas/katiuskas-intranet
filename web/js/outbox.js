@@ -91,10 +91,9 @@ const SENDERS = {
     else form.set('file', entry.file, entry.fileName);
     await apiFetchForm(`/activities/${entry.activityId}/resources`, form);
   },
-  // The edit of a place is made on the place as it is now, not as it was when the person edited it, so
-  // that what others changed meanwhile is not lost: only the fields the person changed are put in, and
-  // if somebody changed one of those too (it is not what the person saw, nor what they want) it is not
-  // sent: the person decides, with the place in front.
+  // The edit of a place names only the fields the person changed (PATCH), so what others changed
+  // meanwhile in other fields is not touched. If somebody changed one of these fields too (it is neither
+  // what the person saw nor what they want) it is not sent: the person decides, with the place in front.
   'place-edit': async (entry, { apiFetch }) => {
     const fresh = placeBody(await apiFetch(`/places/${entry.placeId}`));
     const fields = Object.keys(entry.changes);
@@ -108,8 +107,8 @@ const SENDERS = {
       );
     }
     await apiFetch(`/places/${entry.placeId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ ...fresh, ...entry.changes }),
+      method: 'PATCH',
+      body: JSON.stringify(entry.changes),
     });
   },
   'place-file': async (entry, { apiFetchForm }) => {

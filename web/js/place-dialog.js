@@ -702,4 +702,11 @@ function openPointDialog({ placeId, point = null, coordinates = null, onSaved, o
   openModal(dialog);
 }
 
-export { buildDialog, openPlaceDialog, openPointDialog };
+export {
+  bindCoordinates,
+  bindLocate,
+  buildDialog,
+  coordinatesField,
+  openPlaceDialog,
+  openPointDialog,
+};

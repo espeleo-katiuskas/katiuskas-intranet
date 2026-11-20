@@ -785,10 +785,12 @@ Signing out, or a session that is refused, deletes the copies of the data and `k
   `err.network` with `isOffline()`): it is made of what the list of places has, which is always
   kept (name, type, state, where, coordinates, altitude and measures), with a note, "Datos
   parciales…", and "No se guarda en este móvil…" where the rest would be (how to get there, the
-  description, the technical sheet, the points, the files and the activities). "Editar lugar" is
-  not offered, because an edit replaces every field and the missing ones would be cleared;
-  "Añadir punto" and the form of files are, as they only add. If the place is not even in the list,
-  the page says "Este lugar no está guardado en este móvil…".
+  description, the technical sheet, the points, the files and the activities). The full "Editar
+  lugar" is not offered, because the dialog would show the fields it does not have as empty;
+  "Corregir datos" is (`place-quick-edit.js`: the name, the coordinate with "Usar mi ubicación"
+  and the altitude, only the fields that change are kept), and so are "Añadir punto" and the form
+  of files, as they only add. If the place is not even in the list, the page says "Este lugar no
+  está guardado en este móvil…".
 - Nothing can be changed, except what goes through the outbox (see "The outbox" below): any other
   change with no connection fails as it always did.
 
@@ -842,12 +844,14 @@ A new kind of entry needs its `SENDERS` and, if sending twice would show, its `A
 
 The edit of a place is kept as the fields that changed (`diffPlace` in `place-body.js`), with what
 each had when the person edited (`base`) and what they want (`changes`), never as the whole place.
-`PUT /places/{id}` replaces everything, so sending a whole old place would undo what others did
-meanwhile.
+It is sent with `PATCH /places/{id}` (`backend-internals.md`, "Partial edit"), which changes only
+the fields it names, so what others changed meanwhile in other fields is not touched (`PUT`
+replaces everything, and would undo it).
 
-At send time the place is read again and `changes` are put on top of it. If somebody changed one of
-those fields since (it is neither `base` nor `changes`) nothing is sent and the entry says "El lugar
-ha cambiado mientras tanto (…)" until the person looks and retries or discards.
+At send time the place is read first, only to look for a clash. If somebody changed one of those
+fields since (it is neither `base` nor `changes`) nothing is sent and the entry says "El lugar ha
+cambiado mientras tanto (…)" until the person looks and retries or discards. If the fields already
+have the wanted values, nothing is sent either.
 
 With no connection the dialog works with the catalogues that the phone has (types, subtypes,
 systems, geologies), and the zone stays the one the place has (the search of zones and the proposal

@@ -20,6 +20,7 @@ import { bindFiles, fileRowsHtml } from './place-files.js';
 import { copyFromOsm, openOsmLinkDialog, osmChangesHtml, osmDataHtml } from './osm-link.js';
 import { describeFields } from './place-body.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
+import { openQuickEdit } from './place-quick-edit.js';
 import { bindPendingList } from './pending-list.js';
 import {
   coordinatesHtml,
@@ -311,8 +312,8 @@ function render() {
 // With no connection and a place that was not opened lately, the page is made of what the list of places
 // has (that is kept always): the name, type, state, where, coordinates and measures. What only the page
 // of the place has (how to get there, the description, the points, the files, the activities) is not
-// there, and the page says so. The edit of the place is not offered (it replaces every field, and the
-// fields that are not here would be cleared); a point or a file can still be added, as they only add.
+// there, and the page says so. The full edit of the place is not offered (it would clear the fields that
+// are not here); the short one (name, coordinate, altitude) is, and so are a point or a file, which only add.
 async function loadPartial() {
   try {
     const item = (await apiFetch('/places')).find((p) => p.id === placeId);
@@ -341,6 +342,7 @@ async function loadPartial() {
     document.getElementById('place-authorship').textContent = '';
     document.getElementById('partial-note').hidden = false;
     document.getElementById('edit-place').hidden = true;
+    document.getElementById('quick-edit-place').hidden = false;
     return true;
   } catch {
     return false;
@@ -350,6 +352,7 @@ async function loadPartial() {
 async function load() {
   document.getElementById('partial-note').hidden = true;
   document.getElementById('edit-place').hidden = false;
+  document.getElementById('quick-edit-place').hidden = true;
   try {
     const [
       loaded,
@@ -424,6 +427,11 @@ const renderPending = bindPendingList({
   reload: load,
 });
 const queued = () => renderPending();
+
+// The short edit of the partial page (see loadPartial): the name, the coordinate and the altitude.
+document.getElementById('quick-edit-place').addEventListener('click', () => {
+  openQuickEdit({ place, onQueued: queued });
+});
 
 document.getElementById('edit-place').addEventListener('click', () => {
   openPlaceDialog({
