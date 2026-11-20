@@ -773,8 +773,8 @@ If the network is not there and the person is known from that copy, the page ope
 - The network is "not there" on a failed request, which is told from a refusal: only a "no" from the
   server ends a session.
 - The roles come from the copy.
-- A strip at the top says "Sin conexión: se ven los datos guardados en este móvil…" (and that
-  memoria entries are sent when the connection is back).
+- A strip at the top says "Sin conexión: se ven los datos del móvil. Tus ediciones se envían al
+  volver." It is kept short on purpose: on a phone every line of it is lost to the page.
 - The page is loaded again when the connection is back (`online`).
 - It waits four seconds for `/auth/me` in that case. A person who has never signed in on that phone
   waits for it as before, and sees "No se puede conectar con la intranet".
@@ -789,8 +789,8 @@ Signing out, or a session that is refused, deletes the copies of the data and `k
 - The home page shows the data of interest from the copy and "No disponible sin conexión" for the
   Junta and the documents, which are not kept (the link to the history of the Junta is not there
   either).
-- The activities that are active are listed and the page of one of the next ones opens ("Esta
-  actividad no está guardada en este móvil…" for another, and the material is not loaded, without a
+- The activities that are active are listed and the page of one of the next ones opens ("Actividad
+  no guardada en el móvil." for another, and the material is not loaded, without a
   modal about it).
 - The list of places works, and so does the page of every place in it (a partial one if it was not
   opened recently, see below), each with its "Rumbo" button on a phone.
@@ -800,13 +800,14 @@ Signing out, or a session that is refused, deletes the copies of the data and `k
 - The page of a place that was not opened recently is a partial one (`loadPartial` in `place.js`,
   `err.network` with `isOffline()`): it is made of what the list of places has, which is always
   kept (name, type, state, where, coordinates, altitude and measures), with a note, "Datos
-  parciales…", and "No se guarda en este móvil…" where the rest would be (how to get there, the
+  parciales: faltan los textos, los puntos, los ficheros y las actividades.", and "No disponible
+  sin conexión." where the rest would be (how to get there, the
   description, the technical sheet, the points, the files and the activities). The full "Editar
   lugar" is not offered, because the dialog would show the fields it does not have as empty;
   "Corregir datos" is (`place-quick-edit.js`: the name, the coordinate with "Usar mi ubicación"
   and the altitude, only the fields that change are kept), and so are "Añadir punto" and the form
-  of files, as they only add. If the place is not even in the list, the page says "Este lugar no
-  está guardado en este móvil…".
+  of files, as they only add. If the place is not even in the list, the page says "Lugar no
+  guardado en el móvil.".
 - Nothing can be changed, except what goes through the outbox (see "The outbox" below): any other
   change with no connection fails as it always did.
 
@@ -821,7 +822,7 @@ Four kinds of entry go through it so far:
 
 - The text and files of memoria entries, from the form of `/actividad`. When the page is a copy, or
   when sending fails with `err.network`, `queueMemoria` queues the entry instead of showing an
-  error, and says "Guardado en este móvil: se enviará cuando haya conexión".
+  error, and says "Guardado: se enviará al haber conexión".
 - The edit of a place (`place-edit`) and a point added to one (`place-point`): two kinds, both from
   the dialogs of `/lugar` (`place-dialog.js`: "Usar mi ubicación" works with no connection, it
   only needs the GPS).

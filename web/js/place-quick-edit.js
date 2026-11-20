@@ -97,7 +97,7 @@ export function openQuickEdit({ place, onQueued }) {
       changes,
     });
     showFeedback(
-      `Guardado en este móvil (${describeFields(Object.keys(changes))}): se enviará cuando haya conexión.`,
+      `Guardado (${describeFields(Object.keys(changes))}): se enviará al haber conexión.`,
     );
     await onQueued?.();
   };

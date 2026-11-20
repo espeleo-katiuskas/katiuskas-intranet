@@ -423,9 +423,7 @@ export async function queuePlaceEdit(place, body) {
     base,
     changes,
   });
-  showFeedback(
-    `Guardado en este móvil (${describeFields(Object.keys(changes))}): se enviará cuando haya conexión.`,
-  );
+  showFeedback(`Guardado (${describeFields(Object.keys(changes))}): se enviará al haber conexión.`);
 }
 
 function openPlaceDialog({
@@ -706,7 +704,7 @@ function openPointDialog({ placeId, point = null, coordinates = null, onSaved, o
           placeId,
           point: body,
         });
-        showFeedback('Guardado en este móvil: se enviará cuando haya conexión.');
+        showFeedback('Guardado: se enviará al haber conexión.');
         dialog.close();
         await onQueued?.();
         return;

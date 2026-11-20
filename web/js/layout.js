@@ -195,8 +195,8 @@ async function initPage({ requireAnyRole } = {}) {
       onSent: (sent) => {
         showFeedback(
           sent.length === 1
-            ? 'Se ha enviado lo que habías guardado sin conexión.'
-            : `Se han enviado las ${sent.length} cosas que habías guardado sin conexión.`,
+            ? 'Enviado lo guardado sin conexión.'
+            : `Enviadas ${sent.length} cosas guardadas sin conexión.`,
         );
         // A page that shows what was sent draws it again.
         window.dispatchEvent(new CustomEvent('katiuskas:outbox-sent'));

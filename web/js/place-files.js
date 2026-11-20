@@ -74,7 +74,7 @@ function bindFiles({ list, form, base, reload, queue = null }) {
           title: (data.get('title') ?? '').toString().trim(),
         });
         form.reset();
-        showFeedback('Guardado en este móvil: se enviará cuando haya conexión.');
+        showFeedback('Guardado: se enviará al haber conexión.');
         await queue.onQueued?.();
         return;
       }

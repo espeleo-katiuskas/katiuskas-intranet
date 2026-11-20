@@ -151,11 +151,7 @@ async function loadActivity(ready = Promise.resolve()) {
       'No se ha podido cargar esta actividad.';
     // With no connection, an activity that has not been opened lately (or is not one of the next ones) is
     // not on the phone.
-    showError(
-      err.network && isOffline()
-        ? 'Esta actividad no está guardada en este móvil para verla sin conexión.'
-        : err.message,
-    );
+    showError(err.network && isOffline() ? 'Actividad no guardada en el móvil.' : err.message);
   }
 }
 
@@ -1188,7 +1184,7 @@ async function queueMemoria(formData) {
     file: file instanceof File ? file : null,
     fileName: file instanceof File ? file.name : null,
   });
-  showFeedback('Guardado en este móvil: se enviará cuando haya conexión.');
+  showFeedback('Guardado: se enviará al haber conexión.');
   await renderMemoriaPending();
 }
 

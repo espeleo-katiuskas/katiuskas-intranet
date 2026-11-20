@@ -335,14 +335,14 @@ async function loadPartial() {
     files = [];
     activities = [];
     render();
-    const missing = '<p class="subtitle">No se guarda en este móvil para verlo sin conexión.</p>';
+    const missing = '<p class="subtitle">No disponible sin conexión.</p>';
     for (const id of ['place-access', 'place-description', 'place-sheet', 'place-files']) {
       document.getElementById(id).innerHTML = missing;
     }
     document.getElementById('points-table-body').innerHTML =
-      '<tr><td colspan="5">No se guardan en este móvil para verlos sin conexión.</td></tr>';
+      '<tr><td colspan="5">No disponible sin conexión.</td></tr>';
     document.getElementById('place-activities-body').innerHTML =
-      '<tr><td colspan="4">No se guardan en este móvil para verlas sin conexión.</td></tr>';
+      '<tr><td colspan="4">No disponible sin conexión.</td></tr>';
     document.getElementById('place-authorship').textContent = '';
     document.getElementById('partial-note').hidden = false;
     document.getElementById('edit-place').hidden = true;
@@ -403,7 +403,7 @@ async function load() {
     // With no connection, a place that has not been opened lately is not on the phone.
     if (err.network && isOffline()) {
       if (await loadPartial()) return;
-      showError('Este lugar no está guardado en este móvil para verlo sin conexión.');
+      showError('Lugar no guardado en el móvil.');
       return;
     }
     showError(err.message);
