@@ -13,7 +13,9 @@ import { bindPlaceInfo, createMap, mapLegend, offerOnMapClick, placeMarker } fro
 import { initPage } from './layout.js';
 import { createOsmLayer } from './osm-layer.js';
 import { initModal, openModal } from './modal.js';
+import { openChooseArea } from './place-choose-area.js';
 import { openPlaceDialog } from './place-dialog.js';
+import { bindPendingList } from './pending-list.js';
 import { initSortableHeaders } from './sortable-headers.js';
 import {
   loadGeologies,
@@ -369,10 +371,31 @@ document.getElementById('toggle-new-place').addEventListener('click', () => {
     subtypes,
     systems,
     geologies,
+    nearby: allPlaces,
     onSaved: (place) => {
       window.location.href = `/lugar?id=${place.id}`;
     },
+    onQueued: () => renderPending(),
   });
+});
+
+// The new places made with no connection that wait to be sent (js/outbox.js). One whose zone was not found
+// asks the person to choose it.
+const renderPending = bindPendingList({
+  container: document.getElementById('places-pending'),
+  login: user.login,
+  matches: (e) => e.kind === 'place-new',
+  describe: (e) => `Lugar nuevo: ${e.name}`,
+  reload: () => load(),
+  actions: (e) =>
+    e.needsArea
+      ? `<button type="button" class="btn btn-primary btn-small" data-outbox-action="choose-area" data-outbox-id="${e.id}">Elegir zona</button>`
+      : '',
+  onAction: (name, entry) => {
+    if (name === 'choose-area') {
+      openChooseArea({ entry, onSent: () => Promise.all([load(), renderPending()]) });
+    }
+  },
 });
 
 // Makes the table of a catalogue and its form work: rename and delete (with a confirmation), and add
@@ -469,6 +492,7 @@ if (isAdmin) {
 
 applyView(mapView);
 await load();
+renderPending();
 locate();
 
 // Asks the browser where the person is, once (it is the browser that asks the person, and remembers the

@@ -4,8 +4,18 @@ import * as outbox from './outbox.js';
 // The entries of the outbox that belong to a page, drawn in `container` as "Pendiente de enviar",
 // each with what it is (`describe(entry)`, html-safe text), why the server refused it if it did, and
 // "Reintentar" and "Descartar". `matches(entry)` says which ones are of this page; `reload()` draws
-// the page's own data again when something was sent. Returns the function that draws the list.
-export function bindPendingList({ container, login, matches, describe, reload }) {
+// the page's own data again when something was sent. An entry may have buttons of its own:
+// `actions(entry)` gives their html (each with a `data-outbox-action="name"`) and `onAction(name, entry)`
+// says what they do. Returns the function that draws the list.
+export function bindPendingList({
+  container,
+  login,
+  matches,
+  describe,
+  reload,
+  actions = () => '',
+  onAction = () => {},
+}) {
   if (!container) return async () => {};
 
   async function render() {
@@ -22,8 +32,9 @@ export function bindPendingList({ container, login, matches, describe, reload })
       <div><span class="badge">Pendiente de enviar</span> <strong>${escapeHtml(describe(e))}</strong></div>
       ${e.error ? `<p class="form-hint">No se pudo enviar: ${escapeHtml(e.error)}</p>` : ''}
       <div class="outbox-actions">
+        ${actions(e)}
         <button type="button" class="btn btn-secondary btn-small" data-outbox-retry="${e.id}"${
-          isOffline() ? ' hidden' : ''
+          isOffline() || e.needsArea ? ' hidden' : ''
         }>Reintentar</button>
         <button type="button" class="btn btn-secondary btn-small" data-outbox-discard="${e.id}">Descartar</button>
       </div>
@@ -33,6 +44,12 @@ export function bindPendingList({ container, login, matches, describe, reload })
   }
 
   container.addEventListener('click', async (event) => {
+    const action = event.target.closest('[data-outbox-action]');
+    if (action) {
+      const [entry] = await outbox.entries((e) => e.id === Number(action.dataset.outboxId));
+      if (entry) await onAction(action.dataset.outboxAction, entry);
+      return;
+    }
     const retry = event.target.closest('[data-outbox-retry]');
     const discard = event.target.closest('[data-outbox-discard]');
     if (discard) {

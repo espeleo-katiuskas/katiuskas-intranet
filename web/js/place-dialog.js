@@ -14,6 +14,7 @@ import { initModal, openModal } from './modal.js';
 import { bindNamesList, namesListField } from './names-list.js';
 import * as outbox from './outbox.js';
 import { describeFields, diffPlace } from './place-body.js';
+import { guessText, nearestPlace } from './place-zone-guess.js';
 import { POINT_KIND_LABELS, STATE_HELP, STATE_LABELS } from './places-common.js';
 
 // The two dialogs to write a place and one of its points, shared by /lugares (a new place) and /lugar
@@ -119,6 +120,8 @@ function bindLocate(input, id) {
   });
 }
 
+// What the zone line of a new place made with no connection says (set by openPlaceDialog).
+let refreshZoneNote = () => {};
 let placeDialog = null;
 let pointDialog = null;
 
@@ -190,6 +193,7 @@ function ensurePlaceDialog() {
           <p class="hint">El material en el que se formó la cueva.</p>
         </div>
         ${areaPickerField({ id: 'pd-area', label: 'Dónde está' })}
+        <p class="hint" id="pd-area-offline" hidden></p>
         <p class="hint area-proposal" id="pd-area-proposal" hidden></p>
         <p class="hint area-add">
           Elige la zona más concreta que sepas (el municipio, la provincia o solo el país); si has
@@ -298,6 +302,7 @@ function ensurePlaceDialog() {
     }
   }
   form.elements.coordinates.addEventListener('input', () => {
+    refreshZoneNote();
     clearTimeout(lookupTimer);
     lookupTimer = setTimeout(proposeArea, LOOKUP_DELAY_MS);
   });
@@ -426,6 +431,22 @@ export async function queuePlaceEdit(place, body) {
   showFeedback(`Guardado (${describeFields(Object.keys(changes))}): se enviará al haber conexión.`);
 }
 
+// A new place made with no connection waits in the outbox. `body` is the place as the API takes it (with
+// the zone the person chose, if they could), and `near` the nearest place of the list, whose zone is the
+// guess the outbox falls back on if the API finds none (see the sender of `place-new` in outbox.js).
+async function queueNewPlace(body, near) {
+  const { area_id: areaId, ...rest } = body;
+  await outbox.enqueue({
+    kind: 'place-new',
+    login: currentUser().login,
+    name: body.name,
+    body: rest,
+    areaId,
+    guessAreaId: near?.place.area_id ?? null,
+  });
+  showFeedback('Guardado: se enviará al haber conexión.');
+}
+
 function openPlaceDialog({
   types,
   subtypes,
@@ -434,6 +455,7 @@ function openPlaceDialog({
   place = null,
   coordinates = null,
   osm = null,
+  nearby = [],
   onSaved,
   onQueued,
 }) {
@@ -451,6 +473,21 @@ function openPlaceDialog({
     proposeKnownArea,
   } = ensurePlaceDialog();
   form.dataset.editing = place ? 'true' : 'false';
+  // A new place made with no connection cannot choose its zone (the search of zones needs the API): the form
+  // says which one it will probably get, and the place waits in the outbox until it is sent.
+  const offlineNew = !place && isOffline();
+  areaPicker.setRequired(!offlineNew);
+  dialog.querySelector('[data-area-picker]').hidden = offlineNew;
+  dialog.querySelector('.area-add').hidden = offlineNew;
+  const zoneNote = document.getElementById('pd-area-offline');
+  zoneNote.hidden = !offlineNew;
+  refreshZoneNote = () => {
+    if (!offlineNew) return;
+    const found = parseCoordinates(form.elements.coordinates.value);
+    zoneNote.textContent = found
+      ? guessText(found.lat, found.lon, nearby)
+      : 'Escribe las coordenadas: la zona se propone a partir de ellas.';
+  };
   document.getElementById('pd-title').textContent = place ? 'Editar lugar' : 'Nuevo lugar';
   const osmNote = document.getElementById('pd-osm-note');
   osmNote.hidden = !osm;
@@ -512,6 +549,7 @@ function openPlaceDialog({
   const start = fromOsm ? { lat: osm.lat, lon: osm.lon } : coordinates;
   if (!place && start) form.elements.coordinates.value = formatDecimal(start.lat, start.lon);
   updateCoordinates();
+  refreshZoneNote();
   if (!place && start) {
     if (fromOsm && osm.area_id) {
       // The element has its zone already (the load worked it out): no need to ask where the coordinates are,
@@ -536,7 +574,7 @@ function openPlaceDialog({
   form.onsubmit = async (event) => {
     event.preventDefault();
     const found = parseCoordinates(form.elements.coordinates.value);
-    if (!found || !areaPicker.area) return;
+    if (!found || (!offlineNew && !areaPicker.area)) return;
     const kind = kindOf();
     const submit = form.querySelector('button[type="submit"]');
     submit.disabled = true;
@@ -549,7 +587,7 @@ function openPlaceDialog({
         state: hasStateOf() ? form.elements.state.value : '',
         subtype_id: kind === 'cave' ? Number(form.elements.subtype_id.value) : null,
         system_id: kind === 'cave' ? whole(form, 'system_id') : null,
-        area_id: areaPicker.area.id,
+        area_id: areaPicker.area?.id ?? null,
         lat: found.lat,
         lon: found.lon,
         altitude_m: whole(form, 'altitude_m'),
@@ -580,19 +618,23 @@ function openPlaceDialog({
           return;
         }
       }
-      if (!(place && isOffline())) {
+      if (!offlineNew && !(place && isOffline())) {
         try {
           saved = await apiFetch(place ? `/places/${place.id}` : '/places', {
             method: place ? 'PATCH' : 'POST',
             body: JSON.stringify(place ? changes : body),
           });
         } catch (err) {
-          // The connection went away after the page opened: an edit waits, a new place does not.
-          if (!(place && err.network)) throw err;
+          // The connection went away after the page opened: the place or its edit waits.
+          if (!err.network) throw err;
         }
       }
       if (!saved) {
-        await queuePlaceEdit(place, body);
+        if (place) {
+          await queuePlaceEdit(place, body);
+        } else {
+          await queueNewPlace(body, nearestPlace(found.lat, found.lon, nearby));
+        }
         dialog.close();
         await onQueued?.();
         return;

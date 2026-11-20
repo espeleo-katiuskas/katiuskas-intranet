@@ -1,5 +1,5 @@
 // The outbox: what a person did with no connection and has to be sent when there is one. Today it is the
-// entries that are added to the memoria of an activity (a text, or a file such as a photo), the changes
+// entries that are added to the memoria of an activity (a text, or a file such as a photo), a new place, the changes
 // to a place, the points added to one and the photos and files of one; the place of an entry is `kind`, so what comes later (the
 // photos of a place) goes in the same queue. It lives in IndexedDB, which keeps a file as it is (localStorage cannot), and an entry
 // stays there until it is sent or the person discards it: closing the page, the browser or the phone
@@ -111,6 +111,30 @@ const SENDERS = {
       body: JSON.stringify(entry.changes),
     });
   },
+  // A place made with no connection has no zone yet. The one the person chose wins, then the one the API
+  // finds for the coordinates, then the guess made from the nearest place; with none of them it waits for
+  // the person to choose one ("Elegir zona"), without blocking the others.
+  'place-new': async (entry, { apiFetch }) => {
+    let areaId = entry.areaId ?? null;
+    if (!areaId) {
+      try {
+        const { area } = await apiFetch(
+          `/areas/locate?lat=${entry.body.lat}&lon=${entry.body.lon}`,
+        );
+        areaId = area?.id ?? null;
+      } catch (err) {
+        if (err.network || err.status === 401) throw err; // The lookup is only a help.
+      }
+    }
+    areaId ??= entry.guessAreaId ?? null;
+    if (!areaId) {
+      throw Object.assign(new Error('Falta la zona: elígela.'), { mark: { needsArea: true } });
+    }
+    await apiFetch('/places', {
+      method: 'POST',
+      body: JSON.stringify({ ...entry.body, area_id: areaId }),
+    });
+  },
   'place-file': async (entry, { apiFetchForm }) => {
     const form = new FormData();
     form.set('file', entry.file, entry.fileName);
@@ -138,6 +162,18 @@ const ALREADY_SENT = {
         r.title === entry.title &&
         (entry.type !== 'text' || r.description === entry.description) &&
         Date.parse(r.created_at) >= entry.queuedAt - 5 * 60 * 1000,
+    );
+  },
+  // Nothing in the API refuses two places with the same name: one with the name and the coordinates is the
+  // one that was sent.
+  'place-new': async (entry, { apiFetch }) => {
+    const list = await apiFetch('/places');
+    const name = entry.body.name.trim().toLowerCase();
+    return list.some(
+      (p) =>
+        p.name.trim().toLowerCase() === name &&
+        sameValue(p.lat, entry.body.lat) &&
+        sameValue(p.lon, entry.body.lon),
     );
   },
   'place-file': async (entry, { apiFetch }) => {
@@ -179,7 +215,7 @@ export async function flush(login, api) {
         sent.push(entry);
       } catch (err) {
         if (err.network || err.status === 401) break;
-        await update(entry.id, { error: err.message });
+        await update(entry.id, { error: err.message, ...err.mark });
       }
     }
     return sent;

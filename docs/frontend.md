@@ -792,7 +792,7 @@ Signing out, or a session that is refused, deletes the copies of the data and `k
   (`keepOfflineMenu` in `layout.js`: the other pages and that button need the API).
 - `/actividades` shows only the list of active activities that is kept: "Ver todas", "Ver
   calendario" and "+ Nueva actividad" are not there. `/lugares` has no "Sistemas", "Zonas" or "Tipos
-  y geologías" (all need the API); "+ Nuevo lugar" stays.
+  y geologías" (all need the API); "+ Nuevo lugar" works (see "New places" under "The outbox").
 - The home page shows the data of interest from the copy and "No disponible sin conexión" for the
   Junta and the documents, which are not kept (the link to the history of the Junta is not there
   either).
@@ -835,6 +835,7 @@ Four kinds of entry go through it so far:
   only needs the GPS).
 - A photo or file attached to a place (`place-file`), from the form of `/lugar` through `bindFiles`'
   `queue` option. The page of a system has no queue.
+- A new place (`place-new`), from "+ Nuevo lugar" on `/lugares` (see "New places").
 
 A new kind of entry needs its `SENDERS` and, if sending twice would show, its `ALREADY_SENT` in
 `outbox.js`.
@@ -879,9 +880,30 @@ have the wanted values, nothing is sent either.
 
 With no connection the dialog works with the catalogues that the phone has (types, subtypes,
 systems, geologies), and the zone stays the one the place has (the search of zones and the proposal
-from the coordinates need the API). Only an edit of an existing place and a new point are kept. A
-new place, changing or removing a point, the link with OpenStreetMap and deleting a place still need
-the connection, and their buttons are not offered.
+from the coordinates need the API). Only an edit of an existing place and a new point are kept.
+Changing or removing a point, the link with OpenStreetMap and deleting a place still need the
+connection, and their buttons are not offered.
+
+#### New places
+
+"+ Nuevo lugar" works with no connection (`openPlaceDialog` with `nearby`, the list of places, and
+`onQueued`). The one thing a new place cannot get off line is its zone: the search of zones and
+`GET /areas/locate` need the API, and the API requires a zone. So:
+
+- The form hides the zone field and says which zone the place will probably get: the one of the
+  nearest place of the list within 5 km (`place-zone-guess.js`, "Zona propuesta: … Se comprobará al
+  enviarlo."), or that it will be looked for when it is sent.
+- The place is kept as `place-new` (`body` without a zone, and `guessAreaId`). A place created on
+  line whose request fails for lack of connection is kept the same way, with the zone the person
+  chose (`areaId`).
+- When it is sent the zone is, in this order: the one the person chose, the one `GET /areas/locate`
+  finds for the coordinates (a failure of the lookup is not an error) and the guess. With none, the
+  entry stays with "Falta la zona: elígela." (`needsArea`) and does not block the others.
+- On `/lugares` the entries wait above the table (`#places-pending`, with the generic list of
+  `pending-list.js`, plus its own button "Elegir zona" for `needsArea`). That button opens
+  `place-choose-area.js`: the zone picker, on line, which sets `areaId` and sends the place.
+- Nothing in the API refuses two places with the same name, so `ALREADY_SENT` looks for one with
+  the same name and coordinates before sending.
 
 #### Pictures and files
 
