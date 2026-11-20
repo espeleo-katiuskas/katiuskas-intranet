@@ -2,6 +2,7 @@ import {
   apiFetch,
   escapeHtml,
   hasAnyRole,
+  isOffline,
   normalizeForSearch,
   showError,
   showFeedback,
@@ -26,6 +27,14 @@ import {
 
 const user = await initPage();
 const isAdmin = hasAnyRole(user, ['admin']);
+
+// With no connection the list of places is for looking and for "+ Nuevo lugar"; the systems, the zones and
+// the catalogues need the API.
+if (isOffline()) {
+  for (const id of ['systems-link', 'manage-areas', 'manage-types']) {
+    document.getElementById(id).hidden = true;
+  }
+}
 
 const tableBody = document.getElementById('places-table-body');
 const searchInput = document.getElementById('places-search');

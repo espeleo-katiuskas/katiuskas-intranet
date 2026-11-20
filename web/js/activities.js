@@ -10,11 +10,20 @@ import {
   activityStateLabels,
   showFeedback,
   showError,
+  isOffline,
 } from './api.js';
 import { initPage } from './layout.js';
 import { initModal, openModal } from './modal.js';
 
 await initPage();
+
+// With no connection the page shows the active activities that are kept on the phone and nothing else:
+// the other views and creating one need the API.
+if (isOffline()) {
+  for (const id of ['toggle-activity-filter', 'toggle-calendar-view', 'toggle-new-activity']) {
+    document.getElementById(id).hidden = true;
+  }
+}
 
 // Loaded once, shared only by the "new activity" participant picker now —
 // per-activity participant management lives on /actividad?id=… instead.

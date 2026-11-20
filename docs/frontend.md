@@ -790,6 +790,9 @@ Signing out, or a session that is refused, deletes the copies of the data and `k
 
 - The menu has only "Inicio", "Actividades" and "Lugares", and the top bar has no "Ver como…"
   (`keepOfflineMenu` in `layout.js`: the other pages and that button need the API).
+- `/actividades` shows only the list of active activities that is kept: "Ver todas", "Ver
+  calendario" and "+ Nueva actividad" are not there. `/lugares` has no "Sistemas", "Zonas" or "Tipos
+  y geologías" (all need the API); "+ Nuevo lugar" stays.
 - The home page shows the data of interest from the copy and "No disponible sin conexión" for the
   Junta and the documents, which are not kept (the link to the history of the Junta is not there
   either).
