@@ -205,7 +205,11 @@ async function initPage({ requireAnyRole } = {}) {
   );
   applyRoleVisibility();
   if (isOffline()) keepOfflineMenu();
-  document.getElementById('logout-button').addEventListener('click', logout);
+  document.getElementById('logout-button').addEventListener('click', () => {
+    // It is easy to press by mistake on a phone, and with no connection there is no way back in.
+    const warning = isOffline() ? ' Sin conexión no podrás volver a entrar hasta que la haya.' : '';
+    if (confirm(`¿Cerrar la sesión?${warning}`)) logout();
+  });
   initRoleOverride();
   initSidebarToggle();
   loadTopbarGreeting();

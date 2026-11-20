@@ -61,7 +61,8 @@ near-identical lines re-typed at the top of every `<page>.js`):
 
 - it validates the session;
 - it applies role-based visibility;
-- it wires the sidebar toggle, topbar greeting, and logout button;
+- it wires the sidebar toggle, topbar greeting, and logout button (which asks "¿Cerrar la sesión?"
+  first, and says that with no connection there is no way back in);
 - it returns the signed-in user same as `currentUser()` would.
 
 Its own `requireAnyRole` option additionally redirects home if the signed-in user holds none of the
