@@ -203,11 +203,13 @@ marked as gone by the next one.
 
 **Decisions that are the club's:**
 
-- **Locations that should be private.** Some cave locations are left out of public maps on
-  purpose, to protect the cave or the visitors. Today everybody who signs in sees everything (it is
-  in `roadmap.md`, as "hide the location of some places"), and anything copied from the club into
-  OSM is public for good. It has to be decided before contributing.
-- **Opening the catalogue to the public** would make the "publicly used" of the ODbL real.
+- **Locations that should be private.** Some cave locations are left out of public maps on purpose,
+  to protect the cave or the visitors. Today everybody who signs in sees everything (the roadmap has
+  the plan to hide some: `roadmap.md`, "The catalogue of places as a service open to the public"),
+  and anything copied from the club into OSM is public for good. It has to be decided before
+  contributing.
+- **Opening the catalogue to the public** would make the "publicly used" of the ODbL real (the
+  same section of `roadmap.md`).
 - **Contributing back to OSM** is optional and the rest does not depend on it. The options are
   nothing, a link to the OSM editor on the page of a place (cheap, and needs no integration), or an
   integration:
