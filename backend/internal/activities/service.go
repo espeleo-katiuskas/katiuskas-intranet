@@ -22,10 +22,11 @@ type Service struct {
 	repo     *Repository
 	licenses *licenses.Service
 	roles    RoleLookup
+	places   PlaceLookup
 }
 
-func NewService(repo *Repository, licensesService *licenses.Service, roles RoleLookup) *Service {
-	return &Service{repo: repo, licenses: licensesService, roles: roles}
+func NewService(repo *Repository, licensesService *licenses.Service, roles RoleLookup, places PlaceLookup) *Service {
+	return &Service{repo: repo, licenses: licensesService, roles: roles, places: places}
 }
 
 // checkMembers verifies that every given user is a member now. Called both when an activity is
@@ -85,7 +86,11 @@ func (s *Service) ListPlaces(ctx context.Context, activityID int64) ([]PlaceRef,
 	if _, err := s.repo.GetByID(ctx, activityID); err != nil {
 		return nil, err
 	}
-	return s.repo.ListPlaces(ctx, activityID)
+	ids, err := s.repo.ListPlaceIDs(ctx, activityID)
+	if err != nil {
+		return nil, err
+	}
+	return s.places.PlaceRefs(ctx, ids)
 }
 
 // SetPlaces makes the places of an activity exactly the given ones (none unlinks them all). It answers
@@ -94,17 +99,27 @@ func (s *Service) SetPlaces(ctx context.Context, activityID int64, placeIDs []in
 	if placeIDs, err = cleanPlaceIDs(placeIDs); err != nil {
 		return nil, nil, err
 	}
-	return s.repo.SetPlaces(ctx, activityID, placeIDs)
+	beforeIDs, afterIDs, err := s.repo.SetPlaces(ctx, activityID, placeIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if before, err = s.places.PlaceRefs(ctx, beforeIDs); err != nil {
+		return nil, nil, err
+	}
+	if after, err = s.places.PlaceRefs(ctx, afterIDs); err != nil {
+		return nil, nil, err
+	}
+	return before, after, nil
 }
 
 // ListByPlace are the activities that went to a place, the latest first; a place that is not there is
 // ErrUnknownPlace.
 func (s *Service) ListByPlace(ctx context.Context, placeID int64) ([]Activity, error) {
-	exists, err := s.repo.PlaceExists(ctx, placeID)
+	found, err := s.places.PlaceRefs(ctx, []int64{placeID})
 	if err != nil {
 		return nil, err
 	}
-	if !exists {
+	if len(found) == 0 {
 		return nil, ErrUnknownPlace
 	}
 	return s.repo.ListByPlace(ctx, placeID)

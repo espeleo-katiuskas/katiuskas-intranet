@@ -508,13 +508,19 @@ An activity goes to places of the catalogue (`activity_places`, migration `00064
   (`Repository.SetPlaces` locks the activity, deletes the links and inserts the new ones, and
   answers with the places before and after, so that Telegram is only told when they differ).
 - Who may is who may edit the activity (`canManage`: the organizer, admin and board).
-- It is a join table of this package, which reads `places` and `place_types` itself rather than
-  importing `places`.
+- It is a join table of this package, which keeps only the ids of the places: it never reads the
+  catalogue's tables nor imports `places`. The names come through `activities.PlaceLookup`
+  (`PlaceRefs`, which `places.Service` satisfies), and what the catalogue asks of the activities
+  (`ActivityCounts`, `HasActivities`, `VisitsOf`: `places.ActivityLookup`) is answered here by
+  `activities.Service`. The types they exchange are in `internal/placelinks`, so neither package
+  imports the other. They are made one with the other in hand: `cmd/api` builds `places` first
+  and then `activities`, and gives `places` its activities with `SetActivities`.
 - `GET /places/{id}/activities` is registered here too, as `/users/{login}/activities` is, and
   lists the activities of a place, the latest first, all of them (every activity is readable by
   anybody who signs in).
 - Deleting an activity deletes its links, and a place with links is not deleted
-  (`places.Repository.DeletePlace`, 409 `place_has_activities`): what was done there stays.
+  (`places.Service.DeletePlace` asks `HasActivities` first, 409 `place_has_activities`; the foreign
+  key is the backstop for one linked meanwhile): what was done there stays.
 - At most `MaxPlaces` (30) per activity, repeated ids counting once.
 - The `type_name` of a place there is its subtype when it has one ("Sima") and its type otherwise.
 
@@ -1678,12 +1684,15 @@ diffs `Where`.
 
 ### Places visited
 
-`GET /users/{login}/places` (`Handler.visitedBy`, `Repository.VisitedBy`, which reuses `listFrom`
-for the text of where it is) gives the places of the activities that a person organized or took part
-in (`activities.leader_id` or `activity_participants`, the same as `GET /users/{login}/activities`)
-that are not cancelled and have started (`start_date` on or before today in the club's time zone,
-`clubtime.Today`). Each comes with how many such activities went there and the latest end date, the
-most recently visited first.
+`GET /users/{login}/places` (`Handler.visitedBy`, `Service.VisitedBy`) gives the places of the
+activities that a person organized or took part in (`activities.leader_id` or
+`activity_participants`, the same as `GET /users/{login}/activities`) that are not cancelled and
+have started (`start_date` on or before today in the club's time zone, `clubtime.Today`). The
+activities answer which places and how often (`ActivityLookup.VisitsOf`); the catalogue gives each
+its name and the text of where it is (`Repository.VisitedPlacesByIDs`, which reuses `listFrom`) and
+sorts them: the most recently visited first, then by name. Each comes with how many such activities
+went there and the latest end date. `activity_count` in the listing of places, in a place and in the
+cavities of a system comes from `ActivityLookup.ActivityCounts` the same way.
 
 The login is resolved with the handler's `UserLookup.UserIDForLogin`. It is open to any baseline
 role, as the history of activities is.

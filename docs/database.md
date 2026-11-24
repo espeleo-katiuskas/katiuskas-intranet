@@ -636,7 +636,9 @@ join table, as an activity may go to several and a place has had many.
 - primary key `(activity_id, place_id)`
 - `activity_id` → `activities(id)` and `place_id` → `places(id)`, both `ON DELETE RESTRICT`: the
   service deletes an activity's links with it, and refuses to delete a place that has any (409
-  `place_has_activities`)
+  `place_has_activities`: `places.Service.DeletePlace` asks the activities first, the key is the
+  backstop). The table belongs to the activities: the catalogue's code never reads it, and the
+  key to `places` is the one that goes when the catalogue is taken out (`roadmap.md`)
 - index `idx_activity_places_place_id` on `(place_id)`
 
 ### `activity_resources`

@@ -18,6 +18,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/places"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
@@ -77,7 +78,7 @@ func newTestServerWithTx(t *testing.T) (*http.ServeMux, testutil.FakeResolver, p
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
-	service := activities.NewService(activities.NewRepository(tx), licensesService, rolesService)
+	service := activities.NewService(activities.NewRepository(tx), licensesService, rolesService, newPlaces(t, tx, usersService))
 	authenticator, resolver := testutil.NewTestAuthenticator()
 
 	mux := http.NewServeMux()
@@ -96,7 +97,7 @@ func newTestServerWithNotifier(t *testing.T) (*http.ServeMux, testutil.FakeResol
 	membershipsService := memberships.NewService(memberships.NewRepository(tx))
 	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
 	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
-	service := activities.NewService(activities.NewRepository(tx), licensesService, rolesService)
+	service := activities.NewService(activities.NewRepository(tx), licensesService, rolesService, newPlaces(t, tx, usersService))
 	authenticator, resolver := testutil.NewTestAuthenticator()
 	notifier := &fakeNotifier{}
 
@@ -1910,4 +1911,14 @@ func TestHandlerTwoActivitiesCannotShareDateAndTitle(t *testing.T) {
 	if rec := doRequest(mux, http.MethodPatch, path, token, map[string]any{"title": "Comida de Navidad"}); rec.Code != http.StatusOK {
 		t.Errorf("renaming to a title free that day: %d: %s", rec.Code, rec.Body.String())
 	}
+}
+
+// newPlaces is the real catalogue of places, which the activities ask to name their places.
+func newPlaces(t *testing.T, tx pgx.Tx, usersService *users.Service) *places.Service {
+	t.Helper()
+	storage, err := places.NewStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return places.NewService(places.NewRepository(tx), storage, usersService)
 }

@@ -181,7 +181,7 @@ type ListItem struct {
 	GeologyID *int64  `json:"geology_id,omitempty"`
 	Geology   *string `json:"geology,omitempty"`
 	// ActivityCount is in how many activities that are not cancelled the place is one of the places they go to
-	// (activity_places).
+	// (the activities say it: ActivityLookup).
 	ActivityCount int `json:"activity_count"`
 	// OsmChanged says that the OpenStreetMap element the place is has changed since it was linked or last
 	// looked at (Place.OsmChanges says what); absent when it has not, or the place is not one.

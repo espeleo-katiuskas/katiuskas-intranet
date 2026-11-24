@@ -330,8 +330,11 @@ Each step can be deployed alone and none makes anything public before the last o
    no longer joins `users` (the repositories give the ids of the authors and the services name
    them through `UserLookup.LoginsForUserIDs`), their columns have no foreign key to `users`
    (migration `00080`) and `users.Service.Delete` asks the catalogue instead (`AuthorGuard`).
-   *Left*: the opaque subject instead of the user id, the `activity_places` cut (`VisitedBy` and
-   other queries of `places` over `activities`) and the schema of its own.
+   The code of `places` no longer reads `activities` nor the other way round: they refer to each
+   other by id through `places.ActivityLookup` and `activities.PlaceLookup`, with the types they
+   exchange in `internal/placelinks`; `activity_places` belongs to the activities, and the foreign
+   key to `places` is kept for now as a backstop. *Left*: the opaque subject instead of the user id
+   and the schema of its own (which is also where the key of `activity_places` goes).
 3. **A viewer and one place for the question.** A `Viewer` as an assertion (issuer, opaque subject,
    groups, expiry), an optional-authentication middleware next to `Protect`, the intranet as the
    first issuer (the assertion is made from the session that exists), and `CanSee(viewer, place,

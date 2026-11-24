@@ -17,6 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
@@ -78,6 +79,8 @@ type env struct {
 	resolver testutil.FakeResolver
 	storage  *places.Storage
 	users    *users.Service
+	// activities is the real activities service, which a catalogue built by hand needs (SetActivities).
+	activities *activities.Service
 	// who: two plain members, board and an admin.
 	member, other, board, admin person
 	// the ids of the seeded types (a via ferrata has a state, a hut has none), of the subtypes cueva and
@@ -101,8 +104,12 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	places.NewHandler(places.NewService(places.NewRepository(tx), storage, usersService), authenticator, usersService, notifier).RegisterRoutes(mux)
-	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage, users: usersService}
+	placesService := places.NewService(places.NewRepository(tx), storage, usersService)
+	// The real activities, which the catalogue asks how many went to each place.
+	activitiesService := activities.NewService(activities.NewRepository(tx), licensesService, rolesService, placesService)
+	placesService.SetActivities(activitiesService)
+	places.NewHandler(placesService, authenticator, usersService, notifier).RegisterRoutes(mux)
+	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage, users: usersService, activities: activitiesService}
 	e.member = e.person("member")
 	e.other = e.person("member")
 	e.board = e.person("board")

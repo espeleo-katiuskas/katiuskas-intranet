@@ -2,7 +2,11 @@
 // and the members taking part in them.
 package activities
 
-import "time"
+import (
+	"time"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/placelinks"
+)
 
 type Type string
 
@@ -67,11 +71,8 @@ type Activity struct {
 }
 
 // PlaceRef is a place an activity goes to, as the activity says it: enough to name it and link to it.
-type PlaceRef struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	TypeName string `json:"type_name"`
-}
+// The activities keep only the ids of the places; the catalogue names them (PlaceLookup).
+type PlaceRef = placelinks.PlaceRef
 
 // MaxPlaces is the most places an activity can be linked to: far more than any outing, only to keep a
 // mistake from linking hundreds.

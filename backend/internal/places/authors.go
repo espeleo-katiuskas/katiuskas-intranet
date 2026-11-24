@@ -46,6 +46,9 @@ func (s *Service) namePlace(ctx context.Context, p Place, err error) (Place, err
 		return Place{}, err
 	}
 	p.CreatedBy, p.UpdatedBy = logins[p.CreatedByID], logins[p.UpdatedByID]
+	if err := s.countActivities(ctx, &p.ListItem); err != nil {
+		return Place{}, err
+	}
 	return p, nil
 }
 
@@ -65,6 +68,13 @@ func (s *Service) nameSystem(ctx context.Context, sys System, err error) (System
 		return System{}, err
 	}
 	sys.CreatedBy, sys.UpdatedBy = logins[sys.CreatedByID], logins[sys.UpdatedByID]
+	cavities := make([]*ListItem, len(sys.Places))
+	for i := range sys.Places {
+		cavities[i] = &sys.Places[i].ListItem
+	}
+	if err := s.countActivities(ctx, cavities...); err != nil {
+		return System{}, err
+	}
 	for i := range sys.Places {
 		for j := range sys.Places[i].Files {
 			f := &sys.Places[i].Files[j]

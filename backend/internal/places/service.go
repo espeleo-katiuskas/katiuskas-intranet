@@ -6,14 +6,13 @@ import (
 	"math"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/clubtime"
 )
 
 type Service struct {
-	repo    *Repository
-	storage *Storage
-	users   UserLookup
+	repo       *Repository
+	storage    *Storage
+	users      UserLookup
+	activities ActivityLookup
 }
 
 func NewService(repo *Repository, storage *Storage, users UserLookup) *Service {
@@ -170,13 +169,19 @@ func (s *Service) typeOf(ctx context.Context, in Input) (Type, Input, error) {
 	return t, in, nil
 }
 
-func (s *Service) ListPlaces(ctx context.Context) ([]ListItem, error) { return s.repo.ListPlaces(ctx) }
-
-// VisitedBy is the places a person has been to, the most recently visited first: those of the activities
-// they organized or took part in that have started (today, in the club's time zone, counts) and were not
-// cancelled, each with how many such activities went there and when the last one ended.
-func (s *Service) VisitedBy(ctx context.Context, userID int64) ([]VisitedPlace, error) {
-	return s.repo.VisitedBy(ctx, userID, clubtime.Today())
+func (s *Service) ListPlaces(ctx context.Context) ([]ListItem, error) {
+	list, err := s.repo.ListPlaces(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]*ListItem, len(list))
+	for i := range list {
+		items[i] = &list[i]
+	}
+	if err := s.countActivities(ctx, items...); err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func (s *Service) GetPlace(ctx context.Context, id int64) (Place, error) {
@@ -282,6 +287,12 @@ func (s *Service) UnlinkOsm(ctx context.Context, id, userID int64) (Place, error
 
 // DeletePlace removes a place with its points and its files.
 func (s *Service) DeletePlace(ctx context.Context, id int64) error {
+	// A place that activities went to is not deleted: their history stays.
+	if has, err := s.activities.HasActivities(ctx, id); err != nil {
+		return err
+	} else if has {
+		return ErrHasActivities
+	}
 	files, err := s.repo.DeletePlace(ctx, id)
 	if err != nil {
 		return err

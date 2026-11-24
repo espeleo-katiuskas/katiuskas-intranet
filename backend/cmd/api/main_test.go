@@ -142,6 +142,17 @@ func TestCatalogueIsWiredToTheUsers(t *testing.T) {
 	if rec := call(http.MethodGet, fmt.Sprintf("/api/v1/places/%d", place.ID), ""); rec.Code != http.StatusOK {
 		t.Errorf("GET the place: expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
+	// The catalogue and the activities are made one with the other in hand: a listing, which asks the
+	// activities how many went to each place, and the page of a user's places, which asks which.
+	if rec := call(http.MethodGet, "/api/v1/places", ""); rec.Code != http.StatusOK {
+		t.Errorf("GET /places: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(http.MethodGet, "/api/v1/users/"+member.Login+"/places", ""); rec.Code != http.StatusOK {
+		t.Errorf("GET the places a person visited: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(http.MethodGet, fmt.Sprintf("/api/v1/places/%d/activities", place.ID), ""); rec.Code != http.StatusOK {
+		t.Errorf("GET the activities of a place: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
 	if err := usersService.Delete(ctx, member.ID); !errors.Is(err, users.ErrHasReferences) {
 		t.Errorf("deleting the author of a place: expected ErrHasReferences, got %v", err)
 	}

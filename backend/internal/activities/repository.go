@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/placelinks"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 )
 
@@ -572,36 +573,29 @@ func linkPlaces(ctx context.Context, tx pgx.Tx, activityID int64, placeIDs []int
 	return nil
 }
 
-// ListPlaces are the places an activity goes to, by name.
-func (r *Repository) ListPlaces(ctx context.Context, activityID int64) ([]PlaceRef, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.name, COALESCE(s.name, t.name)
-		FROM activity_places ap
-		JOIN places p ON p.id = ap.place_id
-		JOIN place_types t ON t.id = p.type_id
-		LEFT JOIN place_subtypes s ON s.id = p.subtype_id
-		WHERE ap.activity_id = $1
-		ORDER BY p.name, p.id
-	`, activityID)
+// ListPlaceIDs are the ids of the places an activity goes to. The activities do not read the places
+// themselves: the Service names them through the catalogue (PlaceLookup).
+func (r *Repository) ListPlaceIDs(ctx context.Context, activityID int64) ([]int64, error) {
+	rows, err := r.pool.Query(ctx, `SELECT place_id FROM activity_places WHERE activity_id = $1 ORDER BY place_id`, activityID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	list := []PlaceRef{}
+	ids := []int64{}
 	for rows.Next() {
-		var p PlaceRef
-		if err := rows.Scan(&p.ID, &p.Name, &p.TypeName); err != nil {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		list = append(list, p)
+		ids = append(ids, id)
 	}
-	return list, rows.Err()
+	return ids, rows.Err()
 }
 
 // SetPlaces makes the places of an activity exactly the given ones, in one transaction: those that are
-// no longer there are unlinked and the new ones linked. It answers with the places as they were before
-// and as they are now, to tell what changed.
-func (r *Repository) SetPlaces(ctx context.Context, activityID int64, placeIDs []int64) (before, after []PlaceRef, err error) {
+// no longer there are unlinked and the new ones linked. It answers with the ids of the places as they
+// were before and as they are now, to tell what changed.
+func (r *Repository) SetPlaces(ctx context.Context, activityID int64, placeIDs []int64) (before, after []int64, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -611,7 +605,7 @@ func (r *Repository) SetPlaces(ctx context.Context, activityID int64, placeIDs [
 		return nil, nil, err
 	}
 	txRepo := &Repository{pool: tx}
-	if before, err = txRepo.ListPlaces(ctx, activityID); err != nil {
+	if before, err = txRepo.ListPlaceIDs(ctx, activityID); err != nil {
 		return nil, nil, err
 	}
 	// Only what is no longer wanted is unlinked: a place that stays is never touched, and one that an
@@ -627,7 +621,7 @@ func (r *Repository) SetPlaces(ctx context.Context, activityID int64, placeIDs [
 	if err := linkPlaces(ctx, tx, activityID, placeIDs); err != nil {
 		return nil, nil, err
 	}
-	if after, err = txRepo.ListPlaces(ctx, activityID); err != nil {
+	if after, err = txRepo.ListPlaceIDs(ctx, activityID); err != nil {
 		return nil, nil, err
 	}
 	return before, after, tx.Commit(ctx)
@@ -654,9 +648,58 @@ func (r *Repository) ListByPlace(ctx context.Context, placeID int64) ([]Activity
 	return list, rows.Err()
 }
 
-// PlaceExists says whether a place of the catalogue has that id.
-func (r *Repository) PlaceExists(ctx context.Context, placeID int64) (bool, error) {
-	var exists bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM places WHERE id = $1)`, placeID).Scan(&exists)
-	return exists, err
+// PlaceActivityCounts is, for each of the places, in how many activities that are not cancelled it is
+// one of the places they go to; a place with none is left out.
+func (r *Repository) PlaceActivityCounts(ctx context.Context, placeIDs []int64) (map[int64]int, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT ap.place_id, count(*)
+		FROM activity_places ap JOIN activities a ON a.id = ap.activity_id
+		WHERE ap.place_id = ANY($1) AND NOT a.cancelled
+		GROUP BY ap.place_id`, placeIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		counts[id] = n
+	}
+	return counts, rows.Err()
+}
+
+// PlaceHasActivities says whether any activity, cancelled or not, goes or went to the place.
+func (r *Repository) PlaceHasActivities(ctx context.Context, placeID int64) (bool, error) {
+	var has bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM activity_places WHERE place_id = $1)`, placeID).Scan(&has)
+	return has, err
+}
+
+// PlaceVisitsOf is the places that the activities a person organized or took part in went to, among
+// those that started on or before `today` ("2026-11-18") and were not cancelled, with how often.
+func (r *Repository) PlaceVisitsOf(ctx context.Context, userID int64, today string) ([]placelinks.PlaceVisit, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT ap.place_id, count(DISTINCT a.id), max(a.end_date)
+		FROM activities a
+		JOIN activity_places ap ON ap.activity_id = a.id
+		LEFT JOIN activity_participants pa ON pa.activity_id = a.id
+		WHERE (a.leader_id = $1 OR pa.user_id = $1) AND NOT a.cancelled AND a.start_date <= $2::date
+		GROUP BY ap.place_id`, userID, today)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []placelinks.PlaceVisit{}
+	for rows.Next() {
+		var v placelinks.PlaceVisit
+		if err := rows.Scan(&v.PlaceID, &v.Visits, &v.LastVisit); err != nil {
+			return nil, err
+		}
+		list = append(list, v)
+	}
+	return list, rows.Err()
 }

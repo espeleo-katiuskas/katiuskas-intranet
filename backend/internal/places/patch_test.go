@@ -84,6 +84,7 @@ func TestPatchDoesNotOverwriteAConcurrentEdit(t *testing.T) {
 	p := e.newPlace(e.cavidad, "Cueva del Agua", nil)
 	e.notifier.wait(t)
 	service := places.NewService(places.NewRepository(e.tx), e.storage, e.users)
+	service.SetActivities(e.activities)
 	calls := 0
 	got, err := service.PatchPlace(context.Background(), p.ID, e.member.user.ID, func(in places.Input) (places.Input, error) {
 		calls++

@@ -285,7 +285,8 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	authenticator := auth.NewAuthenticator(tokensService)
 
 	activitiesRepo := activities.NewRepository(repoPool)
-	activitiesService := activities.NewService(activitiesRepo, licensesService, rolesService)
+	activitiesService := activities.NewService(activitiesRepo, licensesService, rolesService, placesService)
+	placesService.SetActivities(activitiesService)
 
 	distributionsService := distributions.NewService(distributions.NewRepository(repoPool))
 

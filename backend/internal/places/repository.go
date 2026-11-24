@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/placelinks"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 )
 
@@ -46,9 +47,7 @@ func violates(err error, constraint string) bool {
 const listColumns = `
 	p.id, p.type_id, t.name, p.kind, p.name, p.alt_names, COALESCE(p.state, ''), p.subtype_id, st.name, p.system_id, sy.name,
 	p.area_id, w.ids, w.where_text, w.names_text,
-	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name,
-	(SELECT count(*) FROM activity_places ap JOIN activities ac ON ac.id = ap.activity_id
-		WHERE ap.place_id = p.id AND NOT ac.cancelled)`
+	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name`
 
 // listFrom is a place with its type and, through the tree of zones, the ids and the names of the zone it
 // is in and of the ones it is in, from the most specific to the country (depth 0 is the zone itself). The
@@ -78,25 +77,16 @@ func (it *ListItem) scanTargets() []any {
 	return []any{
 		&it.ID, &it.TypeID, &it.TypeName, &it.Kind, &it.Name, &it.AltNames, &it.State, &it.SubtypeID,
 		&it.Subtype, &it.SystemID, &it.System, &it.AreaID, &it.AreaIDs, &it.Where, &it.AreaNames, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
-		&it.Geology, &it.ActivityCount,
+		&it.Geology,
 	}
 }
 
-// VisitedBy is the places that the activities a person organized or took part in went to, among those that
-// started on or before `today` ("2026-11-18") and were not cancelled, the most recently visited first.
-func (r *Repository) VisitedBy(ctx context.Context, userID int64, today string) ([]VisitedPlace, error) {
+// VisitedPlacesByIDs is the places with those ids as the page of the places visited shows them, in no
+// order (the Service orders them by the visits).
+func (r *Repository) VisitedPlacesByIDs(ctx context.Context, ids []int64) ([]VisitedPlace, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, COALESCE(st.name, t.name), p.name, COALESCE(w.where_text, ''), v.visits, v.last_visit`+listFrom+`
-		JOIN (
-			SELECT ap.place_id, count(DISTINCT a.id) AS visits, max(a.end_date) AS last_visit
-			FROM activities a
-			JOIN activity_places ap ON ap.activity_id = a.id
-			LEFT JOIN activity_participants pa ON pa.activity_id = a.id
-			WHERE (a.leader_id = $1 OR pa.user_id = $1) AND NOT a.cancelled AND a.start_date <= $2::date
-			GROUP BY ap.place_id
-		) v ON v.place_id = p.id
-		ORDER BY v.last_visit DESC, lower(p.name), p.id
-	`, userID, today)
+		SELECT p.id, COALESCE(st.name, t.name), p.name, COALESCE(w.where_text, '')`+listFrom+`
+		WHERE p.id = ANY($1)`, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -104,10 +94,35 @@ func (r *Repository) VisitedBy(ctx context.Context, userID int64, today string) 
 	list := []VisitedPlace{}
 	for rows.Next() {
 		var v VisitedPlace
-		if err := rows.Scan(&v.ID, &v.TypeName, &v.Name, &v.Where, &v.Visits, &v.LastVisit); err != nil {
+		if err := rows.Scan(&v.ID, &v.TypeName, &v.Name, &v.Where); err != nil {
 			return nil, err
 		}
 		list = append(list, v)
+	}
+	return list, rows.Err()
+}
+
+// PlaceRefs is the places with those ids, by name, each with what it is (the subtype of a cavity,
+// else its type); an id that is no place is left out.
+func (r *Repository) PlaceRefs(ctx context.Context, ids []int64) ([]placelinks.PlaceRef, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT p.id, p.name, COALESCE(s.name, t.name)
+		FROM places p
+		JOIN place_types t ON t.id = p.type_id
+		LEFT JOIN place_subtypes s ON s.id = p.subtype_id
+		WHERE p.id = ANY($1)
+		ORDER BY p.name, p.id`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := []placelinks.PlaceRef{}
+	for rows.Next() {
+		var p placelinks.PlaceRef
+		if err := rows.Scan(&p.ID, &p.Name, &p.TypeName); err != nil {
+			return nil, err
+		}
+		list = append(list, p)
 	}
 	return list, rows.Err()
 }
@@ -296,13 +311,6 @@ func (r *Repository) DeletePlace(ctx context.Context, id int64) ([]int64, error)
 	if err := lockPlace(ctx, tx, id); err != nil {
 		return nil, err
 	}
-	var activities int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM activity_places WHERE place_id = $1`, id).Scan(&activities); err != nil {
-		return nil, err
-	}
-	if activities > 0 {
-		return nil, ErrHasActivities
-	}
 	if _, err := tx.Exec(ctx, `DELETE FROM place_points WHERE place_id = $1`, id); err != nil {
 		return nil, err
 	}
@@ -324,6 +332,12 @@ func (r *Repository) DeletePlace(ctx context.Context, id int64) ([]int64, error)
 		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM places WHERE id = $1`, id); err != nil {
+		// The Service has asked the activities first; this is for one that was linked in the meantime:
+		// the only thing outside the catalogue that points at a place is the club's links to it.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
+			return nil, ErrHasActivities
+		}
 		return nil, err
 	}
 	return files, tx.Commit(ctx)
