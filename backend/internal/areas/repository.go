@@ -35,16 +35,16 @@ func pgCode(err error) string {
 // to the users, so this is what keeps them from being deleted (users.AuthorGuard).
 func (r *Repository) HasAuthored(ctx context.Context, userID int64) (bool, error) {
 	var has bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM areas WHERE created_by = $1)`, userID).Scan(&has)
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM catalogue.areas WHERE created_by = $1)`, userID).Scan(&has)
 	return has, err
 }
 
 // areaSelect is a zone with how many zones are below it and how many places are in it.
 const areaSelect = `
 	SELECT a.id, a.parent_id, a.kind, a.name, a.code, a.created_by,
-		(SELECT count(*) FROM areas c WHERE c.parent_id = a.id),
-		(SELECT count(*) FROM places p WHERE p.area_id = a.id)
-	FROM areas a`
+		(SELECT count(*) FROM catalogue.areas c WHERE c.parent_id = a.id),
+		(SELECT count(*) FROM catalogue.places p WHERE p.area_id = a.id)
+	FROM catalogue.areas a`
 
 func scanArea(row pgx.Row, a *Area) error {
 	return row.Scan(&a.ID, &a.ParentID, &a.Kind, &a.Name, &a.Code, &a.CreatedByID, &a.ChildCount, &a.PlaceCount)
@@ -100,12 +100,12 @@ func (r *Repository) addAncestors(ctx context.Context, list []Area) error {
 	}
 	rows, err := r.pool.Query(ctx, `
 		WITH RECURSIVE up AS (
-			SELECT a.id AS leaf, a.parent_id AS id, 1 AS depth FROM areas a WHERE a.id = ANY($1)
+			SELECT a.id AS leaf, a.parent_id AS id, 1 AS depth FROM catalogue.areas a WHERE a.id = ANY($1)
 			UNION ALL
-			SELECT up.leaf, a.parent_id, up.depth + 1 FROM up JOIN areas a ON a.id = up.id WHERE a.parent_id IS NOT NULL
+			SELECT up.leaf, a.parent_id, up.depth + 1 FROM up JOIN catalogue.areas a ON a.id = up.id WHERE a.parent_id IS NOT NULL
 		)
 		SELECT up.leaf, z.id, z.kind, z.name
-		FROM up JOIN areas z ON z.id = up.id
+		FROM up JOIN catalogue.areas z ON z.id = up.id
 		ORDER BY up.leaf, up.depth DESC`, ids)
 	if err != nil {
 		return err
@@ -152,9 +152,9 @@ func (r *Repository) IDByCode(ctx context.Context, kind, code string) (int64, er
 	var id int64
 	var err error
 	if kind == "" {
-		err = r.pool.QueryRow(ctx, `SELECT id FROM areas WHERE parent_id IS NULL AND code = $1 LIMIT 1`, code).Scan(&id)
+		err = r.pool.QueryRow(ctx, `SELECT id FROM catalogue.areas WHERE parent_id IS NULL AND code = $1 LIMIT 1`, code).Scan(&id)
 	} else {
-		err = r.pool.QueryRow(ctx, `SELECT id FROM areas WHERE kind = $1 AND code = $2 LIMIT 1`, kind, code).Scan(&id)
+		err = r.pool.QueryRow(ctx, `SELECT id FROM catalogue.areas WHERE kind = $1 AND code = $2 LIMIT 1`, kind, code).Scan(&id)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, ErrNotFound
@@ -166,7 +166,7 @@ func (r *Repository) IDByCode(ctx context.Context, kind, code string) (int64, er
 func (r *Repository) KindBelow(ctx context.Context, parentID int64) (string, error) {
 	var kind string
 	err := r.pool.QueryRow(ctx, `
-		SELECT kind FROM areas WHERE parent_id = $1 GROUP BY kind ORDER BY count(*) DESC, kind LIMIT 1
+		SELECT kind FROM catalogue.areas WHERE parent_id = $1 GROUP BY kind ORDER BY count(*) DESC, kind LIMIT 1
 	`, parentID).Scan(&kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
@@ -179,7 +179,7 @@ func (r *Repository) KindBelow(ctx context.Context, parentID int64) (string, err
 func (r *Repository) NameTaken(ctx context.Context, parentID *int64, normalized string, except int64) (bool, error) {
 	var taken bool
 	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM areas WHERE parent_id IS NOT DISTINCT FROM $1 AND norm_name = $2 AND id <> $3)
+		SELECT EXISTS (SELECT 1 FROM catalogue.areas WHERE parent_id IS NOT DISTINCT FROM $1 AND norm_name = $2 AND id <> $3)
 	`, parentID, normalized, except).Scan(&taken)
 	return taken, err
 }
@@ -188,7 +188,7 @@ func (r *Repository) NameTaken(ctx context.Context, parentID *int64, normalized 
 func (r *Repository) Create(ctx context.Context, parentID *int64, kind, name, normalized string, createdBy int64) (Area, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO areas (parent_id, kind, name, norm_name, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id
+		INSERT INTO catalogue.areas (parent_id, kind, name, norm_name, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id
 	`, parentID, kind, name, normalized, createdBy).Scan(&id)
 	switch pgCode(err) {
 	case uniqueViolationCode:
@@ -212,7 +212,7 @@ func (r *Repository) Update(ctx context.Context, id int64, kind, name, normalize
 	}
 	defer tx.Rollback(ctx)
 	var parent *int64
-	err = tx.QueryRow(ctx, `SELECT parent_id FROM areas WHERE id = $1 FOR UPDATE`, id).Scan(&parent)
+	err = tx.QueryRow(ctx, `SELECT parent_id FROM catalogue.areas WHERE id = $1 FOR UPDATE`, id).Scan(&parent)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Area{}, ErrNotFound
 	}
@@ -225,9 +225,9 @@ func (r *Repository) Update(ctx context.Context, id int64, kind, name, normalize
 			var below bool
 			if err := tx.QueryRow(ctx, `
 				WITH RECURSIVE up AS (
-					SELECT id, parent_id FROM areas WHERE id = $1
+					SELECT id, parent_id FROM catalogue.areas WHERE id = $1
 					UNION ALL
-					SELECT a.id, a.parent_id FROM areas a JOIN up ON a.id = up.parent_id
+					SELECT a.id, a.parent_id FROM catalogue.areas a JOIN up ON a.id = up.parent_id
 				)
 				SELECT EXISTS (SELECT 1 FROM up WHERE id = $2)
 			`, *parent, id).Scan(&below); err != nil {
@@ -238,7 +238,7 @@ func (r *Repository) Update(ctx context.Context, id int64, kind, name, normalize
 			}
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE areas SET parent_id = $2, kind = $3, name = $4, norm_name = $5 WHERE id = $1`,
+	_, err = tx.Exec(ctx, `UPDATE catalogue.areas SET parent_id = $2, kind = $3, name = $4, norm_name = $5 WHERE id = $1`,
 		id, parent, kind, name, normalized)
 	switch pgCode(err) {
 	case uniqueViolationCode:
@@ -258,7 +258,7 @@ func (r *Repository) Update(ctx context.Context, id int64, kind, name, normalize
 // Delete removes a zone that has no zones below it and no places: the foreign keys refuse otherwise, and
 // the checks before them say which of the two it is.
 func (r *Repository) Delete(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM areas WHERE id = $1`, id)
+	tag, err := r.pool.Exec(ctx, `DELETE FROM catalogue.areas WHERE id = $1`, id)
 	if pgCode(err) == foreignKeyViolationCode {
 		return ErrInUse
 	}
@@ -289,7 +289,7 @@ func (r *Repository) Merge(ctx context.Context, from, into int64) error {
 	parents := map[int64]*int64{}
 	for _, id := range []int64{first, second} {
 		var parent *int64
-		err := tx.QueryRow(ctx, `SELECT parent_id FROM areas WHERE id = $1 FOR UPDATE`, id).Scan(&parent)
+		err := tx.QueryRow(ctx, `SELECT parent_id FROM catalogue.areas WHERE id = $1 FOR UPDATE`, id).Scan(&parent)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -305,7 +305,7 @@ func (r *Repository) Merge(ctx context.Context, from, into int64) error {
 	}
 	var clash bool
 	if err := tx.QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM areas c JOIN areas t ON t.parent_id = $2 AND t.norm_name = c.norm_name WHERE c.parent_id = $1)
+		SELECT EXISTS (SELECT 1 FROM catalogue.areas c JOIN catalogue.areas t ON t.parent_id = $2 AND t.norm_name = c.norm_name WHERE c.parent_id = $1)
 	`, from, into).Scan(&clash); err != nil {
 		return err
 	}
@@ -313,11 +313,11 @@ func (r *Repository) Merge(ctx context.Context, from, into int64) error {
 		return ErrDuplicate
 	}
 	for _, statement := range []string{
-		`UPDATE areas SET parent_id = $2 WHERE parent_id = $1`,
-		`UPDATE places SET area_id = $2 WHERE area_id = $1`,
-		`UPDATE osm_elements SET area_id = $2 WHERE area_id = $1`,
-		`UPDATE areas SET code = (SELECT code FROM areas WHERE id = $1) WHERE id = $2 AND code IS NULL`,
-		`DELETE FROM areas WHERE id = $1`,
+		`UPDATE catalogue.areas SET parent_id = $2 WHERE parent_id = $1`,
+		`UPDATE catalogue.places SET area_id = $2 WHERE area_id = $1`,
+		`UPDATE catalogue.osm_elements SET area_id = $2 WHERE area_id = $1`,
+		`UPDATE catalogue.areas SET code = (SELECT code FROM catalogue.areas WHERE id = $1) WHERE id = $2 AND code IS NULL`,
+		`DELETE FROM catalogue.areas WHERE id = $1`,
 	} {
 		args := []any{from}
 		if statement[:6] != "DELETE" {

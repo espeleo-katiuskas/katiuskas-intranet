@@ -41,7 +41,7 @@ const resourceSelect = `
 	ar.file_name, ar.file_size, ar.content_type, ar.place_id, pl.name, ar.position, ar.created_at
 	FROM activity_resources ar
 	JOIN users au ON au.id = ar.author_id
-	LEFT JOIN places pl ON pl.id = ar.place_id`
+	LEFT JOIN catalogue.places pl ON pl.id = ar.place_id`
 
 func scanResource(row interface{ Scan(dest ...any) error }, res *Resource) error {
 	return row.Scan(&res.ID, &res.ActivityID, &res.Type, &res.AuthorID, &res.AuthorLogin, &res.Title,
@@ -89,7 +89,7 @@ func (r *Repository) Create(ctx context.Context, in CreateInput) (Resource, erro
 	}
 	// The name of the place is not in what the insert gives back.
 	if res.PlaceID != nil {
-		if err := tx.QueryRow(ctx, `SELECT name FROM places WHERE id = $1`, *res.PlaceID).Scan(&res.PlaceName); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT name FROM catalogue.places WHERE id = $1`, *res.PlaceID).Scan(&res.PlaceName); err != nil {
 			return Resource{}, err
 		}
 	}

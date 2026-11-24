@@ -19,10 +19,10 @@ func insertPlace(t *testing.T, tx pgx.Tx, createdBy int64, name string) int64 {
 	t.Helper()
 	var id int64
 	err := tx.QueryRow(context.Background(), `
-		INSERT INTO places (type_id, kind, has_state, state, subtype_id, name, area_id, lat, lon, created_by, updated_by)
-		SELECT t.id, t.kind, t.has_state, 'open', (SELECT id FROM place_subtypes WHERE name = 'Cueva'), $2,
-			(SELECT id FROM areas WHERE parent_id IS NULL AND code = 'ES'), 40.8, -3.6, $1, $1
-		FROM place_types t WHERE t.name = 'Cavidad'
+		INSERT INTO catalogue.places (type_id, kind, has_state, state, subtype_id, name, area_id, lat, lon, created_by, updated_by)
+		SELECT t.id, t.kind, t.has_state, 'open', (SELECT id FROM catalogue.place_subtypes WHERE name = 'Cueva'), $2,
+			(SELECT id FROM catalogue.areas WHERE parent_id IS NULL AND code = 'ES'), 40.8, -3.6, $1, $1
+		FROM catalogue.place_types t WHERE t.name = 'Cavidad'
 		RETURNING id
 	`, createdBy, name).Scan(&id)
 	if err != nil {

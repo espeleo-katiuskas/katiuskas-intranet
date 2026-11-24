@@ -47,7 +47,7 @@ func (o fileOwner) touch(ctx context.Context, tx pgx.Tx, userID int64) error {
 
 const fileSelect = `
 	SELECT f.id, f.place_id, f.system_id, f.title, f.file_name, f.content_type, f.file_size, f.uploaded_by, f.created_at
-	FROM place_files f`
+	FROM catalogue.place_files f`
 
 func scanFile(row pgx.Row, f *File) error {
 	return row.Scan(&f.ID, &f.PlaceID, &f.SystemID, &f.Title, &f.FileName, &f.ContentType, &f.FileSize,
@@ -95,7 +95,7 @@ func (r *Repository) CreateFile(ctx context.Context, o fileOwner, uploadedBy int
 	}
 	var id int64
 	err = tx.QueryRow(ctx, `
-		INSERT INTO place_files (`+o.column+`, title, file_name, content_type, file_size, uploaded_by)
+		INSERT INTO catalogue.place_files (`+o.column+`, title, file_name, content_type, file_size, uploaded_by)
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
 	`, o.id, title, name, contentType, size, uploadedBy).Scan(&id)
 	if err != nil {
@@ -122,7 +122,7 @@ func (r *Repository) DeleteFile(ctx context.Context, o fileOwner, id, userID int
 	if err := o.lock(ctx, tx); err != nil {
 		return err
 	}
-	tag, err := tx.Exec(ctx, `DELETE FROM place_files WHERE `+o.column+` = $1 AND id = $2`, o.id, id)
+	tag, err := tx.Exec(ctx, `DELETE FROM catalogue.place_files WHERE `+o.column+` = $1 AND id = $2`, o.id, id)
 	if err != nil {
 		return err
 	}

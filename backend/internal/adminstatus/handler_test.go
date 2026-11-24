@@ -445,7 +445,7 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 	got = read(t, info, func(tx pgx.Tx) {
 		element := func(id int64, source string, gone bool) {
 			exec(t, tx, `
-				INSERT INTO osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, deleted_at)
+				INSERT INTO catalogue.osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, deleted_at)
 				VALUES ('node', $1, 1, now(), 'cave', 40, -3, '{}', 'h', $2, CASE WHEN $3 THEN now() END)
 			`, id, source, gone)
 		}
@@ -455,13 +455,13 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 		element(4, "canary-islands", false)
 		run := func(source, status string, dataAgo, startedAgo time.Duration, added, changed int, failure string) {
 			exec(t, tx, `
-				INSERT INTO osm_sync_runs (source, source_timestamp, started_at, finished_at, status, added, changed, error)
+				INSERT INTO catalogue.osm_sync_runs (source, source_timestamp, started_at, finished_at, status, added, changed, error)
 				VALUES ($1, now() - $2::interval, now() - $3::interval, now() - $3::interval, $4, $5, $6, NULLIF($7, ''))
 			`, source, dataAgo.String(), startedAgo.String(), status, added, changed, failure)
 		}
 		day := 24 * time.Hour
 		run("spain", "ok", 3*day, 3*day, 2, 1, "")
-		exec(t, tx, `UPDATE osm_sync_runs SET unknown_zones = 2, unknown_zone_codes = '28999,41999'
+		exec(t, tx, `UPDATE catalogue.osm_sync_runs SET unknown_zones = 2, unknown_zone_codes = '28999,41999'
 			WHERE source = 'spain'`)
 		run("canary-islands", "ok", 20*day, 20*day, 4, 0, "")
 		run("canary-islands", "failed", 1*day, 1*day, 0, 0, "download: status 503")
@@ -492,7 +492,7 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 	// With the check off, old data is no problem (a failed load still is).
 	info.OSMMaxAge = 0
 	got = read(t, info, func(tx pgx.Tx) {
-		exec(t, tx, `INSERT INTO osm_sync_runs (source, source_timestamp, started_at, finished_at, status)
+		exec(t, tx, `INSERT INTO catalogue.osm_sync_runs (source, source_timestamp, started_at, finished_at, status)
 			VALUES ('spain', now() - interval '90 days', now() - interval '90 days', now() - interval '90 days', 'ok')`)
 	})
 	if len(got.Problems) != 0 || got.OSM.Sources[0].Stale {
@@ -502,7 +502,7 @@ func TestStatusReportsTheOSMMirror(t *testing.T) {
 	// Data of a few hours ago is 0 days old, and the age is still there (a page that took its absence for a
 	// number said "hace undefined días").
 	got = read(t, info, func(tx pgx.Tx) {
-		exec(t, tx, `INSERT INTO osm_sync_runs (source, source_timestamp, started_at, finished_at, status)
+		exec(t, tx, `INSERT INTO catalogue.osm_sync_runs (source, source_timestamp, started_at, finished_at, status)
 			VALUES ('spain', now() - interval '2 hours', now(), now(), 'ok')`)
 	})
 	if len(got.OSM.Sources) != 1 || got.OSM.Sources[0].DataAgeDays == nil || *got.OSM.Sources[0].DataAgeDays != 0 {

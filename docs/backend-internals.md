@@ -1439,7 +1439,8 @@ lent, returned, commented, or that a file or a cover was added or removed.
 ## Places
 
 `internal/places`: the catalogue of places (`place_types`, `places`, `place_points`, and the zone
-each one is in; migration `00061_places.sql`), with the usual `model.go`, `repository.go`,
+each one is in; migration `00061_places.sql`; all of it in the schema `catalogue`, migration
+`00081`, so its SQL says `catalogue.places` and so on), with the usual `model.go`, `repository.go`,
 `service.go` and `handler.go`, plus `files.go`, `handler_files.go`, `storage.go` and `filetype.go`
 for the files (migration `00063_place_files.sql`).
 

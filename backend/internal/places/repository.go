@@ -54,16 +54,16 @@ const listColumns = `
 // text of where it is leaves out the autonomous community when there is a province (in Spain the province
 // says it already): "Valdemanco, Madrid, España", while the ids and the names for the search keep every zone.
 const listFrom = `
-	FROM places p
-	JOIN place_types t ON t.id = p.type_id
-	LEFT JOIN place_geologies g ON g.id = p.geology_id
-	LEFT JOIN place_subtypes st ON st.id = p.subtype_id
-	LEFT JOIN place_systems sy ON sy.id = p.system_id
+	FROM catalogue.places p
+	JOIN catalogue.place_types t ON t.id = p.type_id
+	LEFT JOIN catalogue.place_geologies g ON g.id = p.geology_id
+	LEFT JOIN catalogue.place_subtypes st ON st.id = p.subtype_id
+	LEFT JOIN catalogue.place_systems sy ON sy.id = p.system_id
 	JOIN LATERAL (
 		WITH RECURSIVE up AS (
-			SELECT a.id, a.parent_id, a.kind, a.name, 0 AS depth FROM areas a WHERE a.id = p.area_id
+			SELECT a.id, a.parent_id, a.kind, a.name, 0 AS depth FROM catalogue.areas a WHERE a.id = p.area_id
 			UNION ALL
-			SELECT a.id, a.parent_id, a.kind, a.name, up.depth + 1 FROM areas a JOIN up ON a.id = up.parent_id
+			SELECT a.id, a.parent_id, a.kind, a.name, up.depth + 1 FROM catalogue.areas a JOIN up ON a.id = up.parent_id
 		)
 		SELECT array_agg(id ORDER BY depth DESC) AS ids,
 			string_agg(name, ', ' ORDER BY depth) FILTER (
@@ -107,9 +107,9 @@ func (r *Repository) VisitedPlacesByIDs(ctx context.Context, ids []int64) ([]Vis
 func (r *Repository) PlaceRefs(ctx context.Context, ids []int64) ([]placelinks.PlaceRef, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT p.id, p.name, COALESCE(s.name, t.name)
-		FROM places p
-		JOIN place_types t ON t.id = p.type_id
-		LEFT JOIN place_subtypes s ON s.id = p.subtype_id
+		FROM catalogue.places p
+		JOIN catalogue.place_types t ON t.id = p.type_id
+		LEFT JOIN catalogue.place_subtypes s ON s.id = p.subtype_id
 		WHERE p.id = ANY($1)
 		ORDER BY p.name, p.id`, ids)
 	if err != nil {
@@ -189,7 +189,7 @@ func (r *Repository) GetPlace(ctx context.Context, id int64) (Place, error) {
 		return Place{}, err
 	}
 	p.OsmChanged = len(p.OsmChanges) > 0
-	err = r.pool.QueryRow(ctx, `SELECT count(*) FROM place_files WHERE place_id = $1`, id).Scan(&p.FileCount)
+	err = r.pool.QueryRow(ctx, `SELECT count(*) FROM catalogue.place_files WHERE place_id = $1`, id).Scan(&p.FileCount)
 	return p, err
 }
 
@@ -197,9 +197,9 @@ func (r *Repository) GetPlace(ctx context.Context, id int64) (Place, error) {
 func (r *Repository) areaPath(ctx context.Context, areaID int64) ([]AreaRef, error) {
 	rows, err := r.pool.Query(ctx, `
 		WITH RECURSIVE up AS (
-			SELECT a.id, a.parent_id, a.kind, a.name, 0 AS depth FROM areas a WHERE a.id = $1
+			SELECT a.id, a.parent_id, a.kind, a.name, 0 AS depth FROM catalogue.areas a WHERE a.id = $1
 			UNION ALL
-			SELECT a.id, a.parent_id, a.kind, a.name, up.depth + 1 FROM areas a JOIN up ON a.id = up.parent_id
+			SELECT a.id, a.parent_id, a.kind, a.name, up.depth + 1 FROM catalogue.areas a JOIN up ON a.id = up.parent_id
 		)
 		SELECT id, kind, name FROM up ORDER BY depth DESC`, areaID)
 	if err != nil {
@@ -220,21 +220,21 @@ func (r *Repository) areaPath(ctx context.Context, areaID int64) ([]AreaRef, err
 // AreaExists says whether a zone exists.
 func (r *Repository) AreaExists(ctx context.Context, id int64) (bool, error) {
 	var exists bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM areas WHERE id = $1)`, id).Scan(&exists)
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM catalogue.areas WHERE id = $1)`, id).Scan(&exists)
 	return exists, err
 }
 
 // seenOf is the SQL that takes what an OpenStreetMap element is now, to keep as what the place has seen of it:
 // its tags and its point, or nothing if the element is not named or not there.
 func seenOf(osmType, osmID string) string {
-	return `(SELECT jsonb_build_object('tags', e.tags, 'lat', e.lat, 'lon', e.lon) FROM osm_elements e
+	return `(SELECT jsonb_build_object('tags', e.tags, 'lat', e.lat, 'lon', e.lon) FROM catalogue.osm_elements e
 		WHERE e.osm_type = ` + osmType + ` AND e.osm_id = ` + osmID + `)`
 }
 
 func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in Input) (Place, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO places (type_id, kind, has_state, name, alt_names, state, subtype_id, system_id, area_id,
+		INSERT INTO catalogue.places (type_id, kind, has_state, name, alt_names, state, subtype_id, system_id, area_id,
 			lat, lon, altitude_m, access, description, depth_m, horizontal_length_m, geology_id,
 			technical_sheet, osm_type, osm_id, osm_seen, created_by, updated_by)
 		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
@@ -273,7 +273,7 @@ func (r *Repository) UpdatePlaceIfUnchanged(ctx context.Context, id, userID int6
 
 func (r *Repository) updatePlace(ctx context.Context, id, userID int64, t Type, in Input, unchangedSince *time.Time) (Place, error) {
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE places SET type_id = $2, kind = $3, has_state = $4, name = $5, alt_names = $6,
+		UPDATE catalogue.places SET type_id = $2, kind = $3, has_state = $4, name = $5, alt_names = $6,
 			state = NULLIF($7, ''), subtype_id = $8, system_id = $9, area_id = $10, lat = $11, lon = $12,
 			altitude_m = $13, access = $14, description = $15, depth_m = $16, horizontal_length_m = $17,
 			geology_id = $18, technical_sheet = $19, updated_by = $20, updated_at = clock_timestamp()
@@ -289,7 +289,7 @@ func (r *Repository) updatePlace(ctx context.Context, id, userID int64, t Type, 
 	}
 	if tag.RowsAffected() == 0 {
 		var exists bool
-		if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM places WHERE id = $1)`, id).Scan(&exists); err != nil {
+		if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM catalogue.places WHERE id = $1)`, id).Scan(&exists); err != nil {
 			return Place{}, err
 		}
 		if exists {
@@ -311,10 +311,10 @@ func (r *Repository) DeletePlace(ctx context.Context, id int64) ([]int64, error)
 	if err := lockPlace(ctx, tx, id); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM place_points WHERE place_id = $1`, id); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM catalogue.place_points WHERE place_id = $1`, id); err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, `DELETE FROM place_files WHERE place_id = $1 RETURNING id`, id)
+	rows, err := tx.Query(ctx, `DELETE FROM catalogue.place_files WHERE place_id = $1 RETURNING id`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (r *Repository) DeletePlace(ctx context.Context, id int64) ([]int64, error)
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM places WHERE id = $1`, id); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM catalogue.places WHERE id = $1`, id); err != nil {
 		// The Service has asked the activities first; this is for one that was linked in the meantime:
 		// the only thing outside the catalogue that points at a place is the club's links to it.
 		var pgErr *pgconn.PgError
@@ -346,7 +346,7 @@ func (r *Repository) DeletePlace(ctx context.Context, id int64) ([]int64, error)
 // lockPlace locks the row of a place for the rest of the transaction, or says it is not there.
 func lockPlace(ctx context.Context, tx pgx.Tx, id int64) error {
 	var locked int64
-	err := tx.QueryRow(ctx, `SELECT id FROM places WHERE id = $1 FOR UPDATE`, id).Scan(&locked)
+	err := tx.QueryRow(ctx, `SELECT id FROM catalogue.places WHERE id = $1 FOR UPDATE`, id).Scan(&locked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -363,7 +363,7 @@ func scanPoint(row pgx.Row, p *Point) error {
 
 // ListPoints is the other points of a place, in the order they were added.
 func (r *Repository) ListPoints(ctx context.Context, placeID int64) ([]Point, error) {
-	rows, err := r.pool.Query(ctx, `SELECT `+pointColumns+` FROM place_points WHERE place_id = $1 ORDER BY id`, placeID)
+	rows, err := r.pool.Query(ctx, `SELECT `+pointColumns+` FROM catalogue.place_points WHERE place_id = $1 ORDER BY id`, placeID)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +381,7 @@ func (r *Repository) ListPoints(ctx context.Context, placeID int64) ([]Point, er
 
 func (r *Repository) GetPoint(ctx context.Context, placeID, id int64) (Point, error) {
 	var p Point
-	err := scanPoint(r.pool.QueryRow(ctx, `SELECT `+pointColumns+` FROM place_points WHERE place_id = $1 AND id = $2`, placeID, id), &p)
+	err := scanPoint(r.pool.QueryRow(ctx, `SELECT `+pointColumns+` FROM catalogue.place_points WHERE place_id = $1 AND id = $2`, placeID, id), &p)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Point{}, ErrPointNotFound
 	}
@@ -390,7 +390,7 @@ func (r *Repository) GetPoint(ctx context.Context, placeID, id int64) (Point, er
 
 // touch records that somebody changed the place (its points are part of it).
 func touch(ctx context.Context, tx pgx.Tx, placeID, userID int64) error {
-	_, err := tx.Exec(ctx, `UPDATE places SET updated_by = $2, updated_at = now() WHERE id = $1`, placeID, userID)
+	_, err := tx.Exec(ctx, `UPDATE catalogue.places SET updated_by = $2, updated_at = now() WHERE id = $1`, placeID, userID)
 	return err
 }
 
@@ -405,7 +405,7 @@ func (r *Repository) AddPoint(ctx context.Context, placeID, userID int64, in Poi
 	}
 	var p Point
 	err = scanPoint(tx.QueryRow(ctx, `
-		INSERT INTO place_points (place_id, kind, name, lat, lon, altitude_m, note) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO catalogue.place_points (place_id, kind, name, lat, lon, altitude_m, note) VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+pointColumns, placeID, in.Kind, in.Name, *in.Lat, *in.Lon, in.AltitudeM, in.Note), &p)
 	if err != nil {
 		return Point{}, err
@@ -427,7 +427,7 @@ func (r *Repository) UpdatePoint(ctx context.Context, placeID, id, userID int64,
 	}
 	var p Point
 	err = scanPoint(tx.QueryRow(ctx, `
-		UPDATE place_points SET kind = $3, name = $4, lat = $5, lon = $6, altitude_m = $7, note = $8
+		UPDATE catalogue.place_points SET kind = $3, name = $4, lat = $5, lon = $6, altitude_m = $7, note = $8
 		WHERE place_id = $1 AND id = $2
 		RETURNING `+pointColumns, placeID, id, in.Kind, in.Name, *in.Lat, *in.Lon, in.AltitudeM, in.Note), &p)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -451,7 +451,7 @@ func (r *Repository) DeletePoint(ctx context.Context, placeID, id, userID int64)
 	if err := lockPlace(ctx, tx, placeID); err != nil {
 		return err
 	}
-	tag, err := tx.Exec(ctx, `DELETE FROM place_points WHERE place_id = $1 AND id = $2`, placeID, id)
+	tag, err := tx.Exec(ctx, `DELETE FROM catalogue.place_points WHERE place_id = $1 AND id = $2`, placeID, id)
 	if err != nil {
 		return err
 	}
@@ -467,8 +467,8 @@ func (r *Repository) DeletePoint(ctx context.Context, placeID, id, userID int64)
 // ----- types -----
 
 const typeSelect = `
-	SELECT t.id, t.name, t.kind, t.has_state, (SELECT count(*) FROM places p WHERE p.type_id = t.id)
-	FROM place_types t`
+	SELECT t.id, t.name, t.kind, t.has_state, (SELECT count(*) FROM catalogue.places p WHERE p.type_id = t.id)
+	FROM catalogue.place_types t`
 
 // ListTypes is every type with how many places have it: the cavities, the canyons and then the general
 // ones, each in the order they were added.
@@ -512,7 +512,7 @@ func (r *Repository) TypeNamed(ctx context.Context, name string) (Type, error) {
 // state is said now and does not change.
 func (r *Repository) CreateType(ctx context.Context, name string, hasState bool) (Type, error) {
 	var id int64
-	err := r.pool.QueryRow(ctx, `INSERT INTO place_types (name, kind, has_state) VALUES ($1, 'general', $2) RETURNING id`,
+	err := r.pool.QueryRow(ctx, `INSERT INTO catalogue.place_types (name, kind, has_state) VALUES ($1, 'general', $2) RETURNING id`,
 		name, hasState).Scan(&id)
 	if isUniqueViolation(err) {
 		return Type{}, ErrDuplicateType
@@ -524,7 +524,7 @@ func (r *Repository) CreateType(ctx context.Context, name string, hasState bool)
 }
 
 func (r *Repository) RenameType(ctx context.Context, id int64, name string) (Type, error) {
-	tag, err := r.pool.Exec(ctx, `UPDATE place_types SET name = $2 WHERE id = $1`, id, name)
+	tag, err := r.pool.Exec(ctx, `UPDATE catalogue.place_types SET name = $2 WHERE id = $1`, id, name)
 	if isUniqueViolation(err) {
 		return Type{}, ErrDuplicateType
 	}
@@ -539,7 +539,7 @@ func (r *Repository) RenameType(ctx context.Context, id int64, name string) (Typ
 
 // DeleteType removes a type no place has: the foreign key refuses otherwise.
 func (r *Repository) DeleteType(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM place_types WHERE id = $1`, id)
+	tag, err := r.pool.Exec(ctx, `DELETE FROM catalogue.place_types WHERE id = $1`, id)
 	if isForeignKeyViolation(err) {
 		return ErrTypeInUse
 	}
@@ -555,8 +555,8 @@ func (r *Repository) DeleteType(ctx context.Context, id int64) error {
 // ----- geologies -----
 
 const geologySelect = `
-	SELECT g.id, g.name, (SELECT count(*) FROM places p WHERE p.geology_id = g.id)
-	FROM place_geologies g`
+	SELECT g.id, g.name, (SELECT count(*) FROM catalogue.places p WHERE p.geology_id = g.id)
+	FROM catalogue.place_geologies g`
 
 // ListGeologies is every geology with how many places have it, in the order they were added.
 func (r *Repository) ListGeologies(ctx context.Context) ([]Geology, error) {
@@ -597,7 +597,7 @@ func (r *Repository) GeologyNamed(ctx context.Context, name string) (Geology, er
 
 func (r *Repository) CreateGeology(ctx context.Context, name string) (Geology, error) {
 	var id int64
-	err := r.pool.QueryRow(ctx, `INSERT INTO place_geologies (name) VALUES ($1) RETURNING id`, name).Scan(&id)
+	err := r.pool.QueryRow(ctx, `INSERT INTO catalogue.place_geologies (name) VALUES ($1) RETURNING id`, name).Scan(&id)
 	if isUniqueViolation(err) {
 		return Geology{}, ErrDuplicateGeology
 	}
@@ -608,7 +608,7 @@ func (r *Repository) CreateGeology(ctx context.Context, name string) (Geology, e
 }
 
 func (r *Repository) RenameGeology(ctx context.Context, id int64, name string) (Geology, error) {
-	tag, err := r.pool.Exec(ctx, `UPDATE place_geologies SET name = $2 WHERE id = $1`, id, name)
+	tag, err := r.pool.Exec(ctx, `UPDATE catalogue.place_geologies SET name = $2 WHERE id = $1`, id, name)
 	if isUniqueViolation(err) {
 		return Geology{}, ErrDuplicateGeology
 	}
@@ -623,7 +623,7 @@ func (r *Repository) RenameGeology(ctx context.Context, id int64, name string) (
 
 // DeleteGeology removes a geology no place has: the foreign key refuses otherwise.
 func (r *Repository) DeleteGeology(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM place_geologies WHERE id = $1`, id)
+	tag, err := r.pool.Exec(ctx, `DELETE FROM catalogue.place_geologies WHERE id = $1`, id)
 	if isForeignKeyViolation(err) {
 		return ErrGeologyInUse
 	}
@@ -639,8 +639,8 @@ func (r *Repository) DeleteGeology(ctx context.Context, id int64) error {
 // ----- subtypes -----
 
 const subtypeSelect = `
-	SELECT g.id, g.name, (SELECT count(*) FROM places p WHERE p.subtype_id = g.id)
-	FROM place_subtypes g`
+	SELECT g.id, g.name, (SELECT count(*) FROM catalogue.places p WHERE p.subtype_id = g.id)
+	FROM catalogue.place_subtypes g`
 
 // ListSubtypes is every subtype with how many places have it, in the order they were added.
 func (r *Repository) ListSubtypes(ctx context.Context) ([]Subtype, error) {
@@ -681,7 +681,7 @@ func (r *Repository) SubtypeNamed(ctx context.Context, name string) (Subtype, er
 
 func (r *Repository) CreateSubtype(ctx context.Context, name string) (Subtype, error) {
 	var id int64
-	err := r.pool.QueryRow(ctx, `INSERT INTO place_subtypes (name) VALUES ($1) RETURNING id`, name).Scan(&id)
+	err := r.pool.QueryRow(ctx, `INSERT INTO catalogue.place_subtypes (name) VALUES ($1) RETURNING id`, name).Scan(&id)
 	if isUniqueViolation(err) {
 		return Subtype{}, ErrDuplicateSubtype
 	}
@@ -692,7 +692,7 @@ func (r *Repository) CreateSubtype(ctx context.Context, name string) (Subtype, e
 }
 
 func (r *Repository) RenameSubtype(ctx context.Context, id int64, name string) (Subtype, error) {
-	tag, err := r.pool.Exec(ctx, `UPDATE place_subtypes SET name = $2 WHERE id = $1`, id, name)
+	tag, err := r.pool.Exec(ctx, `UPDATE catalogue.place_subtypes SET name = $2 WHERE id = $1`, id, name)
 	if isUniqueViolation(err) {
 		return Subtype{}, ErrDuplicateSubtype
 	}
@@ -707,7 +707,7 @@ func (r *Repository) RenameSubtype(ctx context.Context, id int64, name string) (
 
 // DeleteSubtype removes a subtype no place has: the foreign key refuses otherwise.
 func (r *Repository) DeleteSubtype(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM place_subtypes WHERE id = $1`, id)
+	tag, err := r.pool.Exec(ctx, `DELETE FROM catalogue.place_subtypes WHERE id = $1`, id)
 	if isForeignKeyViolation(err) {
 		return ErrSubtypeInUse
 	}
@@ -724,7 +724,7 @@ func (r *Repository) DeleteSubtype(ctx context.Context, id int64) error {
 // changed it, and when); an empty pair takes the link away.
 func (r *Repository) SetOsm(ctx context.Context, id, userID int64, osmType *string, osmID *int64) (Place, error) {
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE places SET osm_type = $2, osm_id = $3, osm_seen = `+seenOf("$2", "$3")+`, updated_by = $4,
+		UPDATE catalogue.places SET osm_type = $2, osm_id = $3, osm_seen = `+seenOf("$2", "$3")+`, updated_by = $4,
 			updated_at = now()
 		WHERE id = $1
 	`, id, osmType, osmID, userID)
@@ -747,7 +747,7 @@ func (r *Repository) SetOsm(ctx context.Context, id, userID int64, osmType *stri
 // counts as a change to look at (and says nothing else of the place: who changed it last stays as it was).
 func (r *Repository) ReviewOsm(ctx context.Context, id int64) (Place, error) {
 	var linked bool
-	err := r.pool.QueryRow(ctx, `SELECT osm_type IS NOT NULL FROM places WHERE id = $1`, id).Scan(&linked)
+	err := r.pool.QueryRow(ctx, `SELECT osm_type IS NOT NULL FROM catalogue.places WHERE id = $1`, id).Scan(&linked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Place{}, ErrNotFound
 	}
@@ -757,7 +757,7 @@ func (r *Repository) ReviewOsm(ctx context.Context, id int64) (Place, error) {
 	if !linked {
 		return Place{}, ErrNotLinked
 	}
-	if _, err := r.pool.Exec(ctx, `UPDATE places SET osm_seen = `+seenOf("places.osm_type", "places.osm_id")+` WHERE id = $1`, id); err != nil {
+	if _, err := r.pool.Exec(ctx, `UPDATE catalogue.places SET osm_seen = `+seenOf("places.osm_type", "places.osm_id")+` WHERE id = $1`, id); err != nil {
 		return Place{}, err
 	}
 	return r.GetPlace(ctx, id)
@@ -774,7 +774,7 @@ func (r *Repository) osmChangesOf(ctx context.Context, id int64) ([]OsmChange, e
 func (r *Repository) osmChanges(ctx context.Context, id *int64) (map[int64][]OsmChange, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT p.id, p.osm_seen, e.tags, e.lat, e.lon, e.deleted_at IS NOT NULL
-		FROM places p JOIN osm_elements e ON e.osm_type = p.osm_type AND e.osm_id = p.osm_id
+		FROM catalogue.places p JOIN catalogue.osm_elements e ON e.osm_type = p.osm_type AND e.osm_id = p.osm_id
 		WHERE p.osm_seen IS NOT NULL AND ($1::bigint IS NULL OR p.id = $1)
 	`, id)
 	if err != nil {

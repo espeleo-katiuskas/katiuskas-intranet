@@ -126,11 +126,11 @@ func newEnv(t *testing.T) *env {
 		}
 		return id
 	}
-	e.spain = one(`SELECT id FROM areas WHERE parent_id IS NULL AND code = 'ES'`)
-	e.portugal = one(`SELECT id FROM areas WHERE parent_id IS NULL AND code = 'PT'`)
-	e.madridCommunity = one(`SELECT id FROM areas WHERE parent_id = $1 AND name = 'Comunidad de Madrid'`, e.spain)
-	e.madrid = one(`SELECT id FROM areas WHERE parent_id = $1 AND name = 'Madrid'`, e.madridCommunity)
-	e.valdemanco = one(`SELECT id FROM areas WHERE parent_id = $1 AND name = 'Valdemanco'`, e.madrid)
+	e.spain = one(`SELECT id FROM catalogue.areas WHERE parent_id IS NULL AND code = 'ES'`)
+	e.portugal = one(`SELECT id FROM catalogue.areas WHERE parent_id IS NULL AND code = 'PT'`)
+	e.madridCommunity = one(`SELECT id FROM catalogue.areas WHERE parent_id = $1 AND name = 'Comunidad de Madrid'`, e.spain)
+	e.madrid = one(`SELECT id FROM catalogue.areas WHERE parent_id = $1 AND name = 'Madrid'`, e.madridCommunity)
+	e.valdemanco = one(`SELECT id FROM catalogue.areas WHERE parent_id = $1 AND name = 'Valdemanco'`, e.madrid)
 	return e
 }
 
@@ -196,10 +196,10 @@ func (e *env) add(parent int64, name, kind string) areas.Area {
 func (e *env) placeIn(area int64) {
 	e.t.Helper()
 	tag, err := e.tx.Exec(context.Background(), `
-		INSERT INTO places (type_id, kind, has_state, state, subtype_id, name, area_id, lat, lon, created_by, updated_by)
-		SELECT t.id, t.kind, t.has_state, 'open', (SELECT id FROM place_subtypes WHERE name = 'Cueva'), 'Un lugar',
+		INSERT INTO catalogue.places (type_id, kind, has_state, state, subtype_id, name, area_id, lat, lon, created_by, updated_by)
+		SELECT t.id, t.kind, t.has_state, 'open', (SELECT id FROM catalogue.place_subtypes WHERE name = 'Cueva'), 'Un lugar',
 			$1, 40, -3, $2, $2
-		FROM place_types t WHERE t.name = 'Cavidad'
+		FROM catalogue.place_types t WHERE t.name = 'Cavidad'
 	`, area, e.member.user.ID)
 	if err != nil {
 		e.t.Fatal(err)
@@ -223,45 +223,45 @@ func TestSeed(t *testing.T) {
 		}
 		return n
 	}
-	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND kind = 'País'`); n != 195 {
+	if n := count(`SELECT count(*) FROM catalogue.areas WHERE parent_id IS NULL AND kind = 'País'`); n != 195 {
 		t.Errorf("expected the 195 states of the UN (193 members and 2 observers), got %d", n)
 	}
 	// The three that no state administers (or not undisputed) are roots too, but territories, not countries.
-	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND kind = 'Territorio' AND code IN ('AQ', 'EH', 'TW')`); n != 3 {
+	if n := count(`SELECT count(*) FROM catalogue.areas WHERE parent_id IS NULL AND kind = 'Territorio' AND code IN ('AQ', 'EH', 'TW')`); n != 3 {
 		t.Errorf("Antarctica, Western Sahara and Taiwan should be territories with no zone above: %d", n)
 	}
 	// The other territories of ISO 3166-1 that are not states are not roots, and the observers are.
 	for _, code := range []string{"GI", "HK", "PR", "GL", "FO", "AX", "XK"} {
-		if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND code = $1`, code); n != 0 {
+		if n := count(`SELECT count(*) FROM catalogue.areas WHERE parent_id IS NULL AND code = $1`, code); n != 0 {
 			t.Errorf("%s is not a state of the UN and should not be a country", code)
 		}
 	}
 	for _, code := range []string{"ES", "PT", "FR", "AD", "MA", "VA", "PS", "CI", "TR", "CN", "NL", "GM", "NR"} {
-		if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND code = $1`, code); n != 1 {
+		if n := count(`SELECT count(*) FROM catalogue.areas WHERE parent_id IS NULL AND code = $1`, code); n != 1 {
 			t.Errorf("%s should be a country", code)
 		}
 	}
-	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NULL AND (kind NOT IN ('País', 'Territorio') OR code !~ '^[A-Z]{2}$')`); n != 0 {
+	if n := count(`SELECT count(*) FROM catalogue.areas WHERE parent_id IS NULL AND (kind NOT IN ('País', 'Territorio') OR code !~ '^[A-Z]{2}$')`); n != 0 {
 		t.Errorf("%d roots are not a country or a territory with an ISO code", n)
 	}
-	if n := count(`SELECT count(*) FROM areas WHERE parent_id = $1 AND kind IN ('Comunidad autónoma', 'Ciudad autónoma')`, e.spain); n != 19 {
+	if n := count(`SELECT count(*) FROM catalogue.areas WHERE parent_id = $1 AND kind IN ('Comunidad autónoma', 'Ciudad autónoma')`, e.spain); n != 19 {
 		t.Errorf("expected the 19 communities and cities of Spain, got %d", n)
 	}
-	if n := count(`SELECT count(*) FROM areas p JOIN areas c ON c.id = p.parent_id WHERE p.kind = 'Provincia' AND c.parent_id = $1`, e.spain); n != 50 {
+	if n := count(`SELECT count(*) FROM catalogue.areas p JOIN catalogue.areas c ON c.id = p.parent_id WHERE p.kind = 'Provincia' AND c.parent_id = $1`, e.spain); n != 50 {
 		t.Errorf("expected the 50 provinces, each in a community (Ceuta and Melilla have none), got %d", n)
 	}
-	if n := count(`SELECT count(*) FROM areas WHERE kind = 'Municipio'`); n < 8100 || n > 8200 {
+	if n := count(`SELECT count(*) FROM catalogue.areas WHERE kind = 'Municipio'`); n < 8100 || n > 8200 {
 		t.Errorf("expected about 8,130 municipalities, got %d", n)
 	}
-	if n := count(`SELECT count(*) FROM areas m JOIN areas p ON p.id = m.parent_id WHERE m.kind = 'Municipio' AND (p.kind <> 'Provincia' OR substr(m.code, 1, 2) <> p.code OR m.code !~ '^[0-9]{5}$')`); n != 0 {
+	if n := count(`SELECT count(*) FROM catalogue.areas m JOIN catalogue.areas p ON p.id = m.parent_id WHERE m.kind = 'Municipio' AND (p.kind <> 'Provincia' OR substr(m.code, 1, 2) <> p.code OR m.code !~ '^[0-9]{5}$')`); n != 0 {
 		t.Errorf("%d municipalities are not in their own province, or have no INE code", n)
 	}
-	if n := count(`SELECT count(*) FROM areas WHERE parent_id IS NOT NULL AND parent_id NOT IN (SELECT id FROM areas)`); n != 0 {
+	if n := count(`SELECT count(*) FROM catalogue.areas WHERE parent_id IS NOT NULL AND parent_id NOT IN (SELECT id FROM catalogue.areas)`); n != 0 {
 		t.Errorf("%d zones have a parent that is not there", n)
 	}
 	// The article the INE writes last is first again, and the two languages stay together.
 	for name, parent := range map[string]string{"A Coruña": "La Coruña", "La Vila Joiosa/Villajoyosa": "Alicante", "L'Hospitalet de Llobregat": "Barcelona"} {
-		if n := count(`SELECT count(*) FROM areas m JOIN areas p ON p.id = m.parent_id WHERE m.kind = 'Municipio' AND m.name = $1 AND p.name = $2`, name, parent); n != 1 {
+		if n := count(`SELECT count(*) FROM catalogue.areas m JOIN catalogue.areas p ON p.id = m.parent_id WHERE m.kind = 'Municipio' AND m.name = $1 AND p.name = $2`, name, parent); n != 1 {
 			t.Errorf("expected the municipality %q in %q", name, parent)
 		}
 	}
@@ -269,19 +269,19 @@ func TestSeed(t *testing.T) {
 	// territory, or in two); the municipalities keep the INE's.
 	for _, name := range []string{"Araba/Álava", "Alicante/Alacant", "Castellón/Castelló", "Valencia/València", "Illes Balears",
 		"Comunitat Valenciana", "A Coruña", "Girona", "Lleida", "Ourense", "Gipuzkoa", "Bizkaia"} {
-		if n := count(`SELECT count(*) FROM areas WHERE name = $1 AND kind IN ('Comunidad autónoma', 'Provincia')`, name); n != 0 {
+		if n := count(`SELECT count(*) FROM catalogue.areas WHERE name = $1 AND kind IN ('Comunidad autónoma', 'Provincia')`, name); n != 0 {
 			t.Errorf("%q should be named in Spanish", name)
 		}
 	}
 	for name, kind := range map[string]string{"Álava": "Provincia", "Alicante": "Provincia", "Castellón": "Provincia", "Valencia": "Provincia",
 		"Islas Baleares": "Provincia", "Gerona": "Provincia", "Lérida": "Provincia", "Orense": "Provincia", "Guipúzcoa": "Provincia",
 		"Vizcaya": "Provincia", "La Coruña": "Provincia", "Comunidad Valenciana": "Comunidad autónoma"} {
-		if n := count(`SELECT count(*) FROM areas WHERE name = $1 AND kind = $2`, name, kind); n != 1 {
+		if n := count(`SELECT count(*) FROM catalogue.areas WHERE name = $1 AND kind = $2`, name, kind); n != 1 {
 			t.Errorf("expected the %s %q: %d", kind, name, n)
 		}
 	}
 	// norm_name is what Normalize gives, for every zone.
-	rows, err := e.tx.Query(context.Background(), `SELECT name, norm_name FROM areas`)
+	rows, err := e.tx.Query(context.Background(), `SELECT name, norm_name FROM catalogue.areas`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,7 +481,7 @@ func TestAdd(t *testing.T) {
 		errorCode(t, e.json("POST", "/api/v1/areas", e.admin.token, map[string]any{"parent_id": e.madrid, "name": name}), 409, "duplicate_area")
 	}
 	var comunidad int64
-	if err := e.tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE parent_id = $1 AND name = 'Murcia'`, e.spain).Scan(&comunidad); err != nil {
+	if err := e.tx.QueryRow(context.Background(), `SELECT id FROM catalogue.areas WHERE parent_id = $1 AND name = 'Murcia'`, e.spain).Scan(&comunidad); err != nil {
 		// Murcia is a community under a longer name; any other zone does as well.
 		comunidad = e.madridCommunity
 	}
@@ -533,13 +533,13 @@ func TestTerritories(t *testing.T) {
 	ctx := context.Background()
 	for code, state := range map[string]string{"GI": "GB", "BM": "GB", "GL": "DK", "FO": "DK", "HK": "CN", "PR": "US", "RE": "FR", "AX": "FI", "SJ": "NO", "CK": "NZ"} {
 		var n int
-		if err := e.tx.QueryRow(ctx, `SELECT count(*) FROM areas t JOIN areas s ON s.id = t.parent_id
+		if err := e.tx.QueryRow(ctx, `SELECT count(*) FROM catalogue.areas t JOIN catalogue.areas s ON s.id = t.parent_id
 			WHERE t.kind = 'Territorio' AND t.code = $1 AND s.parent_id IS NULL AND s.code = $2`, code, state).Scan(&n); err != nil || n != 1 {
 			t.Errorf("%s should be a territory of %s: %d %v", code, state, n, err)
 		}
 	}
 	var total int
-	if err := e.tx.QueryRow(ctx, `SELECT count(*) FROM areas WHERE kind = 'Territorio' AND parent_id IS NOT NULL`).Scan(&total); err != nil || total != 51 {
+	if err := e.tx.QueryRow(ctx, `SELECT count(*) FROM catalogue.areas WHERE kind = 'Territorio' AND parent_id IS NOT NULL`).Scan(&total); err != nil || total != 51 {
 		t.Errorf("51 territories below a state expected: %d %v", total, err)
 	}
 	// The three that nobody administers, or whose administrator is disputed, have no zone above them, and
@@ -601,7 +601,7 @@ func TestMerge(t *testing.T) {
 	// An element of the OpenStreetMap mirror in the zone that goes: it follows the merge. (Its id is one no other
 	// test uses: the tests of several packages run at once on the same database.)
 	if _, err := e.tx.Exec(context.Background(), `
-		INSERT INTO osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, area_id)
+		INSERT INTO catalogue.osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, area_id)
 		VALUES ('node', 9100001, 1, now(), 'cave', 40, -3, '{}', 'h', 'spain', $1)`, from.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -617,7 +617,7 @@ func TestMerge(t *testing.T) {
 		t.Errorf("what was in the first should be in the second: %+v", merged)
 	}
 	var elementZone *int64
-	if err := e.tx.QueryRow(context.Background(), `SELECT area_id FROM osm_elements WHERE osm_id = 9100001`).Scan(&elementZone); err != nil ||
+	if err := e.tx.QueryRow(context.Background(), `SELECT area_id FROM catalogue.osm_elements WHERE osm_id = 9100001`).Scan(&elementZone); err != nil ||
 		elementZone == nil || *elementZone != into.ID {
 		t.Errorf("the element of the mirror follows the merge: %v %v", elementZone, err)
 	}
@@ -683,7 +683,7 @@ func TestCountriesDeleteAndMerge(t *testing.T) {
 	e.notifier.wait(t)
 
 	from, into := country("Antigua Unión"), country("Nueva Unión")
-	if _, err := e.tx.Exec(context.Background(), `UPDATE areas SET code = 'ZZ' WHERE id = $1`, from.ID); err != nil {
+	if _, err := e.tx.Exec(context.Background(), `UPDATE catalogue.areas SET code = 'ZZ' WHERE id = $1`, from.ID); err != nil {
 		t.Fatal(err)
 	}
 	e.add(from.ID, "Capital", "Ciudad")
@@ -797,7 +797,7 @@ func TestLocate(t *testing.T) {
 		Area *areas.Area `json:"area"`
 	}
 	var valdemancoCode string
-	if err := e.tx.QueryRow(context.Background(), `SELECT code FROM areas WHERE id = $1`, e.valdemanco).Scan(&valdemancoCode); err != nil {
+	if err := e.tx.QueryRow(context.Background(), `SELECT code FROM catalogue.areas WHERE id = $1`, e.valdemanco).Scan(&valdemancoCode); err != nil {
 		t.Fatal(err)
 	}
 
@@ -913,8 +913,8 @@ func TestGeocode(t *testing.T) {
 func TestAutonomousCitiesHaveNothingBelow(t *testing.T) {
 	e := newEnv(t)
 	rows, err := e.tx.Query(context.Background(), `
-		SELECT c.name, c.parent_id, (SELECT count(*) FROM areas k WHERE k.parent_id = c.id)
-		FROM areas c WHERE c.kind = 'Ciudad autónoma' ORDER BY c.name`)
+		SELECT c.name, c.parent_id, (SELECT count(*) FROM catalogue.areas k WHERE k.parent_id = c.id)
+		FROM catalogue.areas c WHERE c.kind = 'Ciudad autónoma' ORDER BY c.name`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -938,7 +938,7 @@ func TestAutonomousCitiesHaveNothingBelow(t *testing.T) {
 	var provinces, municipalities int
 	if err := e.tx.QueryRow(context.Background(), `
 		SELECT count(*) FILTER (WHERE kind = 'Provincia'), count(*) FILTER (WHERE kind = 'Municipio')
-		FROM areas`).Scan(&provinces, &municipalities); err != nil {
+		FROM catalogue.areas`).Scan(&provinces, &municipalities); err != nil {
 		t.Fatal(err)
 	}
 	if provinces != 50 || municipalities != 8130 {

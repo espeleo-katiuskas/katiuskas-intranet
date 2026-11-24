@@ -14,7 +14,7 @@ import (
 // lockSystem locks the row of a system for the rest of the transaction, or says it is not there.
 func lockSystem(ctx context.Context, tx pgx.Tx, id int64) error {
 	var locked int64
-	err := tx.QueryRow(ctx, `SELECT id FROM place_systems WHERE id = $1 FOR UPDATE`, id).Scan(&locked)
+	err := tx.QueryRow(ctx, `SELECT id FROM catalogue.place_systems WHERE id = $1 FOR UPDATE`, id).Scan(&locked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrSystemNotFound
 	}
@@ -23,7 +23,7 @@ func lockSystem(ctx context.Context, tx pgx.Tx, id int64) error {
 
 // touchSystem records who changed a system last, and when.
 func touchSystem(ctx context.Context, tx pgx.Tx, id, userID int64) error {
-	_, err := tx.Exec(ctx, `UPDATE place_systems SET updated_by = $2, updated_at = now() WHERE id = $1`, id, userID)
+	_, err := tx.Exec(ctx, `UPDATE catalogue.place_systems SET updated_by = $2, updated_at = now() WHERE id = $1`, id, userID)
 	return err
 }
 
@@ -33,23 +33,23 @@ func touchSystem(ctx context.Context, tx pgx.Tx, id, userID int64) error {
 func (r *Repository) HasAuthored(ctx context.Context, userID int64) (bool, error) {
 	var has bool
 	err := r.pool.QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM places WHERE created_by = $1 OR updated_by = $1)
-			OR EXISTS (SELECT 1 FROM place_systems WHERE created_by = $1 OR updated_by = $1)
-			OR EXISTS (SELECT 1 FROM place_files WHERE uploaded_by = $1)`, userID).Scan(&has)
+		SELECT EXISTS (SELECT 1 FROM catalogue.places WHERE created_by = $1 OR updated_by = $1)
+			OR EXISTS (SELECT 1 FROM catalogue.place_systems WHERE created_by = $1 OR updated_by = $1)
+			OR EXISTS (SELECT 1 FROM catalogue.place_files WHERE uploaded_by = $1)`, userID).Scan(&has)
 	return has, err
 }
 
 // SystemExists says whether a system has that id.
 func (r *Repository) SystemExists(ctx context.Context, id int64) (bool, error) {
 	var exists bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM place_systems WHERE id = $1)`, id).Scan(&exists)
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM catalogue.place_systems WHERE id = $1)`, id).Scan(&exists)
 	return exists, err
 }
 
 // SystemNamed is the id of the system with that name, ignoring case, or 0.
 func (r *Repository) SystemNamed(ctx context.Context, name string) (int64, error) {
 	var id int64
-	err := r.pool.QueryRow(ctx, `SELECT id FROM place_systems WHERE lower(name) = lower($1)`, name).Scan(&id)
+	err := r.pool.QueryRow(ctx, `SELECT id FROM catalogue.place_systems WHERE lower(name) = lower($1)`, name).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}
@@ -58,7 +58,7 @@ func (r *Repository) SystemNamed(ctx context.Context, name string) (int64, error
 
 // ListSystems is every system by name, each with its cavities by name.
 func (r *Repository) ListSystems(ctx context.Context) ([]SystemListItem, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, name FROM place_systems ORDER BY lower(name), id`)
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM catalogue.place_systems ORDER BY lower(name), id`)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (r *Repository) ListSystems(ctx context.Context) ([]SystemListItem, error) 
 	}
 	refs, err := r.pool.Query(ctx, `
 		SELECT p.system_id, p.id, p.name, COALESCE(st.name, '')
-		FROM places p LEFT JOIN place_subtypes st ON st.id = p.subtype_id
+		FROM catalogue.places p LEFT JOIN catalogue.place_subtypes st ON st.id = p.subtype_id
 		WHERE p.system_id IS NOT NULL
 		ORDER BY lower(p.name), p.id`)
 	if err != nil {
@@ -105,8 +105,8 @@ func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 	var s System
 	err := r.pool.QueryRow(ctx, `
 		SELECT s.id, s.name, s.description, s.created_by, s.created_at, s.updated_by, s.updated_at,
-			(SELECT count(*) FROM place_files f WHERE f.system_id = s.id)
-		FROM place_systems s
+			(SELECT count(*) FROM catalogue.place_files f WHERE f.system_id = s.id)
+		FROM catalogue.place_systems s
 		WHERE s.id = $1`, id).Scan(&s.ID, &s.Name, &s.Description, &s.CreatedByID, &s.CreatedAt, &s.UpdatedByID,
 		&s.UpdatedAt, &s.FileCount)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -169,7 +169,7 @@ func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 		}
 		fileRows.Close()
 		// And their other points, for the map of the system.
-		pointRows, err := r.pool.Query(ctx, `SELECT `+pointColumns+` FROM place_points WHERE place_id = ANY($1) ORDER BY id`, ids)
+		pointRows, err := r.pool.Query(ctx, `SELECT `+pointColumns+` FROM catalogue.place_points WHERE place_id = ANY($1) ORDER BY id`, ids)
 		if err != nil {
 			return System{}, err
 		}
@@ -190,7 +190,7 @@ func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 func (r *Repository) CreateSystem(ctx context.Context, userID int64, name string, description *string) (System, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO place_systems (name, description, created_by, updated_by) VALUES ($1, $2, $3, $3) RETURNING id
+		INSERT INTO catalogue.place_systems (name, description, created_by, updated_by) VALUES ($1, $2, $3, $3) RETURNING id
 	`, name, description, userID).Scan(&id)
 	if isUniqueViolation(err) {
 		return System{}, ErrDuplicateSystem
@@ -204,7 +204,7 @@ func (r *Repository) CreateSystem(ctx context.Context, userID int64, name string
 // UpdateSystem replaces the name and the description of a system, and who changed it and when.
 func (r *Repository) UpdateSystem(ctx context.Context, id, userID int64, name string, description *string) (System, error) {
 	tag, err := r.pool.Exec(ctx, `
-		UPDATE place_systems SET name = $2, description = $3, updated_by = $4, updated_at = now() WHERE id = $1
+		UPDATE catalogue.place_systems SET name = $2, description = $3, updated_by = $4, updated_at = now() WHERE id = $1
 	`, id, name, description, userID)
 	if isUniqueViolation(err) {
 		return System{}, ErrDuplicateSystem
@@ -229,10 +229,10 @@ func (r *Repository) DeleteSystem(ctx context.Context, id int64) ([]int64, error
 	if err := lockSystem(ctx, tx, id); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE places SET system_id = NULL WHERE system_id = $1`, id); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE catalogue.places SET system_id = NULL WHERE system_id = $1`, id); err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, `DELETE FROM place_files WHERE system_id = $1 RETURNING id`, id)
+	rows, err := tx.Query(ctx, `DELETE FROM catalogue.place_files WHERE system_id = $1 RETURNING id`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +249,7 @@ func (r *Repository) DeleteSystem(ctx context.Context, id int64) ([]int64, error
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM place_systems WHERE id = $1`, id); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM catalogue.place_systems WHERE id = $1`, id); err != nil {
 		return nil, err
 	}
 	return files, tx.Commit(ctx)
@@ -261,7 +261,7 @@ func systemPlaceRefs(ctx context.Context, q interface {
 }, systemID int64) ([]SystemPlaceRef, error) {
 	rows, err := q.Query(ctx, `
 		SELECT p.id, p.name, COALESCE(st.name, '')
-		FROM places p LEFT JOIN place_subtypes st ON st.id = p.subtype_id
+		FROM catalogue.places p LEFT JOIN catalogue.place_subtypes st ON st.id = p.subtype_id
 		WHERE p.system_id = $1 ORDER BY lower(p.name), p.id`, systemID)
 	if err != nil {
 		return nil, err
@@ -293,7 +293,7 @@ func (r *Repository) SetSystemPlaces(ctx context.Context, id, userID int64, plac
 	}
 	var found, caves int
 	if err := tx.QueryRow(ctx, `
-		SELECT count(*), count(*) FILTER (WHERE kind = 'cave') FROM places WHERE id = ANY($1)
+		SELECT count(*), count(*) FILTER (WHERE kind = 'cave') FROM catalogue.places WHERE id = ANY($1)
 	`, placeIDs).Scan(&found, &caves); err != nil {
 		return nil, nil, err
 	}
@@ -306,10 +306,10 @@ func (r *Repository) SetSystemPlaces(ctx context.Context, id, userID int64, plac
 	if before, err = systemPlaceRefs(ctx, tx, id); err != nil {
 		return nil, nil, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE places SET system_id = NULL WHERE system_id = $1 AND NOT (id = ANY($2))`, id, placeIDs); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE catalogue.places SET system_id = NULL WHERE system_id = $1 AND NOT (id = ANY($2))`, id, placeIDs); err != nil {
 		return nil, nil, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE places SET system_id = $1 WHERE id = ANY($2) AND system_id IS DISTINCT FROM $1`, id, placeIDs); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE catalogue.places SET system_id = $1 WHERE id = ANY($2) AND system_id IS DISTINCT FROM $1`, id, placeIDs); err != nil {
 		return nil, nil, err
 	}
 	if err := touchSystem(ctx, tx, id, userID); err != nil {

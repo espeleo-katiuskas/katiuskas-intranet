@@ -39,7 +39,7 @@ type row struct {
 func rows(t *testing.T, tx pgx.Tx) map[osmmirror.Key]row {
 	t.Helper()
 	r, err := tx.Query(context.Background(),
-		`SELECT osm_type, osm_id, coalesce(tags->>'name', ''), deleted_at IS NOT NULL, source FROM osm_elements`)
+		`SELECT osm_type, osm_id, coalesce(tags->>'name', ''), deleted_at IS NOT NULL, source FROM catalogue.osm_elements`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestApply(t *testing.T) {
 		t.Errorf("the elements of another source are not touched: %+v", c)
 	}
 	var geometry string
-	if err := tx.QueryRow(ctx, `SELECT geometry->>'type' FROM osm_elements WHERE osm_type = 'way' AND osm_id = 3`).Scan(&geometry); err != nil || geometry != "Polygon" {
+	if err := tx.QueryRow(ctx, `SELECT geometry->>'type' FROM catalogue.osm_elements WHERE osm_type = 'way' AND osm_id = 3`).Scan(&geometry); err != nil || geometry != "Polygon" {
 		t.Errorf("the outline of a way is kept: %q %v", geometry, err)
 	}
 
@@ -137,14 +137,14 @@ func TestPlacePointsAtElement(t *testing.T) {
 	}
 	user := testutil.InsertMember(t, tx)
 	var typeID int64
-	if err := tx.QueryRow(ctx, `SELECT id FROM place_types WHERE name = 'Cavidad'`).Scan(&typeID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.place_types WHERE name = 'Cavidad'`).Scan(&typeID); err != nil {
 		t.Fatal(err)
 	}
 	var subtypeID, areaID int64
-	if err := tx.QueryRow(ctx, `SELECT id FROM place_subtypes ORDER BY id LIMIT 1`).Scan(&subtypeID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.place_subtypes ORDER BY id LIMIT 1`).Scan(&subtypeID); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE parent_id IS NULL ORDER BY id LIMIT 1`).Scan(&areaID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.areas WHERE parent_id IS NULL ORDER BY id LIMIT 1`).Scan(&areaID); err != nil {
 		t.Fatal(err)
 	}
 	insert := func(osmType any, osmID any) error {
@@ -153,7 +153,7 @@ func TestPlacePointsAtElement(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = sp.Exec(ctx, `
-			INSERT INTO places (type_id, kind, subtype_id, has_state, state, name, area_id, lat, lon, created_by,
+			INSERT INTO catalogue.places (type_id, kind, subtype_id, has_state, state, name, area_id, lat, lon, created_by,
 				updated_by, osm_type, osm_id)
 			VALUES ($1, 'cave', $2, true, 'open', 'Una cueva', $3, 40.8, -3.6, $4, $4, $5, $6)
 		`, typeID, subtypeID, areaID, user.ID, osmType, osmID)
@@ -260,7 +260,7 @@ func TestSyncer(t *testing.T) {
 		t.Errorf("nothing may be touched by a refused load, %d active", n)
 	}
 	var status, msg string
-	if err := tx.QueryRow(ctx, `SELECT status, coalesce(error, '') FROM osm_sync_runs ORDER BY id DESC LIMIT 1`).Scan(&status, &msg); err != nil || status != "failed" || msg == "" {
+	if err := tx.QueryRow(ctx, `SELECT status, coalesce(error, '') FROM catalogue.osm_sync_runs ORDER BY id DESC LIMIT 1`).Scan(&status, &msg); err != nil || status != "failed" || msg == "" {
 		t.Errorf("the failed run is logged: %q %q %v", status, msg, err)
 	}
 	// With force it is accepted.
@@ -283,7 +283,7 @@ func TestSyncerWorksOutTheZone(t *testing.T) {
 	ctx := context.Background()
 	var code string
 	var zoneID int64
-	if err := tx.QueryRow(ctx, `SELECT code, id FROM areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&code, &zoneID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT code, id FROM catalogue.areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&code, &zoneID); err != nil {
 		t.Fatal(err)
 	}
 	ex := &fakeExtractor{
@@ -304,7 +304,7 @@ func TestSyncerWorksOutTheZone(t *testing.T) {
 	}
 	var unknown int
 	var unknownCodes *string
-	if err := tx.QueryRow(ctx, `SELECT unknown_zones, unknown_zone_codes FROM osm_sync_runs
+	if err := tx.QueryRow(ctx, `SELECT unknown_zones, unknown_zone_codes FROM catalogue.osm_sync_runs
 		WHERE source = 'spain' ORDER BY id DESC LIMIT 1`).Scan(&unknown, &unknownCodes); err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestSyncerWorksOutTheZone(t *testing.T) {
 		t.Errorf("the run says one municipality is unknown, 99999: %d %v", unknown, unknownCodes)
 	}
 	var one, two *int64
-	if err := tx.QueryRow(ctx, `SELECT (SELECT area_id FROM osm_elements WHERE osm_id = 1), (SELECT area_id FROM osm_elements WHERE osm_id = 2)`).Scan(&one, &two); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT (SELECT area_id FROM catalogue.osm_elements WHERE osm_id = 1), (SELECT area_id FROM catalogue.osm_elements WHERE osm_id = 2)`).Scan(&one, &two); err != nil {
 		t.Fatal(err)
 	}
 	if one == nil || *one != zoneID || two != nil {
@@ -360,22 +360,22 @@ func TestDeletingAZoneEmptiesTheElementsInIt(t *testing.T) {
 	// A country and a zone of its own, so that no other test is in the way; and an id of the element that no
 	// other test uses, since the tests of several packages run at once on the same database.
 	var country, zone int64
-	if err := tx.QueryRow(ctx, `INSERT INTO areas (kind, name, norm_name) VALUES ('País', 'Zonalandia', 'zonalandia') RETURNING id`).Scan(&country); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO catalogue.areas (kind, name, norm_name) VALUES ('País', 'Zonalandia', 'zonalandia') RETURNING id`).Scan(&country); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO areas (parent_id, kind, name, norm_name) VALUES ($1, 'Provincia', 'Zona de prueba', 'zona de prueba') RETURNING id`, country).Scan(&zone); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO catalogue.areas (parent_id, kind, name, norm_name) VALUES ($1, 'Provincia', 'Zona de prueba', 'zona de prueba') RETURNING id`, country).Scan(&zone); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, area_id)
+		INSERT INTO catalogue.osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, content_hash, source, area_id)
 		VALUES ('node', 9000001, 1, now(), 'cave', 40, -3, '{}', 'h', 'spain', $1)`, zone); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM areas WHERE id = $1`, zone); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM catalogue.areas WHERE id = $1`, zone); err != nil {
 		t.Fatalf("a zone with elements in it can be deleted: %v", err)
 	}
 	var left *int64
-	if err := tx.QueryRow(ctx, `SELECT area_id FROM osm_elements WHERE osm_id = 9000001`).Scan(&left); err != nil || left != nil {
+	if err := tx.QueryRow(ctx, `SELECT area_id FROM catalogue.osm_elements WHERE osm_id = 9000001`).Scan(&left); err != nil || left != nil {
 		t.Errorf("the element is in no zone now: %v %v", left, err)
 	}
 }
@@ -391,17 +391,17 @@ func TestMunicipalityIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	var valdemanco, ceuta, melilla int64
-	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&valdemanco); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&valdemanco); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE kind = 'Ciudad autónoma' AND name = 'Ceuta'`).Scan(&ceuta); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.areas WHERE kind = 'Ciudad autónoma' AND name = 'Ceuta'`).Scan(&ceuta); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE kind = 'Ciudad autónoma' AND name = 'Melilla'`).Scan(&melilla); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.areas WHERE kind = 'Ciudad autónoma' AND name = 'Melilla'`).Scan(&melilla); err != nil {
 		t.Fatal(err)
 	}
 	var code string
-	if err := tx.QueryRow(ctx, `SELECT code FROM areas WHERE id = $1`, valdemanco).Scan(&code); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT code FROM catalogue.areas WHERE id = $1`, valdemanco).Scan(&code); err != nil {
 		t.Fatal(err)
 	}
 	if ids[code] != valdemanco || ids["51001"] != ceuta || ids["52001"] != melilla {

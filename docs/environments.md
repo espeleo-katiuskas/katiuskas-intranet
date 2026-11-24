@@ -288,7 +288,7 @@ databases are separate only because the schema can differ: a commit on `main` wi
 reaches testing before production. It is run by the `AFTER_DEPLOY` hook of the production update
 (see "Pull-based deployment"), and the script that does it is
 [`scripts/copy-prod-to-testing.sh`](../scripts/copy-prod-to-testing.sh): it empties testing's
-database, restores into it a full dump of production's (schema, data, sequence values and goose's
+database (the schemas `catalogue` and `public`), restores into it a full dump of production's (schema, data, sequence values and goose's
 version table) and applies with `goose` the migrations testing is ahead by. In addition, unless
 `--no-files` is given, it replaces the files in testing's `ACTIVITY_RESOURCES_ROOT`,
 `TRANSACTION_FILES_ROOT`, `LIBRARY_FILES_ROOT` and `PLACE_FILES_ROOT` with hard links to

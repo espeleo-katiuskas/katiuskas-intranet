@@ -116,7 +116,7 @@ func newEnv(t *testing.T) *env {
 	e.admin = e.person("admin")
 	id := func(name string) int64 {
 		var v int64
-		if err := tx.QueryRow(context.Background(), `SELECT id FROM place_types WHERE name = $1`, name).Scan(&v); err != nil {
+		if err := tx.QueryRow(context.Background(), `SELECT id FROM catalogue.place_types WHERE name = $1`, name).Scan(&v); err != nil {
 			t.Fatal(err)
 		}
 		return v
@@ -124,19 +124,19 @@ func newEnv(t *testing.T) *env {
 	e.cavidad, e.canyon, e.ferrata, e.refugio = id("Cavidad"), id("Cañón"), id("Vía ferrata"), id("Refugio")
 	subtype := func(name string) int64 {
 		var v int64
-		if err := tx.QueryRow(context.Background(), `SELECT id FROM place_subtypes WHERE name = $1`, name).Scan(&v); err != nil {
+		if err := tx.QueryRow(context.Background(), `SELECT id FROM catalogue.place_subtypes WHERE name = $1`, name).Scan(&v); err != nil {
 			t.Fatal(err)
 		}
 		return v
 	}
 	e.subCueva, e.subSima = subtype("Cueva"), subtype("Sima")
 	cavidadID, cuevaID = e.cavidad, e.subCueva
-	if err := tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&valdemanco); err != nil {
+	if err := tx.QueryRow(context.Background(), `SELECT id FROM catalogue.areas WHERE kind = 'Municipio' AND name = 'Valdemanco'`).Scan(&valdemanco); err != nil {
 		t.Fatal(err)
 	}
 	geology := func(name string) int64 {
 		var v int64
-		if err := tx.QueryRow(context.Background(), `SELECT id FROM place_geologies WHERE name = $1`, name).Scan(&v); err != nil {
+		if err := tx.QueryRow(context.Background(), `SELECT id FROM catalogue.place_geologies WHERE name = $1`, name).Scan(&v); err != nil {
 			t.Fatal(err)
 		}
 		return v
@@ -351,7 +351,7 @@ func TestPlaceCRUD(t *testing.T) {
 	}
 	errorCode(t, e.json("GET", placePath(p, ""), e.member.token, nil), 404, "not_found")
 	var left int
-	if err := e.tx.QueryRow(context.Background(), `SELECT count(*) FROM place_points WHERE place_id = $1`, p.ID).Scan(&left); err != nil || left != 0 {
+	if err := e.tx.QueryRow(context.Background(), `SELECT count(*) FROM catalogue.place_points WHERE place_id = $1`, p.ID).Scan(&left); err != nil || left != 0 {
 		t.Errorf("the points should be deleted with the place: %d %v", left, err)
 	}
 	errorCode(t, e.json("DELETE", placePath(p, ""), e.board.token, nil), 404, "not_found")
@@ -591,7 +591,7 @@ func TestAreaOfAPlace(t *testing.T) {
 	for _, c := range []struct{ name, want string }{{"Comunidad de Madrid", "Comunidad de Madrid, España"}, {"Ceuta", "Ceuta, España"}} {
 		name, want := c.name, c.want
 		var zone int64
-		if err := e.tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE name = $1 AND kind IN ('Comunidad autónoma', 'Ciudad autónoma')`, name).Scan(&zone); err != nil {
+		if err := e.tx.QueryRow(context.Background(), `SELECT id FROM catalogue.areas WHERE name = $1 AND kind IN ('Comunidad autónoma', 'Ciudad autónoma')`, name).Scan(&zone); err != nil {
 			t.Fatal(err)
 		}
 		in := decode[places.Place](t, e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Sima de la Peña", map[string]any{"area_id": zone})))
@@ -603,7 +603,7 @@ func TestAreaOfAPlace(t *testing.T) {
 
 	// A place may be only in a country, and an edit moves it, saying so in the notice.
 	var spain int64
-	if err := e.tx.QueryRow(context.Background(), `SELECT id FROM areas WHERE parent_id IS NULL AND code = 'ES'`).Scan(&spain); err != nil {
+	if err := e.tx.QueryRow(context.Background(), `SELECT id FROM catalogue.areas WHERE parent_id IS NULL AND code = 'ES'`).Scan(&spain); err != nil {
 		t.Fatal(err)
 	}
 	rec := e.json("PUT", placePath(p, ""), e.member.token, body(e.cavidad, "Sima de la Peña", map[string]any{"area_id": spain}))

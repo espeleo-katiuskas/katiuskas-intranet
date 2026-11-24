@@ -53,7 +53,7 @@ type stored struct {
 }
 
 func (r *Repository) stored(ctx context.Context, tx pgx.Tx) (map[Key]stored, error) {
-	rows, err := tx.Query(ctx, `SELECT osm_type, osm_id, content_hash, version, deleted_at IS NOT NULL, source FROM osm_elements`)
+	rows, err := tx.Query(ctx, `SELECT osm_type, osm_id, content_hash, version, deleted_at IS NOT NULL, source FROM catalogue.osm_elements`)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (r *Repository) stored(ctx context.Context, tx pgx.Tx) (map[Key]stored, err
 // Active is how many elements of a source are in the mirror and not marked as gone.
 func (r *Repository) Active(ctx context.Context, source string) (int, error) {
 	var n int
-	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM osm_elements WHERE source = $1 AND deleted_at IS NULL`, source).Scan(&n)
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM catalogue.osm_elements WHERE source = $1 AND deleted_at IS NULL`, source).Scan(&n)
 	return n, err
 }
 
@@ -167,7 +167,7 @@ func upsert(ctx context.Context, tx pgx.Tx, source string, list []Element) error
 		hashes[i] = ContentHash(e)
 	}
 	_, err := tx.Exec(ctx, `
-		INSERT INTO osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, geometry,
+		INSERT INTO catalogue.osm_elements (osm_type, osm_id, version, osm_timestamp, category, lat, lon, tags, geometry,
 			content_hash, source, area_id)
 		SELECT t, i, v, ts, c, la, lo, tg::jsonb, g::jsonb, h, $11, z
 		FROM unnest($1::text[], $2::bigint[], $3::int[], $4::timestamptz[], $5::text[], $6::float8[], $7::float8[],
@@ -193,7 +193,7 @@ func keysOf(list []Element) (types []string, ids []int64) {
 func touch(ctx context.Context, tx pgx.Tx, list []Element) error {
 	types, ids := keysOf(list)
 	_, err := tx.Exec(ctx, `
-		UPDATE osm_elements o SET fetched_at = now()
+		UPDATE catalogue.osm_elements o SET fetched_at = now()
 		FROM unnest($1::text[], $2::bigint[]) AS u(t, i) WHERE o.osm_type = u.t AND o.osm_id = u.i
 	`, types, ids)
 	return err
@@ -202,7 +202,7 @@ func touch(ctx context.Context, tx pgx.Tx, list []Element) error {
 func markGone(ctx context.Context, tx pgx.Tx, list []Element) error {
 	types, ids := keysOf(list)
 	_, err := tx.Exec(ctx, `
-		UPDATE osm_elements o SET deleted_at = now(), changed_at = now()
+		UPDATE catalogue.osm_elements o SET deleted_at = now(), changed_at = now()
 		FROM unnest($1::text[], $2::bigint[]) AS u(t, i) WHERE o.osm_type = u.t AND o.osm_id = u.i
 	`, types, ids)
 	return err
@@ -225,7 +225,7 @@ type Run struct {
 // StartRun writes the row of a load that begins.
 func (r *Repository) StartRun(ctx context.Context, source string, sourceTimestamp time.Time) (int64, error) {
 	var id int64
-	err := r.pool.QueryRow(ctx, `INSERT INTO osm_sync_runs (source, source_timestamp) VALUES ($1, $2) RETURNING id`,
+	err := r.pool.QueryRow(ctx, `INSERT INTO catalogue.osm_sync_runs (source, source_timestamp) VALUES ($1, $2) RETURNING id`,
 		source, sourceTimestamp).Scan(&id)
 	return id, err
 }
@@ -238,7 +238,7 @@ func (r *Repository) FinishRun(ctx context.Context, id int64, res Result, runErr
 		status, msg = "failed", &s
 	}
 	_, err := r.pool.Exec(ctx, `
-		UPDATE osm_sync_runs SET finished_at = now(), status = $2, added = $3, changed = $4, deleted = $5,
+		UPDATE catalogue.osm_sync_runs SET finished_at = now(), status = $2, added = $3, changed = $4, deleted = $5,
 			unchanged = $6, error = $7, unknown_zones = $8, unknown_zone_codes = NULLIF($9, '') WHERE id = $1
 	`, id, status, res.Added, res.Changed, res.Deleted, res.Unchanged, msg, res.UnknownZones, res.UnknownZoneCodes)
 	return err
@@ -249,7 +249,7 @@ func (r *Repository) LastOK(ctx context.Context, source string) (*Run, error) {
 	var run Run
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, source, source_timestamp, started_at, finished_at, status, added, changed, deleted, unchanged, error
-		FROM osm_sync_runs WHERE source = $1 AND status = 'ok' ORDER BY started_at DESC, id DESC LIMIT 1
+		FROM catalogue.osm_sync_runs WHERE source = $1 AND status = 'ok' ORDER BY started_at DESC, id DESC LIMIT 1
 	`, source).Scan(&run.ID, &run.Source, &run.SourceTimestamp, &run.StartedAt, &run.FinishedAt, &run.Status,
 		&run.Added, &run.Changed, &run.Deleted, &run.Unchanged, &run.Error)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -310,9 +310,9 @@ type Detail struct {
 const whereJoin = `
 	LEFT JOIN LATERAL (
 		WITH RECURSIVE up AS (
-			SELECT a.id, a.parent_id, a.name, 0 AS depth FROM areas a WHERE a.id = e.area_id
+			SELECT a.id, a.parent_id, a.name, 0 AS depth FROM catalogue.areas a WHERE a.id = e.area_id
 			UNION ALL
-			SELECT a.id, a.parent_id, a.name, up.depth + 1 FROM areas a JOIN up ON a.id = up.parent_id
+			SELECT a.id, a.parent_id, a.name, up.depth + 1 FROM catalogue.areas a JOIN up ON a.id = up.parent_id
 		)
 		SELECT (array_agg(name ORDER BY depth))[1:2] AS names FROM up
 	) z ON true`
@@ -328,9 +328,9 @@ func (r *Repository) InBounds(ctx context.Context, b Bounds, categories []string
 	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT osm_type, osm_id, lat, lon, category, coalesce(tags->>'name', '')
-		FROM osm_elements e
+		FROM catalogue.osm_elements e
 		WHERE deleted_at IS NULL AND lat BETWEEN $1 AND $2 AND `+lonTest+` AND category = ANY($5)
-			AND NOT EXISTS (SELECT 1 FROM places p WHERE p.osm_type = e.osm_type AND p.osm_id = e.osm_id)
+			AND NOT EXISTS (SELECT 1 FROM catalogue.places p WHERE p.osm_type = e.osm_type AND p.osm_id = e.osm_id)
 		ORDER BY CASE category WHEN 'cave' THEN 0 WHEN 'canyon' THEN 1 WHEN 'mine' THEN 2 WHEN 'hut' THEN 3 ELSE 4 END,
 			osm_type, osm_id
 		LIMIT $6
@@ -366,7 +366,7 @@ func (r *Repository) Wheres(ctx context.Context, keys []Key) (map[Key]string, er
 	}
 	rows, err := r.pool.Query(ctx, `
 		SELECT e.osm_type, e.osm_id, coalesce(array_to_string(z.names, ', '), '')
-		FROM osm_elements e`+whereJoin+`
+		FROM catalogue.osm_elements e`+whereJoin+`
 		WHERE (e.osm_type, e.osm_id) IN (SELECT * FROM unnest($1::text[], $2::bigint[]))
 	`, types, ids)
 	if err != nil {
@@ -394,7 +394,7 @@ func (r *Repository) Get(ctx context.Context, typ string, id int64) (Detail, err
 	err := r.pool.QueryRow(ctx, `
 		SELECT e.osm_type, e.osm_id, e.version, e.osm_timestamp, e.category, e.lat, e.lon, e.tags, e.geometry,
 			e.deleted_at, e.area_id, coalesce(array_to_string(z.names, ', '), '')
-		FROM osm_elements e`+whereJoin+`
+		FROM catalogue.osm_elements e`+whereJoin+`
 		WHERE e.osm_type = $1 AND e.osm_id = $2
 	`, typ, id).Scan(&d.Type, &d.ID, &d.Version, &d.Timestamp, &d.Category, &d.Lat, &d.Lon, &tags, &d.Geometry,
 		&d.DeletedAt, &d.AreaID, &d.Where)
@@ -435,9 +435,9 @@ func (r *Repository) SearchByWords(ctx context.Context, words, categories []stri
 		SELECT e.osm_type, e.osm_id, e.lat, e.lon, e.category, coalesce(e.tags->>'name', ''),
 			coalesce(e.tags->>'alt_name', ''), coalesce(e.tags->>'name:es', ''),
 			coalesce(array_to_string(z.names, ', '), '')
-		FROM osm_elements e`+whereJoin+`
+		FROM catalogue.osm_elements e`+whereJoin+`
 		WHERE e.deleted_at IS NULL AND e.category = ANY($1) AND (e.tags ? 'name' OR e.tags ? 'alt_name')
-			AND NOT EXISTS (SELECT 1 FROM places p WHERE p.osm_type = e.osm_type AND p.osm_id = e.osm_id)`+where+`
+			AND NOT EXISTS (SELECT 1 FROM catalogue.places p WHERE p.osm_type = e.osm_type AND p.osm_id = e.osm_id)`+where+`
 		LIMIT $2`, args...)
 	if err != nil {
 		return nil, err
@@ -460,7 +460,7 @@ func (r *Repository) SearchByWords(ctx context.Context, words, categories []stri
 // the territories that are not states (Gibraltar, Greenland…), by that code. For the boundaries of a country.
 func (r *Repository) CountryIDs(ctx context.Context) (map[string]int64, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT code, id FROM areas WHERE code ~ '^[A-Z]{2}$' AND (parent_id IS NULL OR kind = $1)
+		SELECT code, id FROM catalogue.areas WHERE code ~ '^[A-Z]{2}$' AND (parent_id IS NULL OR kind = $1)
 	`, areas.TerritoryKind)
 	if err != nil {
 		return nil, err
@@ -482,7 +482,7 @@ func (r *Repository) CountryIDs(ctx context.Context) (map[string]int64, error) {
 // boundary of Spain says in its `ref:ine`, and the autonomous cities (Ceuta and Melilla, which have no
 // municipality below them) by the INE code of their municipality (51001, 52001).
 func (r *Repository) MunicipalityIDs(ctx context.Context) (map[string]int64, error) {
-	rows, err := r.pool.Query(ctx, `SELECT code, id FROM areas WHERE kind = 'Municipio' AND code IS NOT NULL`)
+	rows, err := r.pool.Query(ctx, `SELECT code, id FROM catalogue.areas WHERE kind = 'Municipio' AND code IS NOT NULL`)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +500,7 @@ func (r *Repository) MunicipalityIDs(ctx context.Context) (map[string]int64, err
 		return nil, err
 	}
 	rows.Close()
-	cities, err := r.pool.Query(ctx, `SELECT code, id FROM areas WHERE kind = 'Ciudad autónoma' AND code IS NOT NULL`)
+	cities, err := r.pool.Query(ctx, `SELECT code, id FROM catalogue.areas WHERE kind = 'Ciudad autónoma' AND code IS NOT NULL`)
 	if err != nil {
 		return nil, err
 	}

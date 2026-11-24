@@ -148,9 +148,9 @@ tgt_id="$(normalize_host "${conn[tgt.host]}"):${conn[tgt.port]}/${conn[tgt.db]}"
 # Fail before touching anything if either database is unreachable or the
 # source doesn't look like an intranet database.
 pg tgt psql -qAt -c 'SELECT 1' </dev/null >/dev/null || die "cannot connect to the testing database"
-# The testing role empties and refills its own database, so it must own schema
-# public — true for the database owner on PostgreSQL 15+, where that schema
-# belongs to pg_database_owner.
+# The testing role empties and refills its own database (schemas catalogue, which it made
+# itself, and public), so it must own schema public — true for the database owner on
+# PostgreSQL 15+, where that schema belongs to pg_database_owner.
 owns_public=$(pg tgt psql -qAt -c "SELECT pg_has_role(current_user, nspowner, 'MEMBER') FROM pg_namespace WHERE nspname = 'public'" </dev/null)
 [[ $owns_public == t ]] \
   || die "the testing role (${conn[tgt.user]}) doesn't own schema public in ${conn[tgt.db]}; it must be the database owner on PostgreSQL 15 or later"
@@ -278,7 +278,8 @@ fi
 
 log "emptying the testing database"
 PGOPTIONS='-c client_min_messages=warning' \
-  pg tgt psql -q -v ON_ERROR_STOP=1 -c 'DROP SCHEMA IF EXISTS public CASCADE' -c 'CREATE SCHEMA public' </dev/null
+  pg tgt psql -q -v ON_ERROR_STOP=1 -c 'DROP SCHEMA IF EXISTS catalogue CASCADE' \
+  -c 'DROP SCHEMA IF EXISTS public CASCADE' -c 'CREATE SCHEMA public' </dev/null
 
 log "restoring a dump of production into it"
 pg src pg_dump --no-owner --no-acl | pg tgt psql -q -v ON_ERROR_STOP=1 --single-transaction >/dev/null

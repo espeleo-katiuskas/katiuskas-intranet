@@ -113,15 +113,15 @@ func TestCatalogueIsWiredToTheUsers(t *testing.T) {
 		return rec
 	}
 	var typeID int64
-	if err := tx.QueryRow(ctx, `SELECT id FROM place_types WHERE name = 'Cavidad'`).Scan(&typeID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.place_types WHERE name = 'Cavidad'`).Scan(&typeID); err != nil {
 		t.Fatal(err)
 	}
 	var subtypeID int64
-	if err := tx.QueryRow(ctx, `SELECT id FROM place_subtypes ORDER BY id LIMIT 1`).Scan(&subtypeID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.place_subtypes ORDER BY id LIMIT 1`).Scan(&subtypeID); err != nil {
 		t.Fatal(err)
 	}
 	var areaID int64
-	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE parent_id IS NULL ORDER BY id LIMIT 1`).Scan(&areaID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.areas WHERE parent_id IS NULL ORDER BY id LIMIT 1`).Scan(&areaID); err != nil {
 		t.Fatal(err)
 	}
 	created := call(http.MethodPost, "/api/v1/places", fmt.Sprintf(
@@ -158,7 +158,7 @@ func TestCatalogueIsWiredToTheUsers(t *testing.T) {
 	}
 	// The same for somebody who only added a zone.
 	zoner := testutil.InsertMember(t, tx)
-	if _, err := tx.Exec(ctx, `INSERT INTO areas (parent_id, kind, name, norm_name, created_by) VALUES ($1, 'Región', 'Zona de prueba', 'zona de prueba', $2)`, areaID, zoner.ID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO catalogue.areas (parent_id, kind, name, norm_name, created_by) VALUES ($1, 'Región', 'Zona de prueba', 'zona de prueba', $2)`, areaID, zoner.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := usersService.Delete(ctx, zoner.ID); !errors.Is(err, users.ErrHasReferences) {

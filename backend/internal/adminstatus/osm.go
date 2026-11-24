@@ -55,21 +55,21 @@ func (h *Handler) osmStatus(ctx context.Context) *osmStatus {
 		WITH last_ok AS (
 			SELECT DISTINCT ON (source) source, source_timestamp, finished_at, added, changed, deleted, unchanged,
 				unknown_zones, unknown_zone_codes
-			FROM osm_sync_runs WHERE status = 'ok' ORDER BY source, started_at DESC, id DESC
+			FROM catalogue.osm_sync_runs WHERE status = 'ok' ORDER BY source, started_at DESC, id DESC
 		), last_run AS (
 			SELECT DISTINCT ON (source) source, started_at, status, error
-			FROM osm_sync_runs ORDER BY source, started_at DESC, id DESC
+			FROM catalogue.osm_sync_runs ORDER BY source, started_at DESC, id DESC
 		), counts AS (
 			SELECT source, count(*) FILTER (WHERE deleted_at IS NULL) AS elements,
 				count(*) FILTER (WHERE deleted_at IS NOT NULL) AS gone
-			FROM osm_elements GROUP BY source
+			FROM catalogue.osm_elements GROUP BY source
 		)
 		SELECT s.source, coalesce(c.elements, 0), coalesce(c.gone, 0),
 			r.started_at, r.status, coalesce(r.error, ''),
 			o.finished_at, o.source_timestamp,
 			coalesce(o.added, 0), coalesce(o.changed, 0), coalesce(o.deleted, 0), coalesce(o.unchanged, 0),
 			coalesce(o.unknown_zones, 0), coalesce(o.unknown_zone_codes, '')
-		FROM (SELECT source FROM osm_sync_runs UNION SELECT source FROM osm_elements) s
+		FROM (SELECT source FROM catalogue.osm_sync_runs UNION SELECT source FROM catalogue.osm_elements) s
 		LEFT JOIN counts c ON c.source = s.source
 		LEFT JOIN last_run r ON r.source = s.source
 		LEFT JOIN last_ok o ON o.source = s.source
