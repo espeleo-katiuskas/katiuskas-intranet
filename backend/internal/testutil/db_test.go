@@ -86,7 +86,7 @@ CREATE INDEX idx_foo ON foo(id);
 // the thing they point at must not be stopped by them. Each one is named here, with its reason, and no other
 // may be.
 var setNull = map[string]bool{
-	"osm_elements.osm_elements_area_id_fkey": true,
+	"catalogue.osm_elements.osm_elements_area_id_fkey": true,
 }
 
 // One rule for every foreign key: ON DELETE RESTRICT. Nothing cascades and nothing is set to NULL,
