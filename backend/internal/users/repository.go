@@ -227,6 +227,25 @@ func (r *Repository) FindLoginForID(ctx context.Context, id int64) (string, erro
 	return login, err
 }
 
+// FindLoginsForIDs is FindLoginForID for many ids in one query; an id nobody has is left out.
+func (r *Repository) FindLoginsForIDs(ctx context.Context, ids []int64) (map[int64]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, login FROM users WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	logins := make(map[int64]string, len(ids))
+	for rows.Next() {
+		var id int64
+		var login string
+		if err := rows.Scan(&id, &login); err != nil {
+			return nil, err
+		}
+		logins[id] = login
+	}
+	return logins, rows.Err()
+}
+
 // FindIdentityForID is FindLoginForID plus the name, for what says who someone
 // is without loading everything about them: one light query.
 func (r *Repository) FindIdentityForID(ctx context.Context, id int64) (Identity, error) {

@@ -77,6 +77,7 @@ type env struct {
 	notifier *fakeNotifier
 	resolver testutil.FakeResolver
 	storage  *places.Storage
+	users    *users.Service
 	// who: two plain members, board and an admin.
 	member, other, board, admin person
 	// the ids of the seeded types (a via ferrata has a state, a hut has none), of the subtypes cueva and
@@ -100,8 +101,8 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	places.NewHandler(places.NewService(places.NewRepository(tx), storage), authenticator, usersService, notifier).RegisterRoutes(mux)
-	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage}
+	places.NewHandler(places.NewService(places.NewRepository(tx), storage, usersService), authenticator, usersService, notifier).RegisterRoutes(mux)
+	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage, users: usersService}
 	e.member = e.person("member")
 	e.other = e.person("member")
 	e.board = e.person("board")

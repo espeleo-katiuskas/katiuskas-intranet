@@ -77,6 +77,9 @@ type Area struct {
 	// CreatedBy is the login of whoever added the zone through the API; absent for the zones that the seeds
 	// load, and for those added before it was recorded.
 	CreatedBy string `json:"created_by,omitempty"`
+	// CreatedByID is who added it, as the repository knows it: the zones never read the table of
+	// users, and the Service turns it into CreatedBy.
+	CreatedByID *int64 `json:"-"`
 	// ChildCount and PlaceCount are the zones and the places directly below it, not in all its descendants.
 	ChildCount int `json:"child_count"`
 	PlaceCount int `json:"place_count"`

@@ -11,10 +11,47 @@ type Service struct {
 	repo       *Repository
 	boundaries Boundaries
 	geocoder   Geocoder
+	users      UserLookup
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, users UserLookup) *Service {
+	return &Service{repo: repo, users: users}
+}
+
+// named fills in the login of whoever added each zone (one query for all of them), taking the error of
+// the call that produced the zones so that a repository call can be returned through it.
+func (s *Service) named(ctx context.Context, list []Area, err error) ([]Area, error) {
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for _, a := range list {
+		if a.CreatedByID != nil {
+			ids = append(ids, *a.CreatedByID)
+		}
+	}
+	if len(ids) == 0 {
+		return list, nil
+	}
+	logins, err := s.users.LoginsForUserIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		if list[i].CreatedByID != nil {
+			list[i].CreatedBy = logins[*list[i].CreatedByID]
+		}
+	}
+	return list, nil
+}
+
+// namedOne is named for a single zone.
+func (s *Service) namedOne(ctx context.Context, a Area, err error) (Area, error) {
+	list, err := s.named(ctx, []Area{a}, err)
+	if err != nil {
+		return Area{}, err
+	}
+	return list[0], nil
 }
 
 // WithBoundaries gives the service a source to find the zone of a point; without one, Locate finds none.
@@ -84,6 +121,7 @@ func (s *Service) Locate(ctx context.Context, lat, lon float64) (*Area, error) {
 			return nil, err
 		}
 		a, err := s.repo.Get(ctx, id)
+		a, err = s.namedOne(ctx, a, err)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +142,7 @@ func (s *Service) Children(ctx context.Context, parentID *int64) ([]Area, error)
 			return nil, err
 		}
 	}
-	return list, nil
+	return s.named(ctx, list, nil)
 }
 
 // SearchLimit is how many zones a search gives at most, and how many by default.
@@ -122,10 +160,14 @@ func (s *Service) Search(ctx context.Context, text string, limit int) ([]Area, e
 	if limit <= 0 {
 		limit = DefaultSearchLimit
 	}
-	return s.repo.Search(ctx, normalized, min(limit, MaxSearchLimit))
+	list, err := s.repo.Search(ctx, normalized, min(limit, MaxSearchLimit))
+	return s.named(ctx, list, err)
 }
 
-func (s *Service) Get(ctx context.Context, id int64) (Area, error) { return s.repo.Get(ctx, id) }
+func (s *Service) Get(ctx context.Context, id int64) (Area, error) {
+	a, err := s.repo.Get(ctx, id)
+	return s.namedOne(ctx, a, err)
+}
 
 // cleanText checks a name and a kind (which may be blank, to be filled in) and normalizes the name.
 func cleanText(name, kind string) (string, string, string, error) {
@@ -191,7 +233,8 @@ func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string
 	if taken {
 		return Area{}, ErrDuplicate
 	}
-	return s.repo.Create(ctx, parentID, kind, name, normalized, createdBy)
+	a, err := s.repo.Create(ctx, parentID, kind, name, normalized, createdBy)
+	return s.namedOne(ctx, a, err)
 }
 
 // Update renames a zone and, if a kind is given, changes it; with move.Set it also puts it below another
@@ -229,7 +272,8 @@ func (s *Service) Update(ctx context.Context, id int64, name, kind string, move 
 	if taken {
 		return Area{}, ErrDuplicate
 	}
-	return s.repo.Update(ctx, id, kind, name, normalized, move)
+	a, err := s.repo.Update(ctx, id, kind, name, normalized, move)
+	return s.namedOne(ctx, a, err)
 }
 
 // Delete removes a zone that has no zones below it and no places (a country too, if it has none).

@@ -198,6 +198,12 @@ func (s *Service) LoginForUserID(ctx context.Context, id int64) (string, error) 
 	return s.repo.FindLoginForID(ctx, id)
 }
 
+// LoginsForUserIDs is LoginForUserID for many people in one query (the places name the authors of a
+// page of things with it). An id nobody has is left out of the answer.
+func (s *Service) LoginsForUserIDs(ctx context.Context, ids []int64) (map[int64]string, error) {
+	return s.repo.FindLoginsForIDs(ctx, ids)
+}
+
 // Delete refuses to remove the only remaining admin, for the same reason
 // roles.Service.Remove refuses to strip just their admin role: someone has
 // to be left who can manage users and roles.

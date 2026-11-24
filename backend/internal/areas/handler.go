@@ -12,9 +12,12 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
-// UserLookup translates a person's numeric id into their login, for the notices.
+// UserLookup translates a person's numeric id into their login, for the notices and for who added each
+// zone: the zones do not read the table of users.
 type UserLookup interface {
 	LoginForUserID(ctx context.Context, id int64) (string, error)
+	// LoginsForUserIDs gives the login of each id in one go; an id nobody has is left out.
+	LoginsForUserIDs(ctx context.Context, ids []int64) (map[int64]string, error)
 }
 
 type Handler struct {

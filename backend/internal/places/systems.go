@@ -92,12 +92,10 @@ func (r *Repository) ListSystems(ctx context.Context) ([]SystemListItem, error) 
 func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 	var s System
 	err := r.pool.QueryRow(ctx, `
-		SELECT s.id, s.name, s.description, cu.login, s.created_at, uu.login, s.updated_at,
+		SELECT s.id, s.name, s.description, s.created_by, s.created_at, s.updated_by, s.updated_at,
 			(SELECT count(*) FROM place_files f WHERE f.system_id = s.id)
 		FROM place_systems s
-		JOIN users cu ON cu.id = s.created_by
-		JOIN users uu ON uu.id = s.updated_by
-		WHERE s.id = $1`, id).Scan(&s.ID, &s.Name, &s.Description, &s.CreatedBy, &s.CreatedAt, &s.UpdatedBy,
+		WHERE s.id = $1`, id).Scan(&s.ID, &s.Name, &s.Description, &s.CreatedByID, &s.CreatedAt, &s.UpdatedByID,
 		&s.UpdatedAt, &s.FileCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return System{}, ErrSystemNotFound
@@ -342,7 +340,8 @@ func (s *Service) ListSystems(ctx context.Context) ([]SystemListItem, error) {
 }
 
 func (s *Service) GetSystem(ctx context.Context, id int64) (System, error) {
-	return s.repo.GetSystem(ctx, id)
+	sys, err := s.repo.GetSystem(ctx, id)
+	return s.nameSystem(ctx, sys, err)
 }
 
 func (s *Service) CreateSystem(ctx context.Context, userID int64, name string, description *string) (System, error) {
@@ -353,7 +352,8 @@ func (s *Service) CreateSystem(ctx context.Context, userID int64, name string, d
 	if err := s.freeSystemName(ctx, name, 0); err != nil {
 		return System{}, err
 	}
-	return s.repo.CreateSystem(ctx, userID, name, blankToNil(description))
+	sys, err := s.repo.CreateSystem(ctx, userID, name, blankToNil(description))
+	return s.nameSystem(ctx, sys, err)
 }
 
 func (s *Service) UpdateSystem(ctx context.Context, id, userID int64, name string, description *string) (System, error) {
@@ -369,7 +369,8 @@ func (s *Service) UpdateSystem(ctx context.Context, id, userID int64, name strin
 	if err := s.freeSystemName(ctx, name, id); err != nil {
 		return System{}, err
 	}
-	return s.repo.UpdateSystem(ctx, id, userID, name, blankToNil(description))
+	sys, err := s.repo.UpdateSystem(ctx, id, userID, name, blankToNil(description))
+	return s.nameSystem(ctx, sys, err)
 }
 
 // DeleteSystem removes a system with its files; its cavities stay.

@@ -1441,8 +1441,12 @@ for the files (migration `00063_place_files.sql`).
 
 - Everybody who can sign in reads, and creates and changes places and their points: there is no
   review.
-- The API says who and when (`created_by`, `updated_by` and `updated_at` in `Place`, which the
-  repository fills by joining `users`, so the handler needs no lookup for them).
+- The API says who and when (`created_by`, `updated_by` and `updated_at` in `Place`). The places
+  never read `users`: the repository keeps the ids of the authors (`Place.CreatedByID`,
+  `UpdatedByID`, `File.UploadedByID`, `System.CreatedByID`…, never in the JSON) and the `Service`
+  names them (`authors.go`) with `UserLookup.LoginsForUserIDs`, one query for all the people of a
+  response. The columns are still foreign keys to `users` for now (they keep a person with
+  authored places from being deleted: `ErrHasReferences`).
 - Only admin and board delete a place, and only admin manages the types.
 
 ### Partial edit
@@ -1835,7 +1839,8 @@ Any member adds a zone below another, except in Spain.
   `Service.Create` finds the country at the top of the parent's ancestors and compares it with the
   one whose code is `ES`. Those zones come from the INE's lists, loaded by migrations.
 - The zone keeps who added it (`created_by`, a user id; the API says the login, `Area.CreatedBy`),
-  which is empty for the seeded ones.
+  which is empty for the seeded ones. Like the places, the zones do not read `users`: the
+  repository gives `Area.CreatedByID` and `Service.named` turns it into the login.
 - The `kind` is the one most of its siblings have, unless it is given, and the first zone below
   another needs it said (400 `area_kind_required`).
 - Nothing else is checked, so a typo is possible: that is what an admin fixes.

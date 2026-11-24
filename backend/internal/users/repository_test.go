@@ -1362,3 +1362,26 @@ func TestFindActiveByEmailAndPhoneIgnoresALeadingPlus34(t *testing.T) {
 		}
 	}
 }
+
+// TestFindLoginsForIDs is the batch form of FindLoginForID: one query for many people, and an id that
+// nobody has is simply not in the answer.
+func TestFindLoginsForIDs(t *testing.T) {
+	tx := testutil.NewTx(t)
+	repo := users.NewRepository(tx)
+	ctx := context.Background()
+	a, err := repo.Create(ctx, users.CreateInput{FirstName: "Ana", LastName: "Uno", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := repo.Create(ctx, users.CreateInput{FirstName: "Beto", LastName: "Dos", Email: strPtr(testutil.UniqueEmail(t))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.FindLoginsForIDs(ctx, []int64{a.ID, b.ID, -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[a.ID] != a.Login || got[b.ID] != b.Login {
+		t.Errorf("got %v, want the logins of %d and %d only", got, a.ID, b.ID)
+	}
+}

@@ -33,13 +33,13 @@ func pgCode(err error) string {
 
 // areaSelect is a zone with how many zones are below it and how many places are in it.
 const areaSelect = `
-	SELECT a.id, a.parent_id, a.kind, a.name, a.code, coalesce(cu.login, ''),
+	SELECT a.id, a.parent_id, a.kind, a.name, a.code, a.created_by,
 		(SELECT count(*) FROM areas c WHERE c.parent_id = a.id),
 		(SELECT count(*) FROM places p WHERE p.area_id = a.id)
-	FROM areas a LEFT JOIN users cu ON cu.id = a.created_by`
+	FROM areas a`
 
 func scanArea(row pgx.Row, a *Area) error {
-	return row.Scan(&a.ID, &a.ParentID, &a.Kind, &a.Name, &a.Code, &a.CreatedBy, &a.ChildCount, &a.PlaceCount)
+	return row.Scan(&a.ID, &a.ParentID, &a.Kind, &a.Name, &a.Code, &a.CreatedByID, &a.ChildCount, &a.PlaceCount)
 }
 
 func (r *Repository) collect(rows pgx.Rows) ([]Area, error) {

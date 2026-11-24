@@ -326,7 +326,12 @@ Each step can be deployed alone and none makes anything public before the last o
    or `activities` (`activity_places` keeps the place id as a plain reference, and the "a place with
    activities is not deleted" check goes through an interface of the activities); `created_by` and
    the like stop being a key to a person and become an opaque reference the intranet translates to a
-   name. Existing migrations are never edited.
+   name. Existing migrations are never edited. *Done so far*: the code of `places` and `areas`
+   no longer joins `users`: the repositories give the ids of the authors and the services name them
+   through `UserLookup.LoginsForUserIDs`. *Left*: the foreign keys to `users` (dropping them lifts
+   the refusal to delete a person with authored places, `users.ErrHasReferences`, so something
+   in the intranet has to replace it first), the opaque subject instead of the user id, the
+   `activity_places` cut (`VisitedBy`, `Repository` queries over `activities`) and the schema.
 3. **A viewer and one place for the question.** A `Viewer` as an assertion (issuer, opaque subject,
    groups, expiry), an optional-authentication middleware next to `Protect`, the intranet as the
    first issuer (the assertion is made from the session that exists), and `CanSee(viewer, place,

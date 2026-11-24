@@ -13,10 +13,11 @@ import (
 type Service struct {
 	repo    *Repository
 	storage *Storage
+	users   UserLookup
 }
 
-func NewService(repo *Repository, storage *Storage) *Service {
-	return &Service{repo: repo, storage: storage}
+func NewService(repo *Repository, storage *Storage, users UserLookup) *Service {
+	return &Service{repo: repo, storage: storage, users: users}
 }
 
 // blankToNil trims a text and gives nil for a blank one, so that "" is never stored as if it were a value.
@@ -179,7 +180,8 @@ func (s *Service) VisitedBy(ctx context.Context, userID int64) ([]VisitedPlace, 
 }
 
 func (s *Service) GetPlace(ctx context.Context, id int64) (Place, error) {
-	return s.repo.GetPlace(ctx, id)
+	p, err := s.repo.GetPlace(ctx, id)
+	return s.namePlace(ctx, p, err)
 }
 
 func (s *Service) CreatePlace(ctx context.Context, userID int64, in Input) (Place, error) {
@@ -191,7 +193,8 @@ func (s *Service) CreatePlace(ctx context.Context, userID int64, in Input) (Plac
 	if err != nil {
 		return Place{}, err
 	}
-	return s.repo.CreatePlace(ctx, userID, t, in)
+	p, err := s.repo.CreatePlace(ctx, userID, t, in)
+	return s.namePlace(ctx, p, err)
 }
 
 func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (Place, error) {
@@ -203,7 +206,8 @@ func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (
 	if err != nil {
 		return Place{}, err
 	}
-	return s.repo.UpdatePlace(ctx, id, userID, t, in)
+	p, err := s.repo.UpdatePlace(ctx, id, userID, t, in)
+	return s.namePlace(ctx, p, err)
 }
 
 // patchAttempts is how many times a partial edit starts again when somebody saves the place between
@@ -236,7 +240,7 @@ func (s *Service) PatchPlace(ctx context.Context, id, userID int64, apply func(I
 		if errors.Is(err, ErrConcurrentUpdate) {
 			continue
 		}
-		return p, err
+		return s.namePlace(ctx, p, err)
 	}
 	return Place{}, ErrConcurrentUpdate
 }
@@ -258,19 +262,22 @@ func (s *Service) LinkOsm(ctx context.Context, id, userID int64, osmType string,
 	if osmType != "node" && osmType != "way" && osmType != "relation" || osmID <= 0 {
 		return Place{}, ErrUnknownOsmElement
 	}
-	return s.repo.SetOsm(ctx, id, userID, &osmType, &osmID)
+	p, err := s.repo.SetOsm(ctx, id, userID, &osmType, &osmID)
+	return s.namePlace(ctx, p, err)
 }
 
 // ReviewOsm says that a person has looked at what changed in the element of the place: from now on only what
 // changes after this is told.
 func (s *Service) ReviewOsm(ctx context.Context, id int64) (Place, error) {
-	return s.repo.ReviewOsm(ctx, id)
+	p, err := s.repo.ReviewOsm(ctx, id)
+	return s.namePlace(ctx, p, err)
 }
 
 // UnlinkOsm says the place is not an element of OpenStreetMap any more (the element stays in the mirror,
 // and is a candidate again).
 func (s *Service) UnlinkOsm(ctx context.Context, id, userID int64) (Place, error) {
-	return s.repo.SetOsm(ctx, id, userID, nil, nil)
+	p, err := s.repo.SetOsm(ctx, id, userID, nil, nil)
+	return s.namePlace(ctx, p, err)
 }
 
 // DeletePlace removes a place with its points and its files.

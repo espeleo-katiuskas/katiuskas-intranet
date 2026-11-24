@@ -14,12 +14,6 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
-// UserLookup translates a person's numeric id into their login: the API names people by login only.
-type UserLookup interface {
-	LoginForUserID(ctx context.Context, id int64) (string, error)
-	UserIDForLogin(ctx context.Context, login string) (int64, error)
-}
-
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator

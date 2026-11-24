@@ -150,12 +150,10 @@ func (r *Repository) ListPlaces(ctx context.Context) ([]ListItem, error) {
 func (r *Repository) GetPlace(ctx context.Context, id int64) (Place, error) {
 	var p Place
 	targets := append(p.ListItem.scanTargets(), &p.Access, &p.Description, &p.TechnicalSheet,
-		&p.OsmType, &p.OsmID, &p.CreatedBy, &p.CreatedAt, &p.UpdatedBy, &p.UpdatedAt)
+		&p.OsmType, &p.OsmID, &p.CreatedByID, &p.CreatedAt, &p.UpdatedByID, &p.UpdatedAt)
 	err := r.pool.QueryRow(ctx, `
 		SELECT`+listColumns+`, p.access, p.description, p.technical_sheet, p.osm_type, p.osm_id,
-			cu.login, p.created_at, uu.login, p.updated_at`+listFrom+`
-		JOIN users cu ON cu.id = p.created_by
-		JOIN users uu ON uu.id = p.updated_by
+			p.created_by, p.created_at, p.updated_by, p.updated_at`+listFrom+`
 		WHERE p.id = $1`, id).Scan(targets...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Place{}, ErrNotFound
