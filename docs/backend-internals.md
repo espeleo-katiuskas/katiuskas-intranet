@@ -1458,6 +1458,40 @@ for the files (migration `00063_place_files.sql`).
   `HasAuthored`) before `Delete`, and answers `ErrHasReferences` (409 `has_references`) as before.
   A new package that keeps people's ids without a key has to be added there.
 - Only admin and board delete a place, and only admin manages the types.
+- On top of the roles, every route asks the rules (see "The viewer and the rules" below).
+
+### The viewer and the rules
+
+`internal/access` decides who may see and change what, and knows nothing of the club. The first
+stage of opening the catalogue (`roadmap.md`) is this skeleton: nothing is public, and what a
+signed-in person can do is what it was.
+
+- A **`Viewer`** is an assertion made by an issuer: `Issuer`, `Subject`, `Groups` and an optional
+  `ExpiresAt`. Anonymous has no subject; a registered viewer has a subject and no groups; a member
+  has groups. An assertion with no subject or past its expiry says nothing (it is anonymous and in
+  no group, whatever it lists), so it fails closed.
+- The intranet is the first issuer (`auth.ViewerOf`): the subject is the person's id as a string
+  (a stand-in for an opaque identifier), and they are in the group `access.ClubGroup`
+  (`katiuskas`) when they hold a baseline role (admin, board or member), which is what `Protect`
+  already asks. `auth.ViewerFromContext` gives the viewer of a request: the session's person, or
+  anonymous.
+- `Authenticator.WithViewer` is the authentication of a route that answers anybody: no token is an
+  anonymous request, a good one is resolved like `RequireAuth` does, and a token that does not hold
+  is 401 (never anonymous, so a client whose session expired does not get the public answer by
+  mistake). It asks for no role: the handler must ask the rules. No route uses it yet.
+- An **audience** is `Public` (anybody), `Registered` (anybody with an account) or `Group(name)`; a
+  **part** is one of the classification of the roadmap (`PartPlace`, `PartMeasures`,
+  `PartCoordinates`, `PartPoints`, `PartAccess`, `PartSheet`, `PartFiles`, `PartAuthors`,
+  `PartActivities`); an **action** is `ActionSee` or `ActionWrite` (writing does not include
+  seeing). `Rules` is a list of `Rule{Part, Action, Audience}` and `Rules.Allows(viewer, now,
+  action, part)` is the only question: what no rule allows is denied. `ClubOnly()` is every part,
+  both actions, for the club's group.
+- The places handler asks it for every route (`Handler.gate`, inside `Protect`): a `GET` asks to see
+  `PartPlace` and anything else to write it, 403 `forbidden` when not. It has `ClubOnly()` unless
+  `WithRules` says otherwise, and so refuses nobody that `Protect` lets in. A test reads
+  `handler.go` and fails for a route registered without the gate. The parts that can be more closed
+  than the place (the coordinates first) are asked where the answer carries them, which is the next
+  stage: the rules per place, in the data.
 
 ### Partial edit
 

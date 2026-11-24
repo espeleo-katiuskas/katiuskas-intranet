@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/access"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
@@ -19,10 +21,38 @@ type Handler struct {
 	authenticator *auth.Authenticator
 	users         UserLookup
 	notifier      httpapi.MutationNotifier
+	// rules say who may see and change what; every place is for the club alone until somebody opens it.
+	rules access.Rules
 }
 
 func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier, rules: access.ClubOnly()}
+}
+
+// WithRules changes the rules the handler asks (the club alone by default).
+func (h *Handler) WithRules(rules access.Rules) *Handler {
+	h.rules = rules
+	return h
+}
+
+// gate is the question of every route: may this viewer do this to the place? A route that reads asks
+// for seeing it and one that changes anything for writing it, in both cases of the place as a whole
+// (access.PartPlace); the parts that can be more closed than the place are asked for where the
+// answer carries them. It runs inside Protect, so the viewer is a person of the session; with the
+// rules of the club, which is every person Protect lets in, it refuses nobody, and it is what refuses
+// them when the rules say otherwise (403 `forbidden`, as a missing role does).
+func (h *Handler) gate(method string, next http.HandlerFunc) http.HandlerFunc {
+	action := access.ActionWrite
+	if method == http.MethodGet || method == http.MethodHead {
+		action = access.ActionSee
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !h.rules.Allows(auth.ViewerFromContext(r.Context()), time.Now(), action, access.PartPlace) {
+			httpapi.WriteError(w, http.StatusForbidden, "forbidden", "insufficient permissions")
+			return
+		}
+		next(w, r)
+	}
 }
 
 // RegisterRoutes: everybody who can sign in reads the places and creates and changes them and their
@@ -32,51 +62,51 @@ func NewHandler(service *Service, authenticator *auth.Authenticator, users UserL
 // cookie, so that an image can be shown by the page.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	a := h.authenticator
-	mux.Handle("GET /api/v1/places/types", a.Protect(h.listTypes))
-	mux.Handle("POST /api/v1/places/types", a.Protect(h.createType, "admin"))
-	mux.Handle("PUT /api/v1/places/types/{id}", a.Protect(h.renameType, "admin"))
-	mux.Handle("DELETE /api/v1/places/types/{id}", a.Protect(h.deleteType, "admin"))
+	mux.Handle("GET /api/v1/places/types", a.Protect(h.gate("GET", h.listTypes)))
+	mux.Handle("POST /api/v1/places/types", a.Protect(h.gate("POST", h.createType), "admin"))
+	mux.Handle("PUT /api/v1/places/types/{id}", a.Protect(h.gate("PUT", h.renameType), "admin"))
+	mux.Handle("DELETE /api/v1/places/types/{id}", a.Protect(h.gate("DELETE", h.deleteType), "admin"))
 
-	mux.Handle("GET /api/v1/places/geologies", a.Protect(h.listGeologies))
-	mux.Handle("POST /api/v1/places/geologies", a.Protect(h.createGeology, "admin"))
-	mux.Handle("PUT /api/v1/places/geologies/{id}", a.Protect(h.renameGeology, "admin"))
-	mux.Handle("DELETE /api/v1/places/geologies/{id}", a.Protect(h.deleteGeology, "admin"))
+	mux.Handle("GET /api/v1/places/geologies", a.Protect(h.gate("GET", h.listGeologies)))
+	mux.Handle("POST /api/v1/places/geologies", a.Protect(h.gate("POST", h.createGeology), "admin"))
+	mux.Handle("PUT /api/v1/places/geologies/{id}", a.Protect(h.gate("PUT", h.renameGeology), "admin"))
+	mux.Handle("DELETE /api/v1/places/geologies/{id}", a.Protect(h.gate("DELETE", h.deleteGeology), "admin"))
 
-	mux.Handle("GET /api/v1/places/subtypes", a.Protect(h.listSubtypes))
-	mux.Handle("POST /api/v1/places/subtypes", a.Protect(h.createSubtype, "admin"))
-	mux.Handle("PUT /api/v1/places/subtypes/{id}", a.Protect(h.renameSubtype, "admin"))
-	mux.Handle("DELETE /api/v1/places/subtypes/{id}", a.Protect(h.deleteSubtype, "admin"))
+	mux.Handle("GET /api/v1/places/subtypes", a.Protect(h.gate("GET", h.listSubtypes)))
+	mux.Handle("POST /api/v1/places/subtypes", a.Protect(h.gate("POST", h.createSubtype), "admin"))
+	mux.Handle("PUT /api/v1/places/subtypes/{id}", a.Protect(h.gate("PUT", h.renameSubtype), "admin"))
+	mux.Handle("DELETE /api/v1/places/subtypes/{id}", a.Protect(h.gate("DELETE", h.deleteSubtype), "admin"))
 
-	mux.Handle("GET /api/v1/places", a.Protect(h.list))
-	mux.Handle("GET /api/v1/users/{login}/places", a.Protect(h.visitedBy))
-	mux.Handle("POST /api/v1/places", a.Protect(h.create))
-	mux.Handle("GET /api/v1/places/{id}", a.Protect(h.get))
-	mux.Handle("PUT /api/v1/places/{id}", a.Protect(h.update))
-	mux.Handle("PATCH /api/v1/places/{id}", a.Protect(h.patch))
-	mux.Handle("DELETE /api/v1/places/{id}", a.Protect(h.delete, "admin", "board"))
-	mux.Handle("PUT /api/v1/places/{id}/links/osm", a.Protect(h.linkOsm))
-	mux.Handle("DELETE /api/v1/places/{id}/links/osm", a.Protect(h.unlinkOsm))
-	mux.Handle("POST /api/v1/places/{id}/links/osm/review", a.Protect(h.reviewOsm))
+	mux.Handle("GET /api/v1/places", a.Protect(h.gate("GET", h.list)))
+	mux.Handle("GET /api/v1/users/{login}/places", a.Protect(h.gate("GET", h.visitedBy)))
+	mux.Handle("POST /api/v1/places", a.Protect(h.gate("POST", h.create)))
+	mux.Handle("GET /api/v1/places/{id}", a.Protect(h.gate("GET", h.get)))
+	mux.Handle("PUT /api/v1/places/{id}", a.Protect(h.gate("PUT", h.update)))
+	mux.Handle("PATCH /api/v1/places/{id}", a.Protect(h.gate("PATCH", h.patch)))
+	mux.Handle("DELETE /api/v1/places/{id}", a.Protect(h.gate("DELETE", h.delete), "admin", "board"))
+	mux.Handle("PUT /api/v1/places/{id}/links/osm", a.Protect(h.gate("PUT", h.linkOsm)))
+	mux.Handle("DELETE /api/v1/places/{id}/links/osm", a.Protect(h.gate("DELETE", h.unlinkOsm)))
+	mux.Handle("POST /api/v1/places/{id}/links/osm/review", a.Protect(h.gate("POST", h.reviewOsm)))
 
-	mux.Handle("POST /api/v1/places/{id}/points", a.Protect(h.addPoint))
-	mux.Handle("PUT /api/v1/places/{id}/points/{pointId}", a.Protect(h.updatePoint))
-	mux.Handle("DELETE /api/v1/places/{id}/points/{pointId}", a.Protect(h.deletePoint))
+	mux.Handle("POST /api/v1/places/{id}/points", a.Protect(h.gate("POST", h.addPoint)))
+	mux.Handle("PUT /api/v1/places/{id}/points/{pointId}", a.Protect(h.gate("PUT", h.updatePoint)))
+	mux.Handle("DELETE /api/v1/places/{id}/points/{pointId}", a.Protect(h.gate("DELETE", h.deletePoint)))
 
-	mux.Handle("GET /api/v1/places/{id}/files", a.Protect(h.listFiles(placeOwner)))
-	mux.Handle("POST /api/v1/places/{id}/files", a.Protect(h.addFile(placeOwner)))
-	mux.Handle("GET /api/v1/places/{id}/files/{fileId}/file", a.ProtectAllowingCookie(h.file(placeOwner)))
-	mux.Handle("DELETE /api/v1/places/{id}/files/{fileId}", a.Protect(h.deleteFile(placeOwner)))
+	mux.Handle("GET /api/v1/places/{id}/files", a.Protect(h.gate("GET", h.listFiles(placeOwner))))
+	mux.Handle("POST /api/v1/places/{id}/files", a.Protect(h.gate("POST", h.addFile(placeOwner))))
+	mux.Handle("GET /api/v1/places/{id}/files/{fileId}/file", a.ProtectAllowingCookie(h.gate("GET", h.file(placeOwner))))
+	mux.Handle("DELETE /api/v1/places/{id}/files/{fileId}", a.Protect(h.gate("DELETE", h.deleteFile(placeOwner))))
 
-	mux.Handle("GET /api/v1/systems", a.Protect(h.listSystems))
-	mux.Handle("POST /api/v1/systems", a.Protect(h.createSystem))
-	mux.Handle("GET /api/v1/systems/{id}", a.Protect(h.getSystem))
-	mux.Handle("PUT /api/v1/systems/{id}", a.Protect(h.updateSystem))
-	mux.Handle("DELETE /api/v1/systems/{id}", a.Protect(h.deleteSystem, "admin", "board"))
-	mux.Handle("PUT /api/v1/systems/{id}/places", a.Protect(h.setSystemPlaces))
-	mux.Handle("GET /api/v1/systems/{id}/files", a.Protect(h.listFiles(systemOwner)))
-	mux.Handle("POST /api/v1/systems/{id}/files", a.Protect(h.addFile(systemOwner)))
-	mux.Handle("GET /api/v1/systems/{id}/files/{fileId}/file", a.ProtectAllowingCookie(h.file(systemOwner)))
-	mux.Handle("DELETE /api/v1/systems/{id}/files/{fileId}", a.Protect(h.deleteFile(systemOwner)))
+	mux.Handle("GET /api/v1/systems", a.Protect(h.gate("GET", h.listSystems)))
+	mux.Handle("POST /api/v1/systems", a.Protect(h.gate("POST", h.createSystem)))
+	mux.Handle("GET /api/v1/systems/{id}", a.Protect(h.gate("GET", h.getSystem)))
+	mux.Handle("PUT /api/v1/systems/{id}", a.Protect(h.gate("PUT", h.updateSystem)))
+	mux.Handle("DELETE /api/v1/systems/{id}", a.Protect(h.gate("DELETE", h.deleteSystem), "admin", "board"))
+	mux.Handle("PUT /api/v1/systems/{id}/places", a.Protect(h.gate("PUT", h.setSystemPlaces)))
+	mux.Handle("GET /api/v1/systems/{id}/files", a.Protect(h.gate("GET", h.listFiles(systemOwner))))
+	mux.Handle("POST /api/v1/systems/{id}/files", a.Protect(h.gate("POST", h.addFile(systemOwner))))
+	mux.Handle("GET /api/v1/systems/{id}/files/{fileId}/file", a.ProtectAllowingCookie(h.gate("GET", h.file(systemOwner))))
+	mux.Handle("DELETE /api/v1/systems/{id}/files/{fileId}", a.Protect(h.gate("DELETE", h.deleteFile(systemOwner))))
 }
 
 func (h *Handler) actorLogin(ctx context.Context) string {

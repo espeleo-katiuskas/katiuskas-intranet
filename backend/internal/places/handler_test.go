@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
@@ -79,6 +80,9 @@ type env struct {
 	resolver testutil.FakeResolver
 	storage  *places.Storage
 	users    *users.Service
+	service  *places.Service
+	// authenticator is the one of the mux, for a second mux built with other rules.
+	authenticator *auth.Authenticator
 	// activities is the real activities service, which a catalogue built by hand needs (SetActivities).
 	activities *activities.Service
 	// who: two plain members, board and an admin.
@@ -109,7 +113,7 @@ func newEnv(t *testing.T) *env {
 	activitiesService := activities.NewService(activities.NewRepository(tx), licensesService, rolesService, placesService)
 	placesService.SetActivities(activitiesService)
 	places.NewHandler(placesService, authenticator, usersService, notifier).RegisterRoutes(mux)
-	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage, users: usersService, activities: activitiesService}
+	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage, users: usersService, activities: activitiesService, service: placesService, authenticator: authenticator}
 	e.member = e.person("member")
 	e.other = e.person("member")
 	e.board = e.person("board")

@@ -337,11 +337,15 @@ Each step can be deployed alone and none makes anything public before the last o
    their own, `catalogue` (migration `00081`), and the SQL names them with it. *Left*: the opaque
    subject instead of the user id, and the last foreign key that crosses the border, that of
    `activity_places` to `places`.
-3. **A viewer and one place for the question.** A `Viewer` as an assertion (issuer, opaque subject,
+3. **A viewer and one place for the question.** A `Viewer` as an assertion (issuer, subject,
    groups, expiry), an optional-authentication middleware next to `Protect`, the intranet as the
-   first issuer (the assertion is made from the session that exists), and `CanSee(viewer, place,
-   part)` backed by the table of rules, with tests that cross every viewer with every audience and
-   every part. Nothing is public yet: every place is for the club's group.
+   first issuer (the assertion is made from the session that exists) and one question every handler
+   asks, backed by rules, with tests that cross every viewer with every audience, part and action.
+   Nothing is public yet: every place is for the club's group. *Done*: `internal/access` (the
+   `Viewer`, the audiences, the parts and `Rules.Allows`), `auth.ViewerOf`,
+   `Authenticator.WithViewer`, and a gate on every route of the places that asks the rules
+   (`ClubOnly()` for now, so nothing changed for anybody). *Left*: the rules per place, in the data
+   (step 4), the parts asked where the answer carries them, and the opaque subject.
 4. **Visibility in the data**: the audience in `places` (and in the files and points that can
    differ), a migration that puts everything at the club's group, the choice in the forms of the
    place (admin and board only), a notice for each change, and the redaction applied to the list,
