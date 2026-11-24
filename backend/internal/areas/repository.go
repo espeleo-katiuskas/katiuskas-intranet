@@ -31,6 +31,14 @@ func pgCode(err error) string {
 	return ""
 }
 
+// HasAuthored says whether a person added a zone. created_by is a plain reference, not a foreign key
+// to the users, so this is what keeps them from being deleted (users.AuthorGuard).
+func (r *Repository) HasAuthored(ctx context.Context, userID int64) (bool, error) {
+	var has bool
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM areas WHERE created_by = $1)`, userID).Scan(&has)
+	return has, err
+}
+
 // areaSelect is a zone with how many zones are below it and how many places are in it.
 const areaSelect = `
 	SELECT a.id, a.parent_id, a.kind, a.name, a.code, a.created_by,

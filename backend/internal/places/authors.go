@@ -14,6 +14,11 @@ type UserLookup interface {
 	LoginsForUserIDs(ctx context.Context, ids []int64) (map[int64]string, error)
 }
 
+// HasAuthored says whether a person made anything in the catalogue of places (users.AuthorGuard).
+func (s *Service) HasAuthored(ctx context.Context, userID int64) (bool, error) {
+	return s.repo.HasAuthored(ctx, userID)
+}
+
 // loginsOf is the login of each of the people, one query for all. Zero ids are skipped.
 func (s *Service) loginsOf(ctx context.Context, ids ...int64) (map[int64]string, error) {
 	seen := make(map[int64]bool, len(ids))

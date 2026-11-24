@@ -27,6 +27,18 @@ func touchSystem(ctx context.Context, tx pgx.Tx, id, userID int64) error {
 	return err
 }
 
+// HasAuthored says whether a person created or changed a place or a system, or attached a file. The
+// columns that say it are plain references, not foreign keys to the users, so this is what keeps
+// a person with authored records from being deleted (users.AuthorGuard).
+func (r *Repository) HasAuthored(ctx context.Context, userID int64) (bool, error) {
+	var has bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM places WHERE created_by = $1 OR updated_by = $1)
+			OR EXISTS (SELECT 1 FROM place_systems WHERE created_by = $1 OR updated_by = $1)
+			OR EXISTS (SELECT 1 FROM place_files WHERE uploaded_by = $1)`, userID).Scan(&has)
+	return has, err
+}
+
 // SystemExists says whether a system has that id.
 func (r *Repository) SystemExists(ctx context.Context, id int64) (bool, error) {
 	var exists bool

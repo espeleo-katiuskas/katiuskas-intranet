@@ -2,17 +2,24 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/adminstatus"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/config"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/tokens"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 type alwaysHealthyPinger struct{}
@@ -78,6 +85,73 @@ func TestBuildRouterAssemblesAndAnswers(t *testing.T) {
 	}
 	if rec := get("/api/v1/does-not-exist"); rec.Code != http.StatusNotFound {
 		t.Errorf("GET an unknown route: expected 404, got %d", rec.Code)
+	}
+}
+
+// TestCatalogueIsWiredToTheUsers checks, through the real router, the two things the catalogue takes
+// from the users: it names the author of a place (a service made before the users would hold a nil
+// lookup and panic here), and a person who authored something cannot be deleted (there is no foreign
+// key to say it, so the users must have been told to ask the catalogue).
+func TestCatalogueIsWiredToTheUsers(t *testing.T) {
+	tx := testutil.NewTx(t)
+	router, _, usersService, _, err := buildRouter(testConfig(t), tx, alwaysHealthyPinger{}, telegram.NewSenderFromConfig("", ""), nil)
+	if err != nil {
+		t.Fatalf("buildRouter: %v", err)
+	}
+	ctx := context.Background()
+	member := testutil.InsertMember(t, tx)
+	token, err := tokens.NewService(tokens.NewRepository(tx), roles.NewService(roles.NewRepository(tx))).Issue(ctx, member.ID, time.Hour)
+	if err != nil {
+		t.Fatalf("issue a token: %v", err)
+	}
+	call := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+	var typeID int64
+	if err := tx.QueryRow(ctx, `SELECT id FROM place_types WHERE name = 'Cavidad'`).Scan(&typeID); err != nil {
+		t.Fatal(err)
+	}
+	var subtypeID int64
+	if err := tx.QueryRow(ctx, `SELECT id FROM place_subtypes ORDER BY id LIMIT 1`).Scan(&subtypeID); err != nil {
+		t.Fatal(err)
+	}
+	var areaID int64
+	if err := tx.QueryRow(ctx, `SELECT id FROM areas WHERE parent_id IS NULL ORDER BY id LIMIT 1`).Scan(&areaID); err != nil {
+		t.Fatal(err)
+	}
+	created := call(http.MethodPost, "/api/v1/places", fmt.Sprintf(
+		`{"type_id":%d,"subtype_id":%d,"area_id":%d,"name":"Cueva del cableado","lat":40.4,"lon":-3.7}`, typeID, subtypeID, areaID))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("POST /places: expected 201, got %d: %s", created.Code, created.Body.String())
+	}
+	var place struct {
+		ID        int64  `json:"id"`
+		CreatedBy string `json:"created_by"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &place); err != nil {
+		t.Fatal(err)
+	}
+	if place.CreatedBy != member.Login {
+		t.Errorf("created_by: got %q, want the login %q", place.CreatedBy, member.Login)
+	}
+	if rec := call(http.MethodGet, fmt.Sprintf("/api/v1/places/%d", place.ID), ""); rec.Code != http.StatusOK {
+		t.Errorf("GET the place: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := usersService.Delete(ctx, member.ID); !errors.Is(err, users.ErrHasReferences) {
+		t.Errorf("deleting the author of a place: expected ErrHasReferences, got %v", err)
+	}
+	// The same for somebody who only added a zone.
+	zoner := testutil.InsertMember(t, tx)
+	if _, err := tx.Exec(ctx, `INSERT INTO areas (parent_id, kind, name, norm_name, created_by) VALUES ($1, 'Región', 'Zona de prueba', 'zona de prueba', $2)`, areaID, zoner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := usersService.Delete(ctx, zoner.ID); !errors.Is(err, users.ErrHasReferences) {
+		t.Errorf("deleting the author of a zone: expected ErrHasReferences, got %v", err)
 	}
 }
 

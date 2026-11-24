@@ -14,6 +14,21 @@ type Service struct {
 	roles       *roles.Service
 	memberships *memberships.Service
 	licenses    *licenses.Service
+	// authorGuards are the packages that keep records made by a person without a foreign key to
+	// users (the catalogue), and so cannot make the database refuse a delete.
+	authorGuards []AuthorGuard
+}
+
+// AuthorGuard is a package whose records point at a person only by id, with no foreign key: it says
+// whether a person has made any, so that deleting them is refused as it would be with a key.
+type AuthorGuard interface {
+	HasAuthored(ctx context.Context, userID int64) (bool, error)
+}
+
+// WithAuthorGuards sets the packages Delete asks before it removes a person (see AuthorGuard).
+func (s *Service) WithAuthorGuards(guards ...AuthorGuard) *Service {
+	s.authorGuards = guards
+	return s
 }
 
 func NewService(repo *Repository, rolesService *roles.Service, membershipsService *memberships.Service, licensesService *licenses.Service) *Service {
@@ -214,6 +229,18 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	}
 	if isLastAdmin {
 		return roles.ErrLastAdmin
+	}
+	// What the database cannot refuse for us: the people who authored records that have no foreign
+	// key to them. Like the keys, this does not make the delete atomic, which at the club's scale
+	// does not matter: it is an administrator deleting a person.
+	for _, guard := range s.authorGuards {
+		authored, err := guard.HasAuthored(ctx, id)
+		if err != nil {
+			return err
+		}
+		if authored {
+			return ErrHasReferences
+		}
 	}
 	return s.repo.Delete(ctx, id)
 }

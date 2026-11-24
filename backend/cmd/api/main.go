@@ -260,13 +260,6 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		slog.Error("set up place files storage", "error", err, "root", cfg.PlaceFilesRoot)
 		return nil, nil, nil, nil, err
 	}
-	placesService := places.NewService(places.NewRepository(repoPool), placeFilesStorage, usersService)
-	areasService := areas.NewService(areas.NewRepository(repoPool), usersService)
-	// No address, or "off", turns the lookup of the zone of a point off (the tests, an offline host).
-	if cfg.NominatimURL != "" && cfg.NominatimURL != "off" {
-		nominatim := areas.NewNominatim(cfg.NominatimURL) // One client, so its requests are spaced together.
-		areasService.WithBoundaries(nominatim).WithGeocoder(nominatim)
-	}
 
 	licensesRepo := licenses.NewRepository(repoPool)
 	licensesService := licenses.NewService(licensesRepo, membershipsService)
@@ -274,6 +267,17 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	usersRepo := users.NewRepository(repoPool)
 	usersService = users.NewService(usersRepo, rolesService, membershipsService, licensesService)
 	membershipsService.SetNumberAssigner(usersService)
+
+	// The catalogue (places and zones) names its authors through the users, so it is made after them,
+	// and it tells the users whether a person has authored anything, which keeps them from being deleted.
+	placesService := places.NewService(places.NewRepository(repoPool), placeFilesStorage, usersService)
+	areasService := areas.NewService(areas.NewRepository(repoPool), usersService)
+	// No address, or "off", turns the lookup of the zone of a point off (the tests, an offline host).
+	if cfg.NominatimURL != "" && cfg.NominatimURL != "off" {
+		nominatim := areas.NewNominatim(cfg.NominatimURL) // One client, so its requests are spaced together.
+		areasService.WithBoundaries(nominatim).WithGeocoder(nominatim)
+	}
+	usersService.WithAuthorGuards(placesService, areasService)
 
 	tokensRepo := tokens.NewRepository(repoPool)
 	tokensService := tokens.NewService(tokensRepo, rolesService)

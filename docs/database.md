@@ -117,7 +117,9 @@ what it deletes, the code does it itself, explicitly, in the same transaction:
 - `DELETE /users/{login}`: only the person's sessions and sign-in links, which are ephemeral.
   Anything else that points at them (roles, membership periods, leaves, licenses, board positions,
   activities they led or are signed up to, dues, material movements, orders...) makes it refuse
-  (409 `has_references`) until it is removed.
+  (409 `has_references`) until it is removed. What the catalogue keeps without a foreign key
+  (places, systems and their files, zones: `created_by`, `updated_by`, `uploaded_by`) is checked in
+  Go, by `users.AuthorGuard`, with the same answer.
 - `DELETE /roles/{id}`: refused while somebody holds the role (409 `role_in_use`).
 - `DELETE /activities/{id}/participants/{login}`: refused while that person has guests in the
   activity (409 `has_guests`).
@@ -1121,7 +1123,8 @@ Notes on the columns:
 Constraints:
 
 - primary key (id)
-- `parent_id` → `areas(id)`, and not its own parent; `created_by` → `users(id)`
+- `parent_id` → `areas(id)`, and not its own parent; `created_by` is a person's id with no
+  foreign key (migration `00080`)
 - `kind` and `name` are not blank, `norm_name` is not empty, and `code` is not blank when there is
   one
 - unique `idx_areas_parent_name` on `(COALESCE(parent_id, 0), norm_name)`: below the same zone
@@ -1278,7 +1281,7 @@ Constraints:
 - `places_osm_both_or_none`: `osm_type` and `osm_id` are both there or both empty
 - unique `places_osm_element_key` on `(osm_type, osm_id)`: an element is at most one place
 - `places_osm_seen_needs_element`: there is a snapshot only if there is an element
-- `created_by` → `users(id)`, `updated_by` → `users(id)`
+- `created_by` and `updated_by` are people's ids with no foreign key (migration `00080`)
 - `name` is not blank
 - `state` is `open`, `permit_required`, `tourist` or `closed`, or empty
 - `state_for_types_with_state`: `has_state` is true exactly when there is a state
@@ -1348,7 +1351,7 @@ Constraints:
 
 - primary key (id)
 - `name` is not blank
-- `created_by`, `updated_by` → `users(id)`
+- `created_by`, `updated_by` are people's ids with no foreign key (migration `00080`)
 - unique `idx_place_systems_name` on `lower(name)`: names are unique ignoring case
 
 Rules outside the database: the name is at most 200 characters; `updated_by` and `updated_at` are
@@ -1372,7 +1375,7 @@ share a path although a place and a system may share a directory number.
 | `file_name` | text | not blank; the name of the uploaded file |
 | `content_type` | text | not blank; decided from the bytes |
 | `file_size` | integer | greater than 0 |
-| `uploaded_by` | bigint | → `users(id)` |
+| `uploaded_by` | bigint | a person's id, with no foreign key (migration `00080`) |
 | `created_at` | timestamptz | default `now()` |
 
 - `file_of_a_place_or_a_system`: exactly one of `place_id` and `system_id` is there
@@ -2181,3 +2184,7 @@ at the end; that database has to be recreated when a new migration appears.
 - `00079_areas_spanish_names.sql`: the 2 communities and 11 provinces whose INE name is in another
   language or in two ("Girona", "Araba/Álava", "Illes Balears") get their Spanish name ("Gerona",
   "Álava", "Islas Baleares")
+- `00080_catalogue_authors_without_keys.sql`: drops the foreign keys from `places`,
+  `place_systems`, `place_files` and `areas` to `users` (who created, changed or attached
+  something). `users.Service.Delete` now asks the catalogue (`users.AuthorGuard`) and refuses with
+  `has_references`, as the keys did

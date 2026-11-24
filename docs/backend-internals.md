@@ -1445,8 +1445,11 @@ for the files (migration `00063_place_files.sql`).
   never read `users`: the repository keeps the ids of the authors (`Place.CreatedByID`,
   `UpdatedByID`, `File.UploadedByID`, `System.CreatedByID`…, never in the JSON) and the `Service`
   names them (`authors.go`) with `UserLookup.LoginsForUserIDs`, one query for all the people of a
-  response. The columns are still foreign keys to `users` for now (they keep a person with
-  authored places from being deleted: `ErrHasReferences`).
+  response. The columns are plain references, with no foreign key (migration `00080`), so what the
+  key did, keep a person with authored places from being deleted, is done in Go: `users.Service`
+  asks the `users.AuthorGuard`s it was given (`WithAuthorGuards(places, areas)`, in `cmd/api`:
+  `HasAuthored`) before `Delete`, and answers `ErrHasReferences` (409 `has_references`) as before.
+  A new package that keeps people's ids without a key has to be added there.
 - Only admin and board delete a place, and only admin manages the types.
 
 ### Partial edit

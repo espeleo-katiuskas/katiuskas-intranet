@@ -18,6 +18,11 @@ func NewService(repo *Repository, users UserLookup) *Service {
 	return &Service{repo: repo, users: users}
 }
 
+// HasAuthored says whether a person added a zone (users.AuthorGuard).
+func (s *Service) HasAuthored(ctx context.Context, userID int64) (bool, error) {
+	return s.repo.HasAuthored(ctx, userID)
+}
+
 // named fills in the login of whoever added each zone (one query for all of them), taking the error of
 // the call that produced the zones so that a repository call can be returned through it.
 func (s *Service) named(ctx context.Context, list []Area, err error) ([]Area, error) {
