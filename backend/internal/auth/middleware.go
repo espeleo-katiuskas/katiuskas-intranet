@@ -14,7 +14,12 @@ type contextKey string
 const userContextKey contextKey = "auth.user"
 
 type AuthenticatedUser struct {
-	ID    int64
+	ID int64
+	// Subject is the opaque identifier of the person (users.subject), the one they have for whatever is
+	// not the intranet: it is what the viewer's subject is. It says nothing of how the intranet keeps people.
+	Subject string
+	// Login is the person's login, the name the catalogue shows as the author of what they do.
+	Login string
 	Roles []string
 	// ImpersonatedBy is set only when this session was minted by
 	// POST /users/{login}/impersonate: the id of the admin acting as

@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
@@ -1920,5 +1921,5 @@ func newPlaces(t *testing.T, tx pgx.Tx, usersService *users.Service) *places.Ser
 	if err != nil {
 		t.Fatal(err)
 	}
-	return places.NewService(places.NewRepository(tx), storage, usersService)
+	return places.NewService(places.NewRepository(tx), storage, accounts.NewService(accounts.NewRepository(tx)))
 }

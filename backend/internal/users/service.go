@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/access"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
@@ -19,10 +20,11 @@ type Service struct {
 	authorGuards []AuthorGuard
 }
 
-// AuthorGuard is a package whose records point at a person only by id, with no foreign key: it says
-// whether a person has made any, so that deleting them is refused as it would be with a key.
+// AuthorGuard is a package that keeps what a person made under an account of its own (the catalogue of
+// places): it says whether the person that the issuer knows by that subject has made any, so that
+// deleting them is refused as it would be with a foreign key.
 type AuthorGuard interface {
-	HasAuthored(ctx context.Context, userID int64) (bool, error)
+	HasAuthored(ctx context.Context, issuer, subject string) (bool, error)
 }
 
 // WithAuthorGuards sets the packages Delete asks before it removes a person (see AuthorGuard).
@@ -213,12 +215,6 @@ func (s *Service) LoginForUserID(ctx context.Context, id int64) (string, error) 
 	return s.repo.FindLoginForID(ctx, id)
 }
 
-// LoginsForUserIDs is LoginForUserID for many people in one query (the places name the authors of a
-// page of things with it). An id nobody has is left out of the answer.
-func (s *Service) LoginsForUserIDs(ctx context.Context, ids []int64) (map[int64]string, error) {
-	return s.repo.FindLoginsForIDs(ctx, ids)
-}
-
 // Delete refuses to remove the only remaining admin, for the same reason
 // roles.Service.Remove refuses to strip just their admin role: someone has
 // to be left who can manage users and roles.
@@ -233,8 +229,12 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	// What the database cannot refuse for us: the people who authored records that have no foreign
 	// key to them. Like the keys, this does not make the delete atomic, which at the club's scale
 	// does not matter: it is an administrator deleting a person.
+	subject, err := s.repo.FindSubjectForID(ctx, id)
+	if err != nil {
+		return err
+	}
 	for _, guard := range s.authorGuards {
-		authored, err := guard.HasAuthored(ctx, id)
+		authored, err := guard.HasAuthored(ctx, access.IntranetIssuer, subject)
 		if err != nil {
 			return err
 		}

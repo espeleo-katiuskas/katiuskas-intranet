@@ -18,7 +18,8 @@ Contents:
 - [Library](#library): `library_types`, `library_items`, `library_loans`, `library_comments`,
   `library_resources`
 - [Places](#places): `areas`, `place_types`, `place_subtypes`, `place_geologies`, `places`,
-  `place_points`, `place_systems`, `place_files`
+  `place_points`, `place_systems`, `place_files`, `catalogue.accounts`, `issuers`,
+  `account_identities`
 - [Material](#material): `material_items`, `material_types`, `material_type_attributes`,
   `material_attribute_options`, `material_movements`, `material_item_quantities`
 - [Distributions](#distributions): `distributions`, `distribution_options`, `distribution_articles`,
@@ -184,9 +185,14 @@ only required fields when creating one are first name, last name and date of bir
 | `last_login_ip` | text | yes |  |
 | `login` | text | no |  |
 | `telegram_chat_id` | bigint | yes |  |
+| `subject` | uuid | no | gen_random_uuid() |
 
 Notes on the columns:
 
+- `subject`: The person's opaque identifier (migration `00083`), random, unique and never changed.
+  It is what the intranet gives the catalogue of places to know a person by (the viewer of a session
+  has it as its subject), and says nothing of how the intranet stores people. The API never shows
+  it, and it is in no table of the catalogue but `account_identities`.
 - `national_id`: DNI. Unique if present.
 - `gender`: Optional. The age category is not stored: it is computed from `birth_date`.
 - `email`: One or several, separated by a space. An email cannot belong to two people (checked by
@@ -1132,8 +1138,8 @@ Notes on the columns:
 Constraints:
 
 - primary key (id)
-- `parent_id` → `areas(id)`, and not its own parent; `created_by` is a person's id with no
-  foreign key (migration `00080`)
+- `parent_id` → `areas(id)`, and not its own parent; `created_by` is an account of the
+  catalogue (`catalogue.accounts`), if the API added it
 - `kind` and `name` are not blank, `norm_name` is not empty, and `code` is not blank when there is
   one
 - unique `idx_areas_parent_name` on `(COALESCE(parent_id, 0), norm_name)`: below the same zone
@@ -1302,7 +1308,7 @@ Constraints:
 - `places_osm_both_or_none`: `osm_type` and `osm_id` are both there or both empty
 - unique `places_osm_element_key` on `(osm_type, osm_id)`: an element is at most one place
 - `places_osm_seen_needs_element`: there is a snapshot only if there is an element
-- `created_by` and `updated_by` are people's ids with no foreign key (migration `00080`)
+- `created_by` and `updated_by` → `catalogue.accounts(id)`: who added it and who last changed it
 - `name` is not blank
 - `state` is `open`, `permit_required`, `tourist` or `closed`, or empty
 - `state_for_types_with_state`: `has_state` is true exactly when there is a state
@@ -1376,7 +1382,7 @@ Constraints:
 
 - primary key (id)
 - `name` is not blank
-- `created_by`, `updated_by` are people's ids with no foreign key (migration `00080`)
+- `created_by`, `updated_by` → `catalogue.accounts(id)`
 - unique `idx_place_systems_name` on `lower(name)`: names are unique ignoring case
 
 Rules outside the database: the name is at most 200 characters; `updated_by` and `updated_at` are
@@ -1400,12 +1406,46 @@ share a path although a place and a system may share a directory number.
 | `file_name` | text | not blank; the name of the uploaded file |
 | `content_type` | text | not blank; decided from the bytes |
 | `file_size` | integer | greater than 0 |
-| `uploaded_by` | bigint | a person's id, with no foreign key (migration `00080`) |
+| `uploaded_by` | bigint | → `catalogue.accounts(id)` |
 | `created_at` | timestamptz | default `now()` |
 
 - `file_of_a_place_or_a_system`: exactly one of `place_id` and `system_id` is there
 - indexes `idx_place_files_place_id` on `(place_id)`, `idx_place_files_system_id` on `(system_id)`
   and `idx_place_files_uploaded_by` on `(uploaded_by)`
+
+### The accounts of the catalogue: `catalogue.accounts`, `issuers` and `account_identities`
+
+Who acts on the catalogue, kept apart from the intranet's table of people (migration `00083`): what
+the places, the systems, the files and the zones keep of who made something is the id of an account.
+
+`accounts`:
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` | bigint | no | identity |
+| `kind` | text | no |  |
+| `display_name` | text | no |  |
+| `created_at` | timestamptz | no | now() |
+
+- `kind`: `person` (shown as the author of a change) or `service` (a client of the catalogue: the
+  intranet of the club is the first).
+- `display_name`: How it is shown, not blank. For a person it is the name the issuer gave the last
+  time they acted (for the club, their login), so a person who changed it is shown by the new one
+  from then on, on everything they ever made.
+- primary key (id); `kind` is `person` or `service`
+
+`issuers`: the services that vouch for the people they send. `issuer` (text, the key: the intranet's
+is `katiuskas-intranet`) and `account_id` (→ `catalogue.accounts(id)`, unique: the service account
+that answers for it). An assertion of an issuer that is not here is refused (403).
+
+`account_identities`: how an issuer knows a person. `issuer` (→ `issuers`), `subject` (text: what
+the issuer calls the person, for the intranet `users.subject`, a uuid that says nothing of how it
+stores them) and `account_id` (→ `catalogue.accounts(id)`); the key is `(issuer, subject)`, and
+index `idx_account_identities_account_id`. The account of a person is made the first time they
+change something, never before (`accounts.Service.Ensure`). The subject is in no other table of the
+catalogue.
+
+All the foreign keys are `ON DELETE RESTRICT`, so an account that made something is never deleted.
 
 ### `osm_elements`
 
@@ -2218,3 +2258,9 @@ at the end; that database has to be recreated when a new migration appears.
   has to be able to create schemas in the database, as its owner can
 - `00082_place_visibility.sql`: `places.place_audience`, `location_audience`, `content_audience` and
   `protected`, with the checks that go with them; every place starts `club` everywhere
+- `00083_catalogue_accounts.sql`: `users.subject` (a random uuid for each person, the existing ones
+  included) and the accounts of the catalogue (`catalogue.accounts`, `issuers`,
+  `account_identities`), with the intranet of the club as the first service and an account for each
+  person who had made something. The columns that held ids of users (`created_by`, `updated_by`,
+  `uploaded_by` of the places, the systems, the files and the zones) now hold ids of accounts, with
+  a foreign key, converted in the same migration, which can be undone

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/places"
 )
 
@@ -83,10 +84,10 @@ func TestPatchDoesNotOverwriteAConcurrentEdit(t *testing.T) {
 	e := newEnv(t)
 	p := e.newPlace(e.cavidad, "Cueva del Agua", nil)
 	e.notifier.wait(t)
-	service := places.NewService(places.NewRepository(e.tx), e.storage, e.users)
+	service := places.NewService(places.NewRepository(e.tx), e.storage, accounts.NewService(accounts.NewRepository(e.tx)))
 	service.SetActivities(e.activities)
 	calls := 0
-	got, err := service.PatchPlace(context.Background(), p.ID, e.member.user.ID, func(in places.Input) (places.Input, error) {
+	got, err := service.PatchPlace(context.Background(), p.ID, e.accountOf(e.member), func(in places.Input) (places.Input, error) {
 		calls++
 		if calls == 1 {
 			// Another person saves the name while this edit is being worked out.

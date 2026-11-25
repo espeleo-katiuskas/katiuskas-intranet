@@ -156,7 +156,7 @@ func TestPlacePointsAtElement(t *testing.T) {
 			INSERT INTO catalogue.places (type_id, kind, subtype_id, has_state, state, name, area_id, lat, lon, created_by,
 				updated_by, osm_type, osm_id)
 			VALUES ($1, 'cave', $2, true, 'open', 'Una cueva', $3, 40.8, -3.6, $4, $4, $5, $6)
-		`, typeID, subtypeID, areaID, user.ID, osmType, osmID)
+		`, typeID, subtypeID, areaID, testutil.CatalogueAccount(t, tx, user), osmType, osmID)
 		if err != nil {
 			_ = sp.Rollback(ctx)
 			return err

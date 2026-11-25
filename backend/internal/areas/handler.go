@@ -12,12 +12,10 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
-// UserLookup translates a person's numeric id into their login, for the notices and for who added each
-// zone: the zones do not read the table of users.
+// UserLookup translates a person's numeric id into their login, for the notices. The zones do not read
+// the table of users: who added a zone is an account of the catalogue (internal/accounts).
 type UserLookup interface {
 	LoginForUserID(ctx context.Context, id int64) (string, error)
-	// LoginsForUserIDs gives the login of each id in one go; an id nobody has is left out.
-	LoginsForUserIDs(ctx context.Context, ids []int64) (map[int64]string, error)
 }
 
 type Handler struct {
@@ -197,7 +195,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current, _ := auth.UserFromContext(r.Context())
-	a, err := h.service.Create(r.Context(), body.ParentID, body.Name, body.Kind, current.HasAnyRole("admin"), current.ID)
+	// Whoever adds a zone is an account of the catalogue, made the first time they act.
+	account, err := h.service.AccountOf(r.Context(), auth.ViewerFromContext(r.Context()))
+	if err != nil {
+		httpapi.WriteError(w, http.StatusForbidden, "forbidden", "this person cannot act on the catalogue")
+		return
+	}
+	a, err := h.service.Create(r.Context(), body.ParentID, body.Name, body.Kind, current.HasAnyRole("admin"), account.ID)
 	if err != nil {
 		writeError(w, err, "could not add the zone")
 		return

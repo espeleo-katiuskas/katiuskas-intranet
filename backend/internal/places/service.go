@@ -6,17 +6,19 @@ import (
 	"math"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 )
 
 type Service struct {
 	repo       *Repository
 	storage    *Storage
-	users      UserLookup
+	accounts   *accounts.Service
 	activities ActivityLookup
 }
 
-func NewService(repo *Repository, storage *Storage, users UserLookup) *Service {
-	return &Service{repo: repo, storage: storage, users: users}
+func NewService(repo *Repository, storage *Storage, accounts *accounts.Service) *Service {
+	return &Service{repo: repo, storage: storage, accounts: accounts}
 }
 
 // blankToNil trims a text and gives nil for a blank one, so that "" is never stored as if it were a value.
@@ -186,10 +188,10 @@ func (s *Service) ListPlaces(ctx context.Context) ([]ListItem, error) {
 
 func (s *Service) GetPlace(ctx context.Context, id int64) (Place, error) {
 	p, err := s.repo.GetPlace(ctx, id)
-	return s.namePlace(ctx, p, err)
+	return s.decoratePlace(ctx, p, err)
 }
 
-func (s *Service) CreatePlace(ctx context.Context, userID int64, in Input) (Place, error) {
+func (s *Service) CreatePlace(ctx context.Context, by int64, in Input) (Place, error) {
 	in, err := clean(in)
 	if err != nil {
 		return Place{}, err
@@ -198,11 +200,11 @@ func (s *Service) CreatePlace(ctx context.Context, userID int64, in Input) (Plac
 	if err != nil {
 		return Place{}, err
 	}
-	p, err := s.repo.CreatePlace(ctx, userID, t, in)
-	return s.namePlace(ctx, p, err)
+	p, err := s.repo.CreatePlace(ctx, by, t, in)
+	return s.decoratePlace(ctx, p, err)
 }
 
-func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (Place, error) {
+func (s *Service) UpdatePlace(ctx context.Context, id int64, by int64, in Input) (Place, error) {
 	in, err := clean(in)
 	if err != nil {
 		return Place{}, err
@@ -211,20 +213,20 @@ func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (
 	if err != nil {
 		return Place{}, err
 	}
-	p, err := s.repo.UpdatePlace(ctx, id, userID, t, in)
-	return s.namePlace(ctx, p, err)
+	p, err := s.repo.UpdatePlace(ctx, id, by, t, in)
+	return s.decoratePlace(ctx, p, err)
 }
 
 // SetVisibility changes how open a place is. Who may is for the handler to say (admin and board).
-func (s *Service) SetVisibility(ctx context.Context, id, userID int64, v Visibility) (Place, error) {
+func (s *Service) SetVisibility(ctx context.Context, id int64, by int64, v Visibility) (Place, error) {
 	if err := v.Validate(); err != nil {
 		return Place{}, err
 	}
-	if err := s.repo.SetVisibility(ctx, id, userID, v); err != nil {
+	if err := s.repo.SetVisibility(ctx, id, by, v); err != nil {
 		return Place{}, err
 	}
 	p, err := s.repo.GetPlace(ctx, id)
-	return s.namePlace(ctx, p, err)
+	return s.decoratePlace(ctx, p, err)
 }
 
 // patchAttempts is how many times a partial edit starts again when somebody saves the place between
@@ -235,7 +237,7 @@ const patchAttempts = 3
 // gives its fields as an Input to `apply`, which changes what the edit says, and saves the result
 // with the same checks as a whole edit. It writes only if the place is as it was read (when it
 // is not, it starts again with the new one), so what somebody saved meanwhile is never overwritten.
-func (s *Service) PatchPlace(ctx context.Context, id, userID int64, apply func(Input) (Input, error)) (Place, error) {
+func (s *Service) PatchPlace(ctx context.Context, id int64, by int64, apply func(Input) (Input, error)) (Place, error) {
 	for range patchAttempts {
 		current, err := s.repo.GetPlace(ctx, id)
 		if err != nil {
@@ -253,11 +255,11 @@ func (s *Service) PatchPlace(ctx context.Context, id, userID int64, apply func(I
 		if err != nil {
 			return Place{}, err
 		}
-		p, err := s.repo.UpdatePlaceIfUnchanged(ctx, id, userID, t, in, current.UpdatedAt)
+		p, err := s.repo.UpdatePlaceIfUnchanged(ctx, id, by, t, in, current.UpdatedAt)
 		if errors.Is(err, ErrConcurrentUpdate) {
 			continue
 		}
-		return s.namePlace(ctx, p, err)
+		return s.decoratePlace(ctx, p, err)
 	}
 	return Place{}, ErrConcurrentUpdate
 }
@@ -274,27 +276,27 @@ func inputOf(p Place) Input {
 
 // LinkOsm makes a place the OpenStreetMap element of the mirror that osmType and osmID name, instead of
 // the one it was, if any. Only the pair and the place are read: nothing of the place is changed with it.
-func (s *Service) LinkOsm(ctx context.Context, id, userID int64, osmType string, osmID int64) (Place, error) {
+func (s *Service) LinkOsm(ctx context.Context, id int64, by int64, osmType string, osmID int64) (Place, error) {
 	osmType = strings.TrimSpace(osmType)
 	if osmType != "node" && osmType != "way" && osmType != "relation" || osmID <= 0 {
 		return Place{}, ErrUnknownOsmElement
 	}
-	p, err := s.repo.SetOsm(ctx, id, userID, &osmType, &osmID)
-	return s.namePlace(ctx, p, err)
+	p, err := s.repo.SetOsm(ctx, id, by, &osmType, &osmID)
+	return s.decoratePlace(ctx, p, err)
 }
 
 // ReviewOsm says that a person has looked at what changed in the element of the place: from now on only what
 // changes after this is told.
 func (s *Service) ReviewOsm(ctx context.Context, id int64) (Place, error) {
 	p, err := s.repo.ReviewOsm(ctx, id)
-	return s.namePlace(ctx, p, err)
+	return s.decoratePlace(ctx, p, err)
 }
 
 // UnlinkOsm says the place is not an element of OpenStreetMap any more (the element stays in the mirror,
 // and is a candidate again).
-func (s *Service) UnlinkOsm(ctx context.Context, id, userID int64) (Place, error) {
-	p, err := s.repo.SetOsm(ctx, id, userID, nil, nil)
-	return s.namePlace(ctx, p, err)
+func (s *Service) UnlinkOsm(ctx context.Context, id int64, by int64) (Place, error) {
+	p, err := s.repo.SetOsm(ctx, id, by, nil, nil)
+	return s.decoratePlace(ctx, p, err)
 }
 
 // DeletePlace removes a place with its points and its files.
@@ -334,28 +336,28 @@ func cleanPoint(in PointInput) (PointInput, error) {
 	return in, nil
 }
 
-func (s *Service) AddPoint(ctx context.Context, placeID, userID int64, in PointInput) (Point, error) {
+func (s *Service) AddPoint(ctx context.Context, placeID int64, by int64, in PointInput) (Point, error) {
 	in, err := cleanPoint(in)
 	if err != nil {
 		return Point{}, err
 	}
-	return s.repo.AddPoint(ctx, placeID, userID, in)
+	return s.repo.AddPoint(ctx, placeID, by, in)
 }
 
 func (s *Service) GetPoint(ctx context.Context, placeID, id int64) (Point, error) {
 	return s.repo.GetPoint(ctx, placeID, id)
 }
 
-func (s *Service) UpdatePoint(ctx context.Context, placeID, id, userID int64, in PointInput) (Point, error) {
+func (s *Service) UpdatePoint(ctx context.Context, placeID, id int64, by int64, in PointInput) (Point, error) {
 	in, err := cleanPoint(in)
 	if err != nil {
 		return Point{}, err
 	}
-	return s.repo.UpdatePoint(ctx, placeID, id, userID, in)
+	return s.repo.UpdatePoint(ctx, placeID, id, by, in)
 }
 
-func (s *Service) DeletePoint(ctx context.Context, placeID, id, userID int64) error {
-	return s.repo.DeletePoint(ctx, placeID, id, userID)
+func (s *Service) DeletePoint(ctx context.Context, placeID, id int64, by int64) error {
+	return s.repo.DeletePoint(ctx, placeID, id, by)
 }
 
 // ----- types -----

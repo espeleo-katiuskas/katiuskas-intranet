@@ -25,6 +25,15 @@ type Handler struct {
 	rules access.Rules
 }
 
+// UserLookup is what the handler needs of the people of the club: it is the intranet's side of the places.
+// The API names a person by login, so a route that names one (the places somebody visited) turns the
+// login into an id, and a notice names who acts by their login. The catalogue itself never reads people:
+// who did something is an account of its own (internal/accounts).
+type UserLookup interface {
+	LoginForUserID(ctx context.Context, id int64) (string, error)
+	UserIDForLogin(ctx context.Context, login string) (int64, error)
+}
+
 func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
 	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier, rules: access.ClubOnly()}
 }
@@ -47,9 +56,19 @@ func (h *Handler) gate(method string, next http.HandlerFunc) http.HandlerFunc {
 		action = access.ActionSee
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !h.rules.Allows(auth.ViewerFromContext(r.Context()), time.Now(), action, access.PartPlace) {
+		viewer := auth.ViewerFromContext(r.Context())
+		if !h.rules.Allows(viewer, time.Now(), action, access.PartPlace) {
 			httpapi.WriteError(w, http.StatusForbidden, "forbidden", "insufficient permissions")
 			return
+		}
+		if action == access.ActionWrite {
+			// Whoever changes something is an account of the catalogue, made the first time they act.
+			account, err := h.service.AccountOf(r.Context(), viewer)
+			if err != nil {
+				httpapi.WriteError(w, http.StatusForbidden, "forbidden", "this person cannot act on the catalogue")
+				return
+			}
+			r = r.WithContext(context.WithValue(r.Context(), accountContextKey{}, account.ID))
 		}
 		next(w, r)
 	}
@@ -119,9 +138,14 @@ func (h *Handler) actorLogin(ctx context.Context) string {
 	return login
 }
 
-func actorID(ctx context.Context) int64 {
-	current, _ := auth.UserFromContext(ctx)
-	return current.ID
+type accountContextKey struct{}
+
+// actorAccount is the id of the account of whoever is changing something: what the catalogue keeps of who
+// did it. A route that changes something has it from the gate, which makes the account the first time a
+// person acts.
+func actorAccount(ctx context.Context) int64 {
+	id, _ := ctx.Value(accountContextKey{}).(int64)
+	return id
 }
 
 func writeError(w http.ResponseWriter, err error, fallback string) {
@@ -503,7 +527,7 @@ func (h *Handler) setVisibility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	before, beforeErr := h.service.GetPlace(r.Context(), id)
-	p, err := h.service.SetVisibility(r.Context(), id, actorID(r.Context()), body)
+	p, err := h.service.SetVisibility(r.Context(), id, actorAccount(r.Context()), body)
 	if err != nil {
 		writeError(w, err, "could not change the visibility of the place")
 		return
@@ -554,7 +578,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	p, err := h.service.CreatePlace(r.Context(), actorID(r.Context()), body.input())
+	p, err := h.service.CreatePlace(r.Context(), actorAccount(r.Context()), body.input())
 	if err != nil {
 		writeError(w, err, "could not create the place")
 		return
@@ -577,7 +601,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	before, beforeErr := h.service.GetPlace(r.Context(), id)
 	in := body.input()
 	in.OsmType, in.OsmID = nil, nil // The element a place is does not change with an edit.
-	p, err := h.service.UpdatePlace(r.Context(), id, actorID(r.Context()), in)
+	p, err := h.service.UpdatePlace(r.Context(), id, actorAccount(r.Context()), in)
 	if err != nil {
 		writeError(w, err, "could not edit the place")
 		return
@@ -625,7 +649,7 @@ func (h *Handler) patch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	before, beforeErr := h.service.GetPlace(r.Context(), id)
-	p, err := h.service.PatchPlace(r.Context(), id, actorID(r.Context()), func(current Input) (Input, error) {
+	p, err := h.service.PatchPlace(r.Context(), id, actorAccount(r.Context()), func(current Input) (Input, error) {
 		// Decoding into a body that already has the place's values changes only what the JSON names.
 		body := placeBody(current)
 		if err := json.Unmarshal(raw, &body); err != nil {
@@ -668,7 +692,7 @@ func (h *Handler) linkOsm(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	p, err := h.service.LinkOsm(r.Context(), id, actorID(r.Context()), body.OsmType, body.OsmID)
+	p, err := h.service.LinkOsm(r.Context(), id, actorAccount(r.Context()), body.OsmType, body.OsmID)
 	if err != nil {
 		writeError(w, err, "could not link the place to the OpenStreetMap element")
 		return
@@ -699,7 +723,7 @@ func (h *Handler) unlinkOsm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p, err := h.service.UnlinkOsm(r.Context(), id, actorID(r.Context()))
+	p, err := h.service.UnlinkOsm(r.Context(), id, actorAccount(r.Context()))
 	if err != nil {
 		writeError(w, err, "could not unlink the place from OpenStreetMap")
 		return
@@ -758,7 +782,7 @@ func (h *Handler) addPoint(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	pt, err := h.service.AddPoint(r.Context(), placeID, actorID(r.Context()), body.input())
+	pt, err := h.service.AddPoint(r.Context(), placeID, actorAccount(r.Context()), body.input())
 	if err != nil {
 		writeError(w, err, "could not add the point")
 		return
@@ -784,7 +808,7 @@ func (h *Handler) updatePoint(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	pt, err := h.service.UpdatePoint(r.Context(), placeID, id, actorID(r.Context()), body.input())
+	pt, err := h.service.UpdatePoint(r.Context(), placeID, id, actorAccount(r.Context()), body.input())
 	if err != nil {
 		writeError(w, err, "could not edit the point")
 		return
@@ -807,7 +831,7 @@ func (h *Handler) deletePoint(w http.ResponseWriter, r *http.Request) {
 	}
 	// Read before deleting, so the notice can still name it.
 	pt, getErr := h.service.GetPoint(r.Context(), placeID, id)
-	if err := h.service.DeletePoint(r.Context(), placeID, id, actorID(r.Context())); err != nil {
+	if err := h.service.DeletePoint(r.Context(), placeID, id, actorAccount(r.Context())); err != nil {
 		writeError(w, err, "could not delete the point")
 		return
 	}

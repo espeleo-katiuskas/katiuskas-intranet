@@ -343,17 +343,21 @@ Each step can be deployed alone and none makes anything public before the last o
    or `activities` (`activity_places` keeps the place id as a plain reference, and the "a place with
    activities is not deleted" check goes through an interface of the activities); `created_by` and
    the like stop being a key to a person and become an opaque reference the intranet translates to a
-   name. Existing migrations are never edited. *Done so far*: the code of `places` and `areas`
-   no longer joins `users` (the repositories give the ids of the authors and the services name
-   them through `UserLookup.LoginsForUserIDs`), their columns have no foreign key to `users`
-   (migration `00080`) and `users.Service.Delete` asks the catalogue instead (`AuthorGuard`).
-   The code of `places` no longer reads `activities` nor the other way round: they refer to each
-   other by id through `places.ActivityLookup` and `activities.PlaceLookup`, with the types they
-   exchange in `internal/placelinks`; `activity_places` belongs to the activities, and the foreign
-   key to `places` is kept for now as a backstop. The tables of the catalogue are in a schema of
-   their own, `catalogue` (migration `00081`), and the SQL names them with it. *Left*: the opaque
-   subject instead of the user id, and the last foreign key that crosses the border, that of
-   `activity_places` to `places`.
+   name. Existing migrations are never edited. *Done so far*: the code of `places` and `areas` no
+   longer joins `users`, their columns have no foreign key to `users` (migration `00080`) and
+   `users.Service.Delete` asks the catalogue instead (`AuthorGuard`). The catalogue has accounts of
+   its own (`internal/accounts`, migration `00083`): what it keeps of who made something is the id
+   of an account, a foreign key with a meaning inside the catalogue; the intranet of the club is the
+   first service (an issuer) and each person who acts has a person account, linked to the identity
+   the intranet knows them by (a random `users.subject`) and made the first time they change
+   something. So the catalogue holds no number of the intranet's, and a client other than the
+   intranet only needs to be registered. The code of `places` no longer reads `activities` nor the
+   other way round: they refer to each other by id through `places.ActivityLookup` and
+   `activities.PlaceLookup`, with the types they exchange in `internal/placelinks`;
+   `activity_places` belongs to the activities, and the foreign key to `places` is kept for now as a
+   backstop. The tables of the catalogue are in a schema of their own, `catalogue` (migration
+   `00081`), and the SQL names them with it. *Left*: the last foreign key that crosses the border,
+   that of `activity_places` to `places`.
 3. **A viewer and one place for the question.** A `Viewer` as an assertion (issuer, subject,
    groups, expiry), an optional-authentication middleware next to `Protect`, the intranet as the
    first issuer (the assertion is made from the session that exists) and one question every handler
@@ -362,7 +366,8 @@ Each step can be deployed alone and none makes anything public before the last o
    `Viewer`, the audiences, the parts and `Rules.Allows`), `auth.ViewerOf`,
    `Authenticator.WithViewer`, and a gate on every route of the places that asks the rules
    (`ClubOnly()` for now, so nothing changed for anybody). *Left*: the rules per place, in the data
-   (step 4), the parts asked where the answer carries them, and the opaque subject.
+   (step 4), and the parts asked where the answer carries them. The subject of the viewer is the
+   person's opaque one, no longer their id, and the catalogue gives them an account of its own.
 4. **Visibility in the data**: the audiences in `places` (three levels and a lock), a migration that
    puts everything at the club, the choice in the place's page (admin and board only), a notice for
    each change, and the redaction of what a viewer may not see. *Done*: migration `00082`, `PUT

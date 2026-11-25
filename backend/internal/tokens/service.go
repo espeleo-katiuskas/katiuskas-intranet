@@ -69,7 +69,7 @@ func (s *Service) Authenticate(ctx context.Context, rawToken, ip, userAgent stri
 	if err != nil {
 		return auth.AuthenticatedUser{}, err
 	}
-	user := auth.AuthenticatedUser{ID: session.UserID, Roles: roleNames, RealRoles: roleNames, ImpersonatedBy: session.ImpersonatedBy}
+	user := auth.AuthenticatedUser{ID: session.UserID, Subject: session.Subject, Login: session.Login, Roles: roleNames, RealRoles: roleNames, ImpersonatedBy: session.ImpersonatedBy}
 	// An admin who asked to see the intranet with other roles acts with those while it lasts.
 	if len(session.RoleOverride) > 0 {
 		user.Roles = session.RoleOverride

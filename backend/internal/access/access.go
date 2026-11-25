@@ -10,8 +10,12 @@ package access
 
 import "time"
 
-// ClubGroup is the group of the members of the club, the first group of the catalogue.
-const ClubGroup = "katiuskas"
+// ClubGroup is the group of the members of the club, the first group of the catalogue, and
+// IntranetIssuer the issuer that vouches for them: the intranet of the club, the first client.
+const (
+	ClubGroup      = "katiuskas"
+	IntranetIssuer = "katiuskas-intranet"
+)
 
 // Viewer is who is asking: an assertion made by an issuer (the intranet signs people in and says who
 // they are), not a row of a table of people. An anonymous viewer has no subject; a registered one has a
@@ -21,6 +25,9 @@ type Viewer struct {
 	// never reads anything of the person from the subject: it is a name, nothing else.
 	Issuer  string
 	Subject string
+	// Name is how the issuer calls the person, which the catalogue shows as the author of a change. The
+	// issuer may change it, and the catalogue keeps the last one it was given.
+	Name string
 	// Groups are the groups the viewer belongs to.
 	Groups []string
 	// ExpiresAt is when the assertion stops being true; the zero value means it does not expire (a

@@ -230,16 +230,13 @@ type Place struct {
 	OsmChanges []OsmChange `json:"osm_changes,omitempty"`
 	// AreaPath is the zone and the ones it is in, the country first, each with its kind.
 	AreaPath []AreaRef `json:"area_path"`
-	// CreatedBy and UpdatedBy are logins (the last person who changed the place or its points). The
-	// repository only knows the ids of those people (CreatedByID, UpdatedByID: the places never read
-	// the table of users); the Service turns them into logins.
-	CreatedBy   string    `json:"created_by"`
-	CreatedByID int64     `json:"-"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedBy   string    `json:"updated_by"`
-	UpdatedByID int64     `json:"-"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Points      []Point   `json:"points"`
+	// CreatedBy and UpdatedBy are the names of the accounts of who added the place and of who last
+	// changed it or its points (accounts.Account.DisplayName: for a person of the club, their login).
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedBy string    `json:"updated_by"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Points    []Point   `json:"points"`
 	// FileCount is how many files are attached to it (GET /places/{id}/files lists them).
 	FileCount int `json:"file_count"`
 }
@@ -319,9 +316,9 @@ type File struct {
 	FileName    string    `json:"file_name"`
 	ContentType string    `json:"content_type"`
 	FileSize    int64     `json:"file_size"`
-	UploadedBy  string    `json:"uploaded_by"` // a login, from UploadedByID (see Place.CreatedBy)
+	UploadedBy  string    `json:"uploaded_by"` // the name of the account of who attached it
 	CreatedAt   time.Time `json:"created_at"`
-	// UploadedByID is who attached it, for the Service to turn into UploadedBy.
+	// UploadedByID is the account of who attached it, to say whether somebody may remove it.
 	UploadedByID int64 `json:"-"`
 }
 
@@ -360,13 +357,12 @@ type System struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
-	// CreatedBy and UpdatedBy are logins (the last person who changed the system, its cavities or its files).
-	CreatedBy   string    `json:"created_by"`
-	CreatedByID int64     `json:"-"` // see Place.CreatedBy
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedBy   string    `json:"updated_by"`
-	UpdatedByID int64     `json:"-"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	// CreatedBy and UpdatedBy are the names of the accounts of who added the system and of who last changed
+	// it, its cavities or its files (see Place.CreatedBy).
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedBy string    `json:"updated_by"`
+	UpdatedAt time.Time `json:"updated_at"`
 	// FileCount is how many files are attached to it (GET /systems/{id}/files lists them).
 	FileCount int `json:"file_count"`
 	// Places are its cavities, by name, with everything about each.

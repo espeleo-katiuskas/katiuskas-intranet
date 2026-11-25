@@ -22,20 +22,18 @@ func lockSystem(ctx context.Context, tx pgx.Tx, id int64) error {
 }
 
 // touchSystem records who changed a system last, and when.
-func touchSystem(ctx context.Context, tx pgx.Tx, id, userID int64) error {
-	_, err := tx.Exec(ctx, `UPDATE catalogue.place_systems SET updated_by = $2, updated_at = now() WHERE id = $1`, id, userID)
+func touchSystem(ctx context.Context, tx pgx.Tx, id int64, by int64) error {
+	_, err := tx.Exec(ctx, `UPDATE catalogue.place_systems SET updated_by = $2, updated_at = now() WHERE id = $1`, id, by)
 	return err
 }
 
-// HasAuthored says whether a person created or changed a place or a system, or attached a file. The
-// columns that say it are plain references, not foreign keys to the users, so this is what keeps
-// a person with authored records from being deleted (users.AuthorGuard).
-func (r *Repository) HasAuthored(ctx context.Context, userID int64) (bool, error) {
+// HasAuthored says whether an account created or changed a place or a system, or attached a file.
+func (r *Repository) HasAuthored(ctx context.Context, by int64) (bool, error) {
 	var has bool
 	err := r.pool.QueryRow(ctx, `
 		SELECT EXISTS (SELECT 1 FROM catalogue.places WHERE created_by = $1 OR updated_by = $1)
 			OR EXISTS (SELECT 1 FROM catalogue.place_systems WHERE created_by = $1 OR updated_by = $1)
-			OR EXISTS (SELECT 1 FROM catalogue.place_files WHERE uploaded_by = $1)`, userID).Scan(&has)
+			OR EXISTS (SELECT 1 FROM catalogue.place_files WHERE uploaded_by = $1)`, by).Scan(&has)
 	return has, err
 }
 
@@ -104,10 +102,12 @@ func (r *Repository) ListSystems(ctx context.Context) ([]SystemListItem, error) 
 func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 	var s System
 	err := r.pool.QueryRow(ctx, `
-		SELECT s.id, s.name, s.description, s.created_by, s.created_at, s.updated_by, s.updated_at,
+		SELECT s.id, s.name, s.description, cu.display_name, s.created_at, uu.display_name, s.updated_at,
 			(SELECT count(*) FROM catalogue.place_files f WHERE f.system_id = s.id)
 		FROM catalogue.place_systems s
-		WHERE s.id = $1`, id).Scan(&s.ID, &s.Name, &s.Description, &s.CreatedByID, &s.CreatedAt, &s.UpdatedByID,
+		JOIN catalogue.accounts cu ON cu.id = s.created_by
+		JOIN catalogue.accounts uu ON uu.id = s.updated_by
+		WHERE s.id = $1`, id).Scan(&s.ID, &s.Name, &s.Description, &s.CreatedBy, &s.CreatedAt, &s.UpdatedBy,
 		&s.UpdatedAt, &s.FileCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return System{}, ErrSystemNotFound
@@ -187,11 +187,11 @@ func (r *Repository) GetSystem(ctx context.Context, id int64) (System, error) {
 	return s, nil
 }
 
-func (r *Repository) CreateSystem(ctx context.Context, userID int64, name string, description *string) (System, error) {
+func (r *Repository) CreateSystem(ctx context.Context, by int64, name string, description *string) (System, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO catalogue.place_systems (name, description, created_by, updated_by) VALUES ($1, $2, $3, $3) RETURNING id
-	`, name, description, userID).Scan(&id)
+	`, name, description, by).Scan(&id)
 	if isUniqueViolation(err) {
 		return System{}, ErrDuplicateSystem
 	}
@@ -202,10 +202,10 @@ func (r *Repository) CreateSystem(ctx context.Context, userID int64, name string
 }
 
 // UpdateSystem replaces the name and the description of a system, and who changed it and when.
-func (r *Repository) UpdateSystem(ctx context.Context, id, userID int64, name string, description *string) (System, error) {
+func (r *Repository) UpdateSystem(ctx context.Context, id int64, by int64, name string, description *string) (System, error) {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE catalogue.place_systems SET name = $2, description = $3, updated_by = $4, updated_at = now() WHERE id = $1
-	`, id, name, description, userID)
+	`, id, name, description, by)
 	if isUniqueViolation(err) {
 		return System{}, ErrDuplicateSystem
 	}
@@ -282,7 +282,7 @@ func systemPlaceRefs(ctx context.Context, q interface {
 // that are no longer there are left in no system, and the new ones leave the system they were in (a
 // cavity is in one). It answers with the cavities as they were and as they are, to tell what changed.
 // A place that is not there is ErrUnknownPlace and one that is not a cavity, ErrNotACavity.
-func (r *Repository) SetSystemPlaces(ctx context.Context, id, userID int64, placeIDs []int64) (before, after []SystemPlaceRef, err error) {
+func (r *Repository) SetSystemPlaces(ctx context.Context, id int64, by int64, placeIDs []int64) (before, after []SystemPlaceRef, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -312,7 +312,7 @@ func (r *Repository) SetSystemPlaces(ctx context.Context, id, userID int64, plac
 	if _, err := tx.Exec(ctx, `UPDATE catalogue.places SET system_id = $1 WHERE id = ANY($2) AND system_id IS DISTINCT FROM $1`, id, placeIDs); err != nil {
 		return nil, nil, err
 	}
-	if err := touchSystem(ctx, tx, id, userID); err != nil {
+	if err := touchSystem(ctx, tx, id, by); err != nil {
 		return nil, nil, err
 	}
 	if after, err = systemPlaceRefs(ctx, tx, id); err != nil {
@@ -353,10 +353,10 @@ func (s *Service) ListSystems(ctx context.Context) ([]SystemListItem, error) {
 
 func (s *Service) GetSystem(ctx context.Context, id int64) (System, error) {
 	sys, err := s.repo.GetSystem(ctx, id)
-	return s.nameSystem(ctx, sys, err)
+	return s.decorateSystem(ctx, sys, err)
 }
 
-func (s *Service) CreateSystem(ctx context.Context, userID int64, name string, description *string) (System, error) {
+func (s *Service) CreateSystem(ctx context.Context, by int64, name string, description *string) (System, error) {
 	name, err := cleanSystemName(name)
 	if err != nil {
 		return System{}, err
@@ -364,11 +364,11 @@ func (s *Service) CreateSystem(ctx context.Context, userID int64, name string, d
 	if err := s.freeSystemName(ctx, name, 0); err != nil {
 		return System{}, err
 	}
-	sys, err := s.repo.CreateSystem(ctx, userID, name, blankToNil(description))
-	return s.nameSystem(ctx, sys, err)
+	sys, err := s.repo.CreateSystem(ctx, by, name, blankToNil(description))
+	return s.decorateSystem(ctx, sys, err)
 }
 
-func (s *Service) UpdateSystem(ctx context.Context, id, userID int64, name string, description *string) (System, error) {
+func (s *Service) UpdateSystem(ctx context.Context, id int64, by int64, name string, description *string) (System, error) {
 	name, err := cleanSystemName(name)
 	if err != nil {
 		return System{}, err
@@ -381,8 +381,8 @@ func (s *Service) UpdateSystem(ctx context.Context, id, userID int64, name strin
 	if err := s.freeSystemName(ctx, name, id); err != nil {
 		return System{}, err
 	}
-	sys, err := s.repo.UpdateSystem(ctx, id, userID, name, blankToNil(description))
-	return s.nameSystem(ctx, sys, err)
+	sys, err := s.repo.UpdateSystem(ctx, id, by, name, blankToNil(description))
+	return s.decorateSystem(ctx, sys, err)
 }
 
 // DeleteSystem removes a system with its files; its cavities stay.
@@ -398,7 +398,7 @@ func (s *Service) DeleteSystem(ctx context.Context, id int64) error {
 }
 
 // SetSystemPlaces makes the cavities of a system exactly the given ones (repeated ids count once).
-func (s *Service) SetSystemPlaces(ctx context.Context, id, userID int64, placeIDs []int64) (before, after []SystemPlaceRef, err error) {
+func (s *Service) SetSystemPlaces(ctx context.Context, id int64, by int64, placeIDs []int64) (before, after []SystemPlaceRef, err error) {
 	seen := map[int64]bool{}
 	clean := make([]int64, 0, len(placeIDs))
 	for _, placeID := range placeIDs {
@@ -407,5 +407,5 @@ func (s *Service) SetSystemPlaces(ctx context.Context, id, userID int64, placeID
 			clean = append(clean, placeID)
 		}
 	}
-	return s.repo.SetSystemPlaces(ctx, id, userID, clean)
+	return s.repo.SetSystemPlaces(ctx, id, by, clean)
 }

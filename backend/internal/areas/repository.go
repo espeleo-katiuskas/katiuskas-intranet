@@ -31,23 +31,22 @@ func pgCode(err error) string {
 	return ""
 }
 
-// HasAuthored says whether a person added a zone. created_by is a plain reference, not a foreign key
-// to the users, so this is what keeps them from being deleted (users.AuthorGuard).
-func (r *Repository) HasAuthored(ctx context.Context, userID int64) (bool, error) {
+// HasAuthored says whether an account added a zone.
+func (r *Repository) HasAuthored(ctx context.Context, account int64) (bool, error) {
 	var has bool
-	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM catalogue.areas WHERE created_by = $1)`, userID).Scan(&has)
+	err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM catalogue.areas WHERE created_by = $1)`, account).Scan(&has)
 	return has, err
 }
 
 // areaSelect is a zone with how many zones are below it and how many places are in it.
 const areaSelect = `
-	SELECT a.id, a.parent_id, a.kind, a.name, a.code, a.created_by,
+	SELECT a.id, a.parent_id, a.kind, a.name, a.code, coalesce(cu.display_name, ''),
 		(SELECT count(*) FROM catalogue.areas c WHERE c.parent_id = a.id),
 		(SELECT count(*) FROM catalogue.places p WHERE p.area_id = a.id)
-	FROM catalogue.areas a`
+	FROM catalogue.areas a LEFT JOIN catalogue.accounts cu ON cu.id = a.created_by`
 
 func scanArea(row pgx.Row, a *Area) error {
-	return row.Scan(&a.ID, &a.ParentID, &a.Kind, &a.Name, &a.Code, &a.CreatedByID, &a.ChildCount, &a.PlaceCount)
+	return row.Scan(&a.ID, &a.ParentID, &a.Kind, &a.Name, &a.Code, &a.CreatedBy, &a.ChildCount, &a.PlaceCount)
 }
 
 func (r *Repository) collect(rows pgx.Rows) ([]Area, error) {

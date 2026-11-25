@@ -167,10 +167,12 @@ func (r *Repository) ListPlaces(ctx context.Context) ([]ListItem, error) {
 func (r *Repository) GetPlace(ctx context.Context, id int64) (Place, error) {
 	var p Place
 	targets := append(p.ListItem.scanTargets(), &p.Access, &p.Description, &p.TechnicalSheet,
-		&p.OsmType, &p.OsmID, &p.CreatedByID, &p.CreatedAt, &p.UpdatedByID, &p.UpdatedAt)
+		&p.OsmType, &p.OsmID, &p.CreatedBy, &p.CreatedAt, &p.UpdatedBy, &p.UpdatedAt)
 	err := r.pool.QueryRow(ctx, `
 		SELECT`+listColumns+`, p.access, p.description, p.technical_sheet, p.osm_type, p.osm_id,
-			p.created_by, p.created_at, p.updated_by, p.updated_at`+listFrom+`
+			cu.display_name, p.created_at, uu.display_name, p.updated_at`+listFrom+`
+		JOIN catalogue.accounts cu ON cu.id = p.created_by
+		JOIN catalogue.accounts uu ON uu.id = p.updated_by
 		WHERE p.id = $1`, id).Scan(targets...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Place{}, ErrNotFound
@@ -233,7 +235,7 @@ func seenOf(osmType, osmID string) string {
 		WHERE e.osm_type = ` + osmType + ` AND e.osm_id = ` + osmID + `)`
 }
 
-func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in Input) (Place, error) {
+func (r *Repository) CreatePlace(ctx context.Context, by int64, t Type, in Input) (Place, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO catalogue.places (type_id, kind, has_state, name, alt_names, state, subtype_id, system_id, area_id,
@@ -244,7 +246,7 @@ func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in I
 		RETURNING id
 	`, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.SystemID, in.AreaID,
 		*in.Lat, *in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM, in.HorizontalLengthM,
-		in.GeologyID, in.TechnicalSheet, in.OsmType, in.OsmID, userID).Scan(&id)
+		in.GeologyID, in.TechnicalSheet, in.OsmType, in.OsmID, by).Scan(&id)
 	if violates(err, "places_osm_element_fkey") {
 		return Place{}, ErrUnknownOsmElement
 	}
@@ -261,19 +263,19 @@ func (r *Repository) CreatePlace(ctx context.Context, userID int64, t Type, in I
 }
 
 // UpdatePlace replaces every field of a place (and who changed it, and when).
-func (r *Repository) UpdatePlace(ctx context.Context, id, userID int64, t Type, in Input) (Place, error) {
-	return r.updatePlace(ctx, id, userID, t, in, nil)
+func (r *Repository) UpdatePlace(ctx context.Context, id int64, by int64, t Type, in Input) (Place, error) {
+	return r.updatePlace(ctx, id, by, t, in, nil)
 }
 
 // UpdatePlaceIfUnchanged is UpdatePlace for a place that is still as it was when `at` was its
 // updated_at: if somebody changed it since, nothing is written and the answer is
 // ErrConcurrentUpdate (a partial edit is made on what was read, so it must not overwrite what
 // somebody saved in between).
-func (r *Repository) UpdatePlaceIfUnchanged(ctx context.Context, id, userID int64, t Type, in Input, at time.Time) (Place, error) {
-	return r.updatePlace(ctx, id, userID, t, in, &at)
+func (r *Repository) UpdatePlaceIfUnchanged(ctx context.Context, id int64, by int64, t Type, in Input, at time.Time) (Place, error) {
+	return r.updatePlace(ctx, id, by, t, in, &at)
 }
 
-func (r *Repository) updatePlace(ctx context.Context, id, userID int64, t Type, in Input, unchangedSince *time.Time) (Place, error) {
+func (r *Repository) updatePlace(ctx context.Context, id int64, by int64, t Type, in Input, unchangedSince *time.Time) (Place, error) {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE catalogue.places SET type_id = $2, kind = $3, has_state = $4, name = $5, alt_names = $6,
 			state = NULLIF($7, ''), subtype_id = $8, system_id = $9, area_id = $10, lat = $11, lon = $12,
@@ -282,7 +284,7 @@ func (r *Repository) updatePlace(ctx context.Context, id, userID int64, t Type, 
 		WHERE id = $1 AND ($21::timestamptz IS NULL OR updated_at = $21)
 	`, id, in.TypeID, t.Kind, t.HasState, in.Name, in.AltNames, in.State, in.SubtypeID, in.SystemID,
 		in.AreaID, *in.Lat, *in.Lon, in.AltitudeM, in.Access, in.Description, in.DepthM,
-		in.HorizontalLengthM, in.GeologyID, in.TechnicalSheet, userID, unchangedSince)
+		in.HorizontalLengthM, in.GeologyID, in.TechnicalSheet, by, unchangedSince)
 	if isForeignKeyViolation(err) {
 		return Place{}, ErrUnknownType
 	}
@@ -356,11 +358,11 @@ func lockPlace(ctx context.Context, tx pgx.Tx, id int64) error {
 }
 
 // SetVisibility changes how open a place is, and says who changed it (as any other change of the place).
-func (r *Repository) SetVisibility(ctx context.Context, id, userID int64, v Visibility) error {
+func (r *Repository) SetVisibility(ctx context.Context, id int64, by int64, v Visibility) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE catalogue.places SET place_audience = $2, location_audience = $3, content_audience = $4,
 			protected = $5, updated_by = $6, updated_at = clock_timestamp()
-		WHERE id = $1`, id, v.Place, v.Location, v.Content, v.Protected, userID)
+		WHERE id = $1`, id, v.Place, v.Location, v.Content, v.Protected, by)
 	if err != nil {
 		return err
 	}
@@ -406,12 +408,12 @@ func (r *Repository) GetPoint(ctx context.Context, placeID, id int64) (Point, er
 }
 
 // touch records that somebody changed the place (its points are part of it).
-func touch(ctx context.Context, tx pgx.Tx, placeID, userID int64) error {
-	_, err := tx.Exec(ctx, `UPDATE catalogue.places SET updated_by = $2, updated_at = now() WHERE id = $1`, placeID, userID)
+func touch(ctx context.Context, tx pgx.Tx, placeID int64, by int64) error {
+	_, err := tx.Exec(ctx, `UPDATE catalogue.places SET updated_by = $2, updated_at = now() WHERE id = $1`, placeID, by)
 	return err
 }
 
-func (r *Repository) AddPoint(ctx context.Context, placeID, userID int64, in PointInput) (Point, error) {
+func (r *Repository) AddPoint(ctx context.Context, placeID int64, by int64, in PointInput) (Point, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Point{}, err
@@ -427,13 +429,13 @@ func (r *Repository) AddPoint(ctx context.Context, placeID, userID int64, in Poi
 	if err != nil {
 		return Point{}, err
 	}
-	if err := touch(ctx, tx, placeID, userID); err != nil {
+	if err := touch(ctx, tx, placeID, by); err != nil {
 		return Point{}, err
 	}
 	return p, tx.Commit(ctx)
 }
 
-func (r *Repository) UpdatePoint(ctx context.Context, placeID, id, userID int64, in PointInput) (Point, error) {
+func (r *Repository) UpdatePoint(ctx context.Context, placeID, id int64, by int64, in PointInput) (Point, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return Point{}, err
@@ -453,13 +455,13 @@ func (r *Repository) UpdatePoint(ctx context.Context, placeID, id, userID int64,
 	if err != nil {
 		return Point{}, err
 	}
-	if err := touch(ctx, tx, placeID, userID); err != nil {
+	if err := touch(ctx, tx, placeID, by); err != nil {
 		return Point{}, err
 	}
 	return p, tx.Commit(ctx)
 }
 
-func (r *Repository) DeletePoint(ctx context.Context, placeID, id, userID int64) error {
+func (r *Repository) DeletePoint(ctx context.Context, placeID, id int64, by int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -475,7 +477,7 @@ func (r *Repository) DeletePoint(ctx context.Context, placeID, id, userID int64)
 	if tag.RowsAffected() == 0 {
 		return ErrPointNotFound
 	}
-	if err := touch(ctx, tx, placeID, userID); err != nil {
+	if err := touch(ctx, tx, placeID, by); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -739,12 +741,12 @@ func (r *Repository) DeleteSubtype(ctx context.Context, id int64) error {
 
 // SetOsm makes a place the element of the OpenStreetMap mirror it names, replacing the one it had (and who
 // changed it, and when); an empty pair takes the link away.
-func (r *Repository) SetOsm(ctx context.Context, id, userID int64, osmType *string, osmID *int64) (Place, error) {
+func (r *Repository) SetOsm(ctx context.Context, id int64, by int64, osmType *string, osmID *int64) (Place, error) {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE catalogue.places SET osm_type = $2, osm_id = $3, osm_seen = `+seenOf("$2", "$3")+`, updated_by = $4,
 			updated_at = now()
 		WHERE id = $1
-	`, id, osmType, osmID, userID)
+	`, id, osmType, osmID, by)
 	if violates(err, "places_osm_element_fkey") {
 		return Place{}, ErrUnknownOsmElement
 	}

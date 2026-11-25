@@ -52,7 +52,7 @@ func (h *Handler) createSystem(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	s, err := h.service.CreateSystem(r.Context(), actorID(r.Context()), body.Name, body.Description)
+	s, err := h.service.CreateSystem(r.Context(), actorAccount(r.Context()), body.Name, body.Description)
 	if err != nil {
 		writeError(w, err, "could not create the system")
 		return
@@ -75,7 +75,7 @@ func (h *Handler) updateSystem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	before, beforeErr := h.service.GetSystem(r.Context(), id)
-	s, err := h.service.UpdateSystem(r.Context(), id, actorID(r.Context()), body.Name, body.Description)
+	s, err := h.service.UpdateSystem(r.Context(), id, actorAccount(r.Context()), body.Name, body.Description)
 	if err != nil {
 		writeError(w, err, "could not edit the system")
 		return
@@ -127,7 +127,7 @@ func (h *Handler) setSystemPlaces(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
 		return
 	}
-	before, after, err := h.service.SetSystemPlaces(r.Context(), id, actorID(r.Context()), body.PlaceIDs)
+	before, after, err := h.service.SetSystemPlaces(r.Context(), id, actorAccount(r.Context()), body.PlaceIDs)
 	if err != nil {
 		writeError(w, err, "could not set the cavities of the system")
 		return

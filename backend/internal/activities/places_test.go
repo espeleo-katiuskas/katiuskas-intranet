@@ -50,9 +50,9 @@ func TestHandlerActivityPlaces(t *testing.T) {
 	leaderToken := tokenFor(t, authn, leader.ID, "member")
 	otherToken := tokenFor(t, authn, other.ID, "member")
 	boardToken := tokenFor(t, authn, board.ID, "board")
-	sima := insertPlace(t, tx, leader.ID, "Sima Alfa")
-	cueva := insertPlace(t, tx, leader.ID, "Cueva Beta")
-	lejana := insertPlace(t, tx, leader.ID, "Cueva Gamma")
+	sima := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, leader), "Sima Alfa")
+	cueva := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, leader), "Cueva Beta")
+	lejana := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, leader), "Cueva Gamma")
 
 	// Created with places (a repeated id counts once).
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", leaderToken, map[string]any{
@@ -146,7 +146,7 @@ func TestHandlerDeleteActivityUnlinksItsPlaces(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	leader := testutil.InsertMember(t, tx)
 	token := tokenFor(t, authn, leader.ID, "member")
-	place := insertPlace(t, tx, leader.ID, "Sima Delta")
+	place := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, leader), "Sima Delta")
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", token, map[string]any{
 		"title": "Pasa", "type": "caving", "start_date": "2026-05-02", "end_date": "2026-05-02", "place_ids": []int64{place},
 	})
@@ -166,8 +166,8 @@ func TestHandlerPlaceOfTheMemoriaStaysOnTheActivity(t *testing.T) {
 	mux, authn, tx := newTestServer(t)
 	leader := testutil.InsertMember(t, tx)
 	token := tokenFor(t, authn, leader.ID, "member")
-	boca := insertPlace(t, tx, leader.ID, "Sima Boca")
-	otra := insertPlace(t, tx, leader.ID, "Sima Otra")
+	boca := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, leader), "Sima Boca")
+	otra := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, leader), "Sima Otra")
 	rec := doRequest(mux, http.MethodPost, "/api/v1/activities", token, map[string]any{
 		"title": "Con memoria", "type": "caving", "start_date": "2026-05-02", "end_date": "2026-05-02", "place_ids": []int64{boca, otra},
 	})

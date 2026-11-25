@@ -158,7 +158,7 @@ func TestCatalogueIsWiredToTheUsers(t *testing.T) {
 	}
 	// The same for somebody who only added a zone.
 	zoner := testutil.InsertMember(t, tx)
-	if _, err := tx.Exec(ctx, `INSERT INTO catalogue.areas (parent_id, kind, name, norm_name, created_by) VALUES ($1, 'Región', 'Zona de prueba', 'zona de prueba', $2)`, areaID, zoner.ID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO catalogue.areas (parent_id, kind, name, norm_name, created_by) VALUES ($1, 'Región', 'Zona de prueba', 'zona de prueba', $2)`, areaID, testutil.CatalogueAccount(t, tx, zoner)); err != nil {
 		t.Fatal(err)
 	}
 	if err := usersService.Delete(ctx, zoner.ID); !errors.Is(err, users.ErrHasReferences) {

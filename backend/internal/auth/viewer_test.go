@@ -25,8 +25,8 @@ func TestViewerOf(t *testing.T) {
 	}
 	now := time.Now()
 	for _, c := range cases {
-		v := ViewerOf(AuthenticatedUser{ID: 42, Roles: c.roles})
-		if v.Issuer != IntranetIssuer || v.Subject != "42" {
+		v := ViewerOf(AuthenticatedUser{ID: 42, Subject: "subject-of-42", Login: "ana", Roles: c.roles})
+		if v.Issuer != IntranetIssuer || v.Subject != "subject-of-42" || v.Name != "ana" {
 			t.Errorf("%s: issuer %q subject %q", c.name, v.Issuer, v.Subject)
 		}
 		if got := v.InGroup(access.ClubGroup, now); got != c.wantGroup {
@@ -42,6 +42,19 @@ func TestViewerOf(t *testing.T) {
 	}
 }
 
+// The viewer's subject is the person's opaque one, never their id; a session that has none is not
+// anybody, whatever roles it has.
+func TestViewerOfSaysNothingOfTheId(t *testing.T) {
+	v := ViewerOf(AuthenticatedUser{ID: 42, Subject: "abc", Roles: []string{"member"}})
+	if v.Subject == "42" {
+		t.Error("the subject must not be the id")
+	}
+	none := ViewerOf(AuthenticatedUser{ID: 42, Roles: []string{"admin"}})
+	if none.KindAt(time.Now()) != access.KindAnonymous || none.InGroup(access.ClubGroup, time.Now()) {
+		t.Errorf("a session with no subject is not anybody: %+v", none)
+	}
+}
+
 func TestViewerFromContext(t *testing.T) {
 	if v := ViewerFromContext(t.Context()); v.Subject != "" || v.KindAt(time.Now()) != access.KindAnonymous {
 		t.Errorf("a context with no session must be anonymous, got %+v", v)
@@ -51,7 +64,7 @@ func TestViewerFromContext(t *testing.T) {
 // WithViewer lets an anonymous request through, resolves a good token, and refuses a bad one instead
 // of treating it as anonymous.
 func TestWithViewer(t *testing.T) {
-	a := NewAuthenticator(stubResolver{"good": {ID: 7, Roles: []string{"member"}}})
+	a := NewAuthenticator(stubResolver{"good": {ID: 7, Subject: "subject-of-7", Roles: []string{"member"}}})
 	var got access.Viewer
 	var called bool
 	handler := a.WithViewer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +86,7 @@ func TestWithViewer(t *testing.T) {
 	if rec := do(""); rec.Code != http.StatusOK || !called || got.KindAt(now) != access.KindAnonymous {
 		t.Errorf("no token: want the handler called as anonymous, got %d called=%v viewer=%+v", rec.Code, called, got)
 	}
-	if rec := do("Bearer good"); rec.Code != http.StatusOK || !called || got.Subject != "7" || !got.InGroup(access.ClubGroup, now) {
+	if rec := do("Bearer good"); rec.Code != http.StatusOK || !called || got.Subject != "subject-of-7" || !got.InGroup(access.ClubGroup, now) {
 		t.Errorf("good token: want the member, got %d called=%v viewer=%+v", rec.Code, called, got)
 	}
 	if rec := do("Bearer expired"); rec.Code != http.StatusUnauthorized || called {

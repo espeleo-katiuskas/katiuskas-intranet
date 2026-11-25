@@ -1449,16 +1449,40 @@ for the files (migration `00063_place_files.sql`).
 - Everybody who can sign in reads, and creates and changes places and their points: there is no
   review.
 - The API says who and when (`created_by`, `updated_by` and `updated_at` in `Place`). The places
-  never read `users`: the repository keeps the ids of the authors (`Place.CreatedByID`,
-  `UpdatedByID`, `File.UploadedByID`, `System.CreatedByID`…, never in the JSON) and the `Service`
-  names them (`authors.go`) with `UserLookup.LoginsForUserIDs`, one query for all the people of a
-  response. The columns are plain references, with no foreign key (migration `00080`), so what the
-  key did, keep a person with authored places from being deleted, is done in Go: `users.Service`
-  asks the `users.AuthorGuard`s it was given (`WithAuthorGuards(places, areas)`, in `cmd/api`:
-  `HasAuthored`) before `Delete`, and answers `ErrHasReferences` (409 `has_references`) as before.
-  A new package that keeps people's ids without a key has to be added there.
+  never read `users`: who made something is an account of the catalogue (see "Accounts of the
+  catalogue" below), the repository joins `catalogue.accounts` for the name (`display_name`) and the
+  places keep its id. `users.Service` still refuses to delete a person who made something
+  (`ErrHasReferences`, 409 `has_references`, as it did with a foreign key): it asks the
+  `users.AuthorGuard`s it was given (`WithAuthorGuards(places, areas)`, in `cmd/api`:
+  `HasAuthored(issuer, subject)`) before `Delete`. A new package that keeps accounts of the
+  catalogue has to be added there.
 - Only admin and board delete a place, and only admin manages the types.
 - On top of the roles, every route asks the rules (see "The viewer and the rules" below).
+
+### Accounts of the catalogue
+
+`internal/accounts` is who acts on the catalogue, with accounts of its own that have nothing to do
+with the intranet's table of people (`accounts`, `issuers` and `account_identities`, migration
+`00083`; the club's intranet is the first service, registered as the issuer `katiuskas-intranet`).
+What the places, the systems, the files and the zones keep of who made something is the id of an
+account (a foreign key), and they show its name.
+
+- A **service** account is a client of the catalogue; an **issuer** is a service that vouches for
+  the people it sends, and an **identity** is how an issuer knows a person: `(issuer, subject)`. For
+  the intranet the subject is `users.subject`, a random uuid that never changes and says nothing of
+  how it stores people, and the name is the person's login (`Viewer.Name`, from
+  `AuthenticatedUser.Login`).
+- `Service.Ensure(viewer)` is the account of the viewer, **made the first time they change
+  something** (reading makes none), with the name the issuer gives now: a name that changed is
+  updated, so the person is shown by the new one on everything they made. A viewer with no subject
+  or no name has no account (`ErrNotSignedIn`), and an issuer that is not registered cannot vouch
+  for anybody (`ErrUnknownIssuer`, 403).
+- `Handler.gate` makes the account of whoever writes before the route runs (`actorAccount(ctx)` is
+  its id); the route that adds a zone does the same. `Service.Of(issuer, subject)` finds one without
+  making it.
+- To let other clients in, register their issuer; nothing else of the catalogue knows about the
+  intranet. What is still the intranet's side of the routes is the login that names who acts in a
+  notice and the one that a route names (`UserLookup`, in the handler).
 
 ### The viewer and the rules
 
@@ -1470,11 +1494,11 @@ signed-in person can do is what it was.
   `ExpiresAt`. Anonymous has no subject; a registered viewer has a subject and no groups; a member
   has groups. An assertion with no subject or past its expiry says nothing (it is anonymous and in
   no group, whatever it lists), so it fails closed.
-- The intranet is the first issuer (`auth.ViewerOf`): the subject is the person's id as a string
-  (a stand-in for an opaque identifier), and they are in the group `access.ClubGroup`
-  (`katiuskas`) when they hold a baseline role (admin, board or member), which is what `Protect`
-  already asks. `auth.ViewerFromContext` gives the viewer of a request: the session's person, or
-  anonymous.
+- The intranet is the first issuer (`auth.ViewerOf`): the subject is the person's own opaque one
+  (`users.subject`; a session that has none is not anybody), the name their login, and they are in
+  the group `access.ClubGroup` (`katiuskas`) when they hold a baseline role (admin, board or member), which is
+  what `Protect` already asks. `auth.ViewerFromContext` gives the viewer of a request: the session's
+  person, or anonymous.
 - `Authenticator.WithViewer` is the authentication of a route that answers anybody: no token is an
   anonymous request, a good one is resolved like `RequireAuth` does, and a token that does not hold
   is 401 (never anonymous, so a client whose session expired does not get the public answer by
@@ -1922,7 +1946,7 @@ Any member adds a zone below another, except in Spain.
   one whose code is `ES`. Those zones come from the INE's lists, loaded by migrations.
 - The zone keeps who added it (`created_by`, a user id; the API says the login, `Area.CreatedBy`),
   which is empty for the seeded ones. Like the places, the zones do not read `users`: the
-  repository gives `Area.CreatedByID` and `Service.named` turns it into the login.
+  repository gives `Area.CreatedBySubject` and `Service.named` turns it into the login.
 - The `kind` is the one most of its siblings have, unless it is given, and the first zone below
   another needs it said (400 `area_kind_required`).
 - Nothing else is checked, so a typo is possible: that is what an admin fixes.

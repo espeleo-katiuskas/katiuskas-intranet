@@ -5,58 +5,36 @@ import (
 	"errors"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/access"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 )
 
 type Service struct {
 	repo       *Repository
 	boundaries Boundaries
 	geocoder   Geocoder
-	users      UserLookup
+	accounts   *accounts.Service
 }
 
-func NewService(repo *Repository, users UserLookup) *Service {
-	return &Service{repo: repo, users: users}
+func NewService(repo *Repository, accounts *accounts.Service) *Service {
+	return &Service{repo: repo, accounts: accounts}
 }
 
-// HasAuthored says whether a person added a zone (users.AuthorGuard).
-func (s *Service) HasAuthored(ctx context.Context, userID int64) (bool, error) {
-	return s.repo.HasAuthored(ctx, userID)
+// AccountOf is the account of the viewer, made if it is the first time they act: what a zone keeps of who
+// added it.
+func (s *Service) AccountOf(ctx context.Context, viewer access.Viewer) (accounts.Account, error) {
+	return s.accounts.Ensure(ctx, viewer)
 }
 
-// named fills in the login of whoever added each zone (one query for all of them), taking the error of
-// the call that produced the zones so that a repository call can be returned through it.
-func (s *Service) named(ctx context.Context, list []Area, err error) ([]Area, error) {
-	if err != nil {
-		return nil, err
+// HasAuthored says whether the person that the issuer knows by that subject added a zone
+// (users.AuthorGuard). One who never acted has no account, and added nothing.
+func (s *Service) HasAuthored(ctx context.Context, issuer, subject string) (bool, error) {
+	account, found, err := s.accounts.Of(ctx, issuer, subject)
+	if err != nil || !found {
+		return false, err
 	}
-	var ids []int64
-	for _, a := range list {
-		if a.CreatedByID != nil {
-			ids = append(ids, *a.CreatedByID)
-		}
-	}
-	if len(ids) == 0 {
-		return list, nil
-	}
-	logins, err := s.users.LoginsForUserIDs(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	for i := range list {
-		if list[i].CreatedByID != nil {
-			list[i].CreatedBy = logins[*list[i].CreatedByID]
-		}
-	}
-	return list, nil
-}
-
-// namedOne is named for a single zone.
-func (s *Service) namedOne(ctx context.Context, a Area, err error) (Area, error) {
-	list, err := s.named(ctx, []Area{a}, err)
-	if err != nil {
-		return Area{}, err
-	}
-	return list[0], nil
+	return s.repo.HasAuthored(ctx, account.ID)
 }
 
 // WithBoundaries gives the service a source to find the zone of a point; without one, Locate finds none.
@@ -126,7 +104,6 @@ func (s *Service) Locate(ctx context.Context, lat, lon float64) (*Area, error) {
 			return nil, err
 		}
 		a, err := s.repo.Get(ctx, id)
-		a, err = s.namedOne(ctx, a, err)
 		if err != nil {
 			return nil, err
 		}
@@ -147,7 +124,7 @@ func (s *Service) Children(ctx context.Context, parentID *int64) ([]Area, error)
 			return nil, err
 		}
 	}
-	return s.named(ctx, list, nil)
+	return list, nil
 }
 
 // SearchLimit is how many zones a search gives at most, and how many by default.
@@ -166,12 +143,12 @@ func (s *Service) Search(ctx context.Context, text string, limit int) ([]Area, e
 		limit = DefaultSearchLimit
 	}
 	list, err := s.repo.Search(ctx, normalized, min(limit, MaxSearchLimit))
-	return s.named(ctx, list, err)
+	return list, err
 }
 
 func (s *Service) Get(ctx context.Context, id int64) (Area, error) {
 	a, err := s.repo.Get(ctx, id)
-	return s.namedOne(ctx, a, err)
+	return a, err
 }
 
 // cleanText checks a name and a kind (which may be blank, to be filled in) and normalizes the name.
@@ -192,7 +169,7 @@ func cleanText(name, kind string) (string, string, string, error) {
 // is a "País" unless it is said otherwise.
 //
 // Only an admin adds a zone in Spain (below it at any depth): they are loaded from the INE's lists.
-// createdBy is the id of whoever adds it, which the zone keeps.
+// createdBy is the account of whoever adds it, which the zone keeps.
 func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string, admin bool, createdBy int64) (Area, error) {
 	name, kind, normalized, err := cleanText(name, kind)
 	if err != nil {
@@ -239,7 +216,7 @@ func (s *Service) Create(ctx context.Context, parentID *int64, name, kind string
 		return Area{}, ErrDuplicate
 	}
 	a, err := s.repo.Create(ctx, parentID, kind, name, normalized, createdBy)
-	return s.namedOne(ctx, a, err)
+	return a, err
 }
 
 // Update renames a zone and, if a kind is given, changes it; with move.Set it also puts it below another
@@ -278,7 +255,7 @@ func (s *Service) Update(ctx context.Context, id int64, name, kind string, move 
 		return Area{}, ErrDuplicate
 	}
 	a, err := s.repo.Update(ctx, id, kind, name, normalized, move)
-	return s.namedOne(ctx, a, err)
+	return a, err
 }
 
 // Delete removes a zone that has no zones below it and no places (a country too, if it has none).

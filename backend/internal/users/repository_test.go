@@ -1363,9 +1363,8 @@ func TestFindActiveByEmailAndPhoneIgnoresALeadingPlus34(t *testing.T) {
 	}
 }
 
-// TestFindLoginsForIDs is the batch form of FindLoginForID: one query for many people, and an id that
-// nobody has is simply not in the answer.
-func TestFindLoginsForIDs(t *testing.T) {
+// TestFindSubjectForID: each person has an opaque subject of their own, a uuid, and nobody has none.
+func TestFindSubjectForID(t *testing.T) {
 	tx := testutil.NewTx(t)
 	repo := users.NewRepository(tx)
 	ctx := context.Background()
@@ -1377,11 +1376,22 @@ func TestFindLoginsForIDs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := repo.FindLoginsForIDs(ctx, []int64{a.ID, b.ID, -1})
+	subjectA, err := repo.FindSubjectForID(ctx, a.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[a.ID] != a.Login || got[b.ID] != b.Login {
-		t.Errorf("got %v, want the logins of %d and %d only", got, a.ID, b.ID)
+	subjectB, err := repo.FindSubjectForID(ctx, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subjectA == subjectB || len(subjectA) != 36 || len(subjectB) != 36 {
+		t.Errorf("each person has a subject of their own, a uuid: %q %q", subjectA, subjectB)
+	}
+	again, _ := repo.FindSubjectForID(ctx, a.ID)
+	if again != subjectA {
+		t.Errorf("a subject never changes: %q then %q", subjectA, again)
+	}
+	if _, err := repo.FindSubjectForID(ctx, -1); !errors.Is(err, users.ErrNotFound) {
+		t.Errorf("the subject of nobody: %v, want ErrNotFound", err)
 	}
 }

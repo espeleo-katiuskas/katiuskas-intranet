@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"net/http"
-	"strconv"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/access"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
@@ -11,15 +10,15 @@ import (
 
 // IntranetIssuer is the issuer of the viewers that the intranet makes of its own sessions: the first
 // issuer of the catalogue, and for now the only one.
-const IntranetIssuer = "katiuskas-intranet"
+const IntranetIssuer = access.IntranetIssuer
 
 // ViewerOf is the assertion the intranet makes about a signed-in person: who they are for the intranet
 // and, if they are admin, board or a current member (BaselineRoles), a member of the club's group. The
-// subject is the id of the person as a string, which is a stand-in: it will be an opaque identifier that
-// says nothing of the intranet's tables. It carries no expiry, because the session behind it is
-// resolved afresh on every request.
+// subject is the person's own opaque one (AuthenticatedUser.Subject), which says nothing of the
+// intranet's tables, and the name is their login; a session without a subject is not anybody. It
+// carries no expiry, because the session behind it is resolved afresh on every request.
 func ViewerOf(user AuthenticatedUser) access.Viewer {
-	v := access.Viewer{Issuer: IntranetIssuer, Subject: strconv.FormatInt(user.ID, 10)}
+	v := access.Viewer{Issuer: IntranetIssuer, Subject: user.Subject, Name: user.Login}
 	if HasBaselineRole(user.Roles) {
 		v.Groups = []string{access.ClubGroup}
 	}

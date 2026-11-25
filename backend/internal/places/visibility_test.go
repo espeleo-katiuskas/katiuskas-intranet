@@ -100,7 +100,7 @@ func samplePlace(v places.Visibility) places.Place {
 		},
 		Access: &access, Description: &description, TechnicalSheet: &sheet,
 		OsmType: new("node"), OsmID: new(int64(7)), OsmChanges: []places.OsmChange{{Key: "position"}},
-		CreatedBy: "ana", CreatedByID: 5, CreatedAt: now, UpdatedBy: "beto", UpdatedByID: 6, UpdatedAt: now,
+		CreatedBy: "ana", CreatedAt: now, UpdatedBy: "beto", UpdatedAt: now,
 		Points: []places.Point{{ID: 1}}, FileCount: 2,
 	}
 }
@@ -145,7 +145,7 @@ func TestPlaceViewedBy(t *testing.T) {
 		if len(p.Points) != 0 || p.Access != nil || p.Description != nil || p.TechnicalSheet != nil || p.FileCount != 0 {
 			t.Errorf("%s: points, access, sheet and files must be left out: %+v", who.name, p)
 		}
-		if p.CreatedBy != "" || p.UpdatedBy != "" || p.CreatedByID != 0 || !p.CreatedAt.IsZero() || p.ActivityCount != 0 {
+		if p.CreatedBy != "" || p.UpdatedBy != "" || !p.CreatedAt.IsZero() || p.ActivityCount != 0 {
 			t.Errorf("%s: authors and activities must be left out: %+v", who.name, p)
 		}
 	}
@@ -201,7 +201,7 @@ func TestSystemViewedBy(t *testing.T) {
 	}
 	description := "connected"
 	system := places.System{
-		Name: "Sistema", Description: &description, FileCount: 1, CreatedBy: "ana", CreatedByID: 5,
+		Name: "Sistema", Description: &description, FileCount: 1, CreatedBy: "ana",
 		Places: []places.SystemPlace{cavity(1, vis(public, public, public)), cavity(2, vis(club, club, club)), cavity(3, vis(public, club, club))},
 	}
 	anon, ok := system.ViewedBy(viewers[0].v, now)

@@ -116,10 +116,11 @@ func (r *Repository) Authenticate(ctx context.Context, tokenHash, ip, userAgent 
 		UPDATE tokens SET last_used_at = now(), last_used_ip = $2, last_used_user_agent = $3,
 			expires_at = CASE WHEN lifetime IS NULL THEN expires_at ELSE now() + lifetime END
 		WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
-		RETURNING user_id, impersonated_by,
+		RETURNING user_id, (SELECT subject::text FROM users WHERE id = tokens.user_id),
+			(SELECT login FROM users WHERE id = tokens.user_id), impersonated_by,
 			CASE WHEN role_override_until > now() THEN role_override END,
 			CASE WHEN role_override_until > now() THEN role_override_until END
-	`, tokenHash, ipArg, userAgentArg).Scan(&s.UserID, &s.ImpersonatedBy, &s.RoleOverride, &s.RoleOverrideUntil)
+	`, tokenHash, ipArg, userAgentArg).Scan(&s.UserID, &s.Subject, &s.Login, &s.ImpersonatedBy, &s.RoleOverride, &s.RoleOverrideUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Session{}, ErrNotFound
 	}

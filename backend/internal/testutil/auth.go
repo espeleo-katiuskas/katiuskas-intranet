@@ -4,7 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"testing"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/access"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 )
 
@@ -36,6 +41,30 @@ func NewTestAuthenticator() (*auth.Authenticator, FakeResolver) {
 // id and roles.
 func TokenFor(resolver FakeResolver, id int64, roleNames ...string) string {
 	token := fmt.Sprintf("test-token-%d-%s", id, strings.Join(roleNames, ","))
-	resolver[token] = auth.AuthenticatedUser{ID: id, Roles: roleNames}
+	subject, login := identityOf(id)
+	resolver[token] = auth.AuthenticatedUser{ID: id, Subject: subject, Login: login, Roles: roleNames}
 	return token
+}
+
+// identityOf is the subject and the login of the person a test inserted with that id. For an id no helper
+// inserted (a test that makes up a session for somebody who is not in the database) they are made from
+// the id: valid, and naming nobody.
+func identityOf(id int64) (subject, login string) {
+	if p, ok := people.Load(id); ok {
+		return p.(personIdentity).subject, p.(personIdentity).login
+	}
+	return fmt.Sprintf("00000000-0000-0000-0000-%012d", id), fmt.Sprintf("test-user-%d", id)
+}
+
+// CatalogueAccount is the account of the catalogue of places of a person, made if they have none: what the
+// catalogue keeps of who made something, for a test that puts rows in the catalogue by hand.
+func CatalogueAccount(t *testing.T, tx pgx.Tx, user TestUser) int64 {
+	t.Helper()
+	account, err := accounts.NewService(accounts.NewRepository(tx)).Ensure(context.Background(), access.Viewer{
+		Issuer: access.IntranetIssuer, Subject: user.Subject, Name: user.Login,
+	})
+	if err != nil {
+		t.Fatalf("the catalogue account of %s: %v", user.Login, err)
+	}
+	return account.ID
 }

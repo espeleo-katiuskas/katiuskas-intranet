@@ -55,8 +55,8 @@ func createWithPlace(t *testing.T, mux *http.ServeMux, activityID int64, token s
 func TestResourceAboutAPlaceOfTheActivity(t *testing.T) {
 	mux, authn, activityID, people, tx := newTestServerTx(t)
 	token := testutil.TokenFor(authn, people.participant.ID, "member")
-	boca := insertPlace(t, tx, people.leader.ID, "Sima Boca", activityID)
-	other := insertPlace(t, tx, people.leader.ID, "Sima Ajena", 0) // In the catalogue, not on this trip.
+	boca := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, people.leader), "Sima Boca", activityID)
+	other := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, people.leader), "Sima Ajena", 0) // In the catalogue, not on this trip.
 
 	// With none, as always.
 	code, res, _ := createWithPlace(t, mux, activityID, token, map[string]string{"type": "text", "title": "Sin lugar", "description": "x"})
@@ -93,7 +93,7 @@ func TestResourceAboutAPlaceOfTheActivity(t *testing.T) {
 
 	// Changing it afterwards: to another of the places, to none, and to one that is not allowed.
 	path := fmt.Sprintf("/api/v1/activities/%d/resources/%d", activityID, res.ID)
-	second := insertPlace(t, tx, people.leader.ID, "Sima Segunda", activityID)
+	second := insertPlace(t, tx, testutil.CatalogueAccount(t, tx, people.leader), "Sima Segunda", activityID)
 	rec = doJSON(mux, http.MethodPatch, path, token, map[string]any{"place_id": second})
 	if got := decodeResource(t, rec); rec.Code != http.StatusOK || got.PlaceID == nil || *got.PlaceID != second || *got.PlaceName != "Sima Segunda" || got.Title != "En la boca" {
 		t.Errorf("expected the other place and the rest as it was, got %d %+v", rec.Code, got)

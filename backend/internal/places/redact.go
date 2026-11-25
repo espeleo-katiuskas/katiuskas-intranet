@@ -97,8 +97,8 @@ func (p Place) ViewedBy(viewer access.Viewer, now time.Time) (Place, bool) {
 		p.FileCount = 0
 	}
 	if hides(parts, access.PartAuthors) {
-		p.CreatedBy, p.CreatedByID, p.CreatedAt = "", 0, time.Time{}
-		p.UpdatedBy, p.UpdatedByID, p.UpdatedAt = "", 0, time.Time{}
+		p.CreatedBy, p.CreatedAt = "", time.Time{}
+		p.UpdatedBy, p.UpdatedAt = "", time.Time{}
 	}
 	return p, true
 }
@@ -155,7 +155,7 @@ func (s System) ViewedBy(viewer access.Viewer, now time.Time) (System, bool) {
 	if !allContent {
 		s.Description, s.FileCount = nil, 0
 	}
-	s.CreatedBy, s.CreatedByID, s.CreatedAt = "", 0, time.Time{}
-	s.UpdatedBy, s.UpdatedByID, s.UpdatedAt = "", 0, time.Time{}
+	s.CreatedBy, s.CreatedAt = "", time.Time{}
+	s.UpdatedBy, s.UpdatedAt = "", time.Time{}
 	return s, true
 }

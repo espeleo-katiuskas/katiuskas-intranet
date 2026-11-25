@@ -36,22 +36,23 @@ func (o fileOwner) lock(ctx context.Context, tx pgx.Tx) error {
 }
 
 // touch records who changed the owner last, and when.
-func (o fileOwner) touch(ctx context.Context, tx pgx.Tx, userID int64) error {
+func (o fileOwner) touch(ctx context.Context, tx pgx.Tx, by int64) error {
 	if o.isSystem() {
-		return touchSystem(ctx, tx, o.id, userID)
+		return touchSystem(ctx, tx, o.id, by)
 	}
-	return touch(ctx, tx, o.id, userID)
+	return touch(ctx, tx, o.id, by)
 }
 
 // ----- repository -----
 
 const fileSelect = `
-	SELECT f.id, f.place_id, f.system_id, f.title, f.file_name, f.content_type, f.file_size, f.uploaded_by, f.created_at
-	FROM catalogue.place_files f`
+	SELECT f.id, f.place_id, f.system_id, f.title, f.file_name, f.content_type, f.file_size, a.display_name,
+		f.created_at, f.uploaded_by
+	FROM catalogue.place_files f JOIN catalogue.accounts a ON a.id = f.uploaded_by`
 
 func scanFile(row pgx.Row, f *File) error {
 	return row.Scan(&f.ID, &f.PlaceID, &f.SystemID, &f.Title, &f.FileName, &f.ContentType, &f.FileSize,
-		&f.UploadedByID, &f.CreatedAt)
+		&f.UploadedBy, &f.CreatedAt, &f.UploadedByID)
 }
 
 // ListFiles is the files of a place or a system, oldest first.
@@ -113,7 +114,7 @@ func (r *Repository) CreateFile(ctx context.Context, o fileOwner, uploadedBy int
 }
 
 // DeleteFile removes the row of a file, and touches the owner like CreateFile does.
-func (r *Repository) DeleteFile(ctx context.Context, o fileOwner, id, userID int64) error {
+func (r *Repository) DeleteFile(ctx context.Context, o fileOwner, id int64, by int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -129,7 +130,7 @@ func (r *Repository) DeleteFile(ctx context.Context, o fileOwner, id, userID int
 	if tag.RowsAffected() == 0 {
 		return ErrFileNotFound
 	}
-	if err := o.touch(ctx, tx, userID); err != nil {
+	if err := o.touch(ctx, tx, by); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -174,8 +175,7 @@ func (s *Service) ListFiles(ctx context.Context, o fileOwner) ([]File, error) {
 	if err := s.ownerExists(ctx, o); err != nil {
 		return nil, err
 	}
-	files, err := s.repo.ListFiles(ctx, o)
-	return s.nameFiles(ctx, files, err)
+	return s.repo.ListFiles(ctx, o)
 }
 
 // AddFile attaches a file (anything) to a place or a system, with an optional caption. The row is
@@ -198,12 +198,12 @@ func (s *Service) AddFile(ctx context.Context, o fileOwner, uploadedBy int64, ti
 		_ = s.repo.DeleteFile(ctx, o, f.ID, uploadedBy)
 		return File{}, err
 	}
-	return s.nameFile(ctx, f, nil)
+	return f, nil
 }
 
 // RemoveFile deletes a file: whoever attached it may, and so may admin and board (privileged). It
 // answers with the file, for the message that tells who removed what.
-func (s *Service) RemoveFile(ctx context.Context, o fileOwner, id, requesterID int64, privileged bool) (File, error) {
+func (s *Service) RemoveFile(ctx context.Context, o fileOwner, id int64, requesterID int64, privileged bool) (File, error) {
 	f, uploaderID, err := s.repo.GetFile(ctx, o, id)
 	if err != nil {
 		return File{}, err
@@ -215,7 +215,7 @@ func (s *Service) RemoveFile(ctx context.Context, o fileOwner, id, requesterID i
 		return File{}, err
 	}
 	s.removeBytes(o.id, id)
-	return s.nameFile(ctx, f, nil)
+	return f, nil
 }
 
 // OpenFile is a file's metadata and its open file, which the caller closes.
@@ -226,11 +226,6 @@ func (s *Service) OpenFile(ctx context.Context, o fileOwner, id int64) (File, *o
 	}
 	file, err := s.storage.Open(o.id, id)
 	if err != nil {
-		return File{}, nil, err
-	}
-	f, err = s.nameFile(ctx, f, nil)
-	if err != nil {
-		_ = file.Close()
 		return File{}, nil, err
 	}
 	return f, file, nil

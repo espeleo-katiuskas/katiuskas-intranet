@@ -115,3 +115,54 @@ func TestEveryRouteIsGated(t *testing.T) {
 		}
 	}
 }
+
+// Who changes something is an account of the catalogue, made the first time they act and not before:
+// the places keep its id, and show its name.
+func TestAuthorsAreCatalogueAccounts(t *testing.T) {
+	e := newEnv(t)
+	count := func(subject string) int {
+		var n int
+		if err := e.tx.QueryRow(t.Context(), `
+			SELECT count(*) FROM catalogue.account_identities WHERE issuer = 'katiuskas-intranet' AND subject = $1`,
+			subject).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	// Reading makes no account.
+	status(t, e.json("GET", "/api/v1/places", e.member.token, nil), http.StatusOK)
+	if count(e.member.user.Subject) != 0 {
+		t.Fatal("somebody who has only read has no account")
+	}
+
+	p := e.newPlace(e.cavidad, "Cueva de la cuenta", nil)
+	e.notifier.wait(t)
+	if count(e.member.user.Subject) != 1 {
+		t.Fatal("the first change makes the account")
+	}
+	if p.CreatedBy != e.member.user.Login || p.UpdatedBy != e.member.user.Login {
+		t.Errorf("the author is shown by the name of the account: %q %q, want %q", p.CreatedBy, p.UpdatedBy, e.member.user.Login)
+	}
+	var kind, name string
+	if err := e.tx.QueryRow(t.Context(), `
+		SELECT a.kind, a.display_name FROM catalogue.places p JOIN catalogue.accounts a ON a.id = p.created_by WHERE p.id = $1`,
+		p.ID).Scan(&kind, &name); err != nil || kind != "person" || name != e.member.user.Login {
+		t.Errorf("created_by is the id of a person's account: %q %q %v", kind, name, err)
+	}
+
+	// The same person is the same account, and another is another; the name follows the issuer's.
+	e.newPlace(e.cavidad, "Otra cueva", nil)
+	e.notifier.wait(t)
+	var accounts int
+	if err := e.tx.QueryRow(t.Context(), `SELECT count(*) FROM catalogue.accounts WHERE kind = 'person'`).Scan(&accounts); err != nil {
+		t.Fatal(err)
+	}
+	if accounts != 1 {
+		t.Errorf("one person, one account: %d", accounts)
+	}
+	changed := e.json("PUT", placePath(p, ""), e.board.token, body(e.cavidad, "Cueva de la cuenta", nil))
+	status(t, changed, http.StatusOK)
+	if got := decode[places.Place](t, changed); got.CreatedBy != e.member.user.Login || got.UpdatedBy != e.board.user.Login {
+		t.Errorf("created by the member, changed by the board member: %q %q", got.CreatedBy, got.UpdatedBy)
+	}
+}

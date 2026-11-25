@@ -121,7 +121,7 @@ func (h *Handler) addFile(owner ownerMaker) http.HandlerFunc {
 			return
 		}
 		o := owner(id)
-		f, err := h.service.AddFile(r.Context(), o, actorID(r.Context()), title, name, content)
+		f, err := h.service.AddFile(r.Context(), o, actorAccount(r.Context()), title, name, content)
 		if err != nil {
 			writeError(w, err, "could not attach the file")
 			return
@@ -168,7 +168,7 @@ func (h *Handler) deleteFile(owner ownerMaker) http.HandlerFunc {
 		}
 		o := owner(id)
 		current, _ := auth.UserFromContext(r.Context())
-		f, err := h.service.RemoveFile(r.Context(), o, fileID, current.ID, current.HasAnyRole("admin", "board"))
+		f, err := h.service.RemoveFile(r.Context(), o, fileID, actorAccount(r.Context()), current.HasAnyRole("admin", "board"))
 		if err != nil {
 			writeError(w, err, "could not delete the file")
 			return

@@ -274,7 +274,16 @@ type TestUser struct {
 	Login string
 	Email string
 	Phone string
+	// Subject is the person's opaque identifier (users.subject), which the catalogue keeps of who did
+	// something.
+	Subject string
 }
+
+// people remembers the subject and the login of each person a test inserted, by id, so that TokenFor
+// (which only knows an id) can make a session that is the same person for the catalogue.
+var people sync.Map
+
+type personIdentity struct{ subject, login string }
 
 // InsertUser inserts a bare-bones person. Pass phone as "" to leave it
 // NULL — FindActiveByEmailAndPhone and the magic-link flow both require
@@ -296,16 +305,18 @@ func InsertUser(t *testing.T, tx pgx.Tx, phone string) TestUser {
 	}
 
 	var id int64
+	var subject string
 	err := tx.QueryRow(ctx, `
 		INSERT INTO users (first_name, last_name, email, phone, login, birth_date)
 		VALUES ('Test', 'User', $1, $2, $3, '1990-01-01')
-		RETURNING id
-	`, email, phoneArg, login).Scan(&id)
+		RETURNING id, subject::text
+	`, email, phoneArg, login).Scan(&id, &subject)
 	if err != nil {
 		t.Fatalf("insert test user: %v", err)
 	}
+	people.Store(id, personIdentity{subject: subject, login: login})
 
-	return TestUser{ID: id, Login: login, Email: email, Phone: phone}
+	return TestUser{ID: id, Login: login, Email: email, Phone: phone, Subject: subject}
 }
 
 // MakeMember gives a person a current membership (they became a socio a year ago), so that they are

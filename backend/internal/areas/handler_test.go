@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/areas"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
@@ -112,9 +113,9 @@ func newEnv(t *testing.T) *env {
 	mux := http.NewServeMux()
 	boundaries := &fakeBoundaries{}
 	geocoder := &fakeGeocoder{}
-	areas.NewHandler(areas.NewService(areas.NewRepository(tx), usersService).WithBoundaries(boundaries).WithGeocoder(geocoder), authenticator, usersService, notifier).RegisterRoutes(mux)
+	areas.NewHandler(areas.NewService(areas.NewRepository(tx), accounts.NewService(accounts.NewRepository(tx))).WithBoundaries(boundaries).WithGeocoder(geocoder), authenticator, usersService, notifier).RegisterRoutes(mux)
 	bare := http.NewServeMux()
-	areas.NewHandler(areas.NewService(areas.NewRepository(tx), usersService), authenticator, usersService, notifier).RegisterRoutes(bare)
+	areas.NewHandler(areas.NewService(areas.NewRepository(tx), accounts.NewService(accounts.NewRepository(tx))), authenticator, usersService, notifier).RegisterRoutes(bare)
 	e := &env{t: t, tx: tx, mux: mux, bare: bare, notifier: notifier, resolver: resolver, boundaries: boundaries, geocoder: geocoder}
 	e.member = e.person("member")
 	e.board = e.person("board")
@@ -200,7 +201,7 @@ func (e *env) placeIn(area int64) {
 		SELECT t.id, t.kind, t.has_state, 'open', (SELECT id FROM catalogue.place_subtypes WHERE name = 'Cueva'), 'Un lugar',
 			$1, 40, -3, $2, $2
 		FROM catalogue.place_types t WHERE t.name = 'Cavidad'
-	`, area, e.member.user.ID)
+	`, area, testutil.CatalogueAccount(e.t, e.tx, e.member.user))
 	if err != nil {
 		e.t.Fatal(err)
 	}

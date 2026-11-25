@@ -17,6 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
@@ -108,7 +109,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	placesService := places.NewService(places.NewRepository(tx), storage, usersService)
+	placesService := places.NewService(places.NewRepository(tx), storage, accounts.NewService(accounts.NewRepository(tx)))
 	// The real activities, which the catalogue asks how many went to each place.
 	activitiesService := activities.NewService(activities.NewRepository(tx), licensesService, rolesService, placesService)
 	placesService.SetActivities(activitiesService)
@@ -1064,4 +1065,10 @@ func TestPlaceWithActivitiesIsNotDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	status(t, e.json("DELETE", placePath(p, ""), e.admin.token, nil), http.StatusNoContent)
+}
+
+// accountOf is the account of the catalogue of a person of the test, made if they have none.
+func (e *env) accountOf(p person) int64 {
+	e.t.Helper()
+	return testutil.CatalogueAccount(e.t, e.tx, p.user)
 }
