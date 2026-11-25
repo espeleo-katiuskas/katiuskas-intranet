@@ -51,7 +51,8 @@ register with no relation to the club (ideally with a verified email and a phone
 a way to verify a phone number) see a little more; the members of the club are a **group** that sees
 everything (the coordinates, for a start) and writes. Later, other groups (another club, the
 federation, a group of explorers of one system), other audiences (one person) and perhaps write
-permissions for people outside the club. Nothing here is decided.
+permissions for people outside the club. The board has answered the main points (see "Decided by
+the board" below); what is still open is listed there.
 
 The idea in one line: instead of a part of the intranet that is opened to the public little by
 little, the catalogue is the product, with public, registered and group audiences from its first
@@ -137,11 +138,11 @@ Against, and what does not go away:
 
 The club has settled these for the work that comes first (the rest, below, is still to settle):
 
-- **The levels of a place** are three, each `club` or `public`: *the place* (that it exists, with its
-  name, type, state, zone and measures), *the location* (the coordinate, the other points and how to
-  get there) and *the content* (the description, the technical sheet and the files). Where the place
-  is closed it does not exist for whoever may not see it: no data, no count, a 404. Who wrote it and
-  the activities are never public.
+- **The levels of a place** are three, each `club` or `public`: *the place* (that it exists, with
+  its name, type, state, zone and measures), *the location* (the coordinate, the other points and
+  how to get there) and *the content* (the description, the technical sheet and the files). Where
+  the place is closed it does not exist for whoever may not see it: no data, no count, a 404. Who
+  wrote it and the activities are never public.
 - **Without access to the coordinates** a viewer sees the zone of the place and no marker.
 - Only **admin and board** change the visibility, never the author alone, and each change is
   announced. A level is never more open than the place. A system shows the cavities that are seen
@@ -150,7 +151,44 @@ The club has settled these for the work that comes first (the rest, below, is st
 - A place can be **protected** (bats, archaeology, private land): a lock under which nothing may be
   public.
 
+### Decided by the board
+
+Answered on 2026-11-26, to the questions in the page prepared for the board:
+
+- **The site** is called «Cuevas y simas» and lives at its own domain, `https://cuevasysimas.es`
+  (the third option, not the one recommended: a path of `www.katiuskas.es`). It has its own legal
+  notice, privacy policy and cookies, and its session is not shared with the intranet.
+- **Who answers for it**: a project with its own governance (not the club).
+- **The first places opened**: a handful marked by whoever knows them, at the level of *the place*
+  alone (name, type, state, zone and measures); the location and the content stay for the club.
+- **What the public sees of the location**: only the zone, no marker.
+- **Legal notice**: a standard template, not one written with an adviser.
+- **Photos, technical sheets and texts of members**: none published at the start.
+- **OpenStreetMap and maps**: the club's data kept apart from OpenStreetMap's and credited; nothing
+  contributed back until the private locations are settled.
+- **People outside the club** can register (the second option), with an email and a phone number.
+  The phone is verified through Telegram at first; other methods may come later.
+
+What this changes: taking the catalogue out of the intranet (step 7 below) stops being optional,
+since the project has its own domain and governance; the club becomes a group of it and the
+intranet a client. The accounts of the catalogue (`internal/accounts`) were made for this.
+
+What the answers leave open (to ask the board):
+
+- Who is legally responsible for the project (name or entity, address and contact email), which is
+  what the template of the legal notice needs, and who holds the domain and the hosting.
+- Which people govern and moderate it.
+- Whether the phone is mandatory when registering, as it has been understood. If it is optional,
+  somebody with no Telegram could register with the email alone.
+- Which Telegram bot verifies the phone: one of the project's own (the recommendation, for the
+  separation) or the club's.
+- When registration opens: after the first places are opened (proposed) or before.
+
 ### Decisions to settle
+
+The points that the board answered above (the site and its domain, governance, the legal notice,
+the phone through Telegram, the content, OpenStreetMap, and the location shown to the public) are
+kept below for their reasoning, with the options that were not chosen.
 
 **1. What each part of a place is.** Before a mechanism, a classification. A starting point to be
 discussed by the people who know the caves, one row per part:
@@ -336,7 +374,8 @@ Each step can be deployed alone and none makes anything public before the last o
 
 1. **Decide** what has to be decided first: 1 (the classification), 3 (the policy for coordinates),
    4 (identity), 6 (the site and its name), 7 (governance) and 8 (the legal points). Without them
-   the next steps are guesses; 2 and 5 can wait for the experience of the first stage.
+   the next steps are guesses; 2 and 5 can wait for the experience of the first stage. *Done*,
+   except the points that "Decided by the board" leaves open.
 2. **Draw the boundary inside the repository** (no change in behaviour): `internal/places` (and
    `areas`, the mirror) import nothing from `users` or `activities` and use small local interfaces;
    their tables go in a schema of their own through a new migration, with no foreign key to `users`
@@ -386,13 +425,13 @@ Each step can be deployed alone and none makes anything public before the last o
    export), the limits against abuse; then the domain, the links from `www.katiuskas.es`,
    `robots.txt`, a first small set of places marked public by the people who know the caves, and a
    way to take any of them down at once.
-7. **Take it out into a service of its own, if it is worth it.** Reasons that would justify it: a
-   second group that wants to use it, a team or a pace of deployment that is not the intranet's, or
-   an isolation or a load the intranet should not share. What it takes: its own repository,
-   database, deployment, backups and monitoring; the intranet reaching it with the assertion (and a
-   browser token if the pages call it directly); `activity_places` working with a reference that may
-   point to a place that is gone; and the notices and the off-line copies moved with it. If none of
-   the reasons exists, stay at step 6: the boundary is already drawn and costs nothing to keep.
+7. **Take it out into a service of its own.** The board chose a project with its own domain and
+   governance, so this is the plan and not an option. What it takes: its own repository, database,
+   deployment, backups and monitoring; the intranet reaching it with the assertion (and a browser
+   token if the pages call it directly); `activity_places` working with a reference that may point
+   to a place that is gone; and the notices and the off-line copies moved with it. It can come
+   before or after the first opening, since the boundary is drawn either way; until then the same
+   process can answer the new domain.
 8. **Later**: other groups and per-person rules (more use of the table of rules), proposals and
    moderation (9), the phone verified by SMS if it is wanted, and contributing to OpenStreetMap
    (`osm-integration.md`, section 5) once the question of private locations is closed.
