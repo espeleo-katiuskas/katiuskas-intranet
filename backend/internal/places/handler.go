@@ -83,6 +83,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/places/{id}", a.Protect(h.gate("GET", h.get)))
 	mux.Handle("PUT /api/v1/places/{id}", a.Protect(h.gate("PUT", h.update)))
 	mux.Handle("PATCH /api/v1/places/{id}", a.Protect(h.gate("PATCH", h.patch)))
+	mux.Handle("PUT /api/v1/places/{id}/settings/visibility", a.Protect(h.gate("PUT", h.setVisibility), "admin", "board"))
 	mux.Handle("DELETE /api/v1/places/{id}", a.Protect(h.gate("DELETE", h.delete), "admin", "board"))
 	mux.Handle("PUT /api/v1/places/{id}/links/osm", a.Protect(h.gate("PUT", h.linkOsm)))
 	mux.Handle("DELETE /api/v1/places/{id}/links/osm", a.Protect(h.gate("DELETE", h.unlinkOsm)))
@@ -176,6 +177,9 @@ func writeError(w http.ResponseWriter, err error, fallback string) {
 		{ErrTypeInUse, http.StatusConflict, "place_type_in_use"},
 		{ErrFixedType, http.StatusConflict, "fixed_place_type"},
 		{ErrHasActivities, http.StatusConflict, "place_has_activities"},
+		{ErrInvalidVisibility, http.StatusBadRequest, "invalid_place_visibility"},
+		{ErrVisibilityTooOpen, http.StatusBadRequest, "visibility_too_open"},
+		{ErrPlaceProtected, http.StatusBadRequest, "place_protected"},
 	} {
 		if errors.Is(err, m.err) {
 			httpapi.WriteError(w, m.status, m.code, err.Error())
@@ -462,7 +466,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not list the places")
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, list)
+	// Only the places the viewer may know exist, each as they may see it.
+	httpapi.WriteJSON(w, http.StatusOK, VisibleTo(list, auth.ViewerFromContext(r.Context()), time.Now()))
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -475,7 +480,72 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not read the place")
 		return
 	}
+	// A place the viewer may not see is not there for them.
+	seen, ok := p.ViewedBy(auth.ViewerFromContext(r.Context()), time.Now())
+	if !ok {
+		writeError(w, ErrNotFound, "could not read the place")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, seen)
+}
+
+// setVisibility (PUT /places/{id}/settings/visibility, a longer path because /places/{id}/visibility would clash with the
+// reference data under /places/types) changes how open a place is: admin and board only, the whole of it at once. It is a
+// change of the place like any other, so it says who and when, and it is announced.
+func (h *Handler) setVisibility(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var body Visibility
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpapi.WriteError(w, http.StatusBadRequest, "invalid_body", "malformed JSON body")
+		return
+	}
+	before, beforeErr := h.service.GetPlace(r.Context(), id)
+	p, err := h.service.SetVisibility(r.Context(), id, actorID(r.Context()), body)
+	if err != nil {
+		writeError(w, err, "could not change the visibility of the place")
+		return
+	}
+	if beforeErr == nil {
+		if changes := visibilityChanges(before.Visibility, p.Visibility); changes != "" {
+			httpapi.NotifyAsync(h.notifier, fmt.Sprintf("👁️ %s ha cambiado la visibilidad del lugar «%s»%s: %s.",
+				h.actorLogin(r.Context()), p.Name, inWhere(p.Where), changes))
+		}
+	}
 	httpapi.WriteJSON(w, http.StatusOK, p)
+}
+
+// visibilityChanges says what changed between two visibilities, for the notice; empty if nothing did.
+func visibilityChanges(before, after Visibility) string {
+	audience := func(a Audience) string {
+		if a == AudiencePublic {
+			return "público"
+		}
+		return "solo el club"
+	}
+	var changes []string
+	for _, level := range []struct {
+		name          string
+		before, after Audience
+	}{
+		{"el lugar", before.Place, after.Place},
+		{"la localización", before.Location, after.Location},
+		{"el contenido", before.Content, after.Content},
+	} {
+		if level.before != level.after {
+			changes = append(changes, fmt.Sprintf("%s pasa de %s a %s", level.name, audience(level.before), audience(level.after)))
+		}
+	}
+	if before.Protected != after.Protected {
+		if after.Protected {
+			changes = append(changes, "queda protegido")
+		} else {
+			changes = append(changes, "deja de estar protegido")
+		}
+	}
+	return strings.Join(changes, "; ")
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {

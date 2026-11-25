@@ -47,7 +47,8 @@ func violates(err error, constraint string) bool {
 const listColumns = `
 	p.id, p.type_id, t.name, p.kind, p.name, p.alt_names, COALESCE(p.state, ''), p.subtype_id, st.name, p.system_id, sy.name,
 	p.area_id, w.ids, w.where_text, w.names_text,
-	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name`
+	p.lat, p.lon, p.altitude_m, p.depth_m, p.horizontal_length_m, p.geology_id, g.name,
+	p.place_audience, p.location_audience, p.content_audience, p.protected`
 
 // listFrom is a place with its type and, through the tree of zones, the ids and the names of the zone it
 // is in and of the ones it is in, from the most specific to the country (depth 0 is the zone itself). The
@@ -78,6 +79,7 @@ func (it *ListItem) scanTargets() []any {
 		&it.ID, &it.TypeID, &it.TypeName, &it.Kind, &it.Name, &it.AltNames, &it.State, &it.SubtypeID,
 		&it.Subtype, &it.SystemID, &it.System, &it.AreaID, &it.AreaIDs, &it.Where, &it.AreaNames, &it.Lat, &it.Lon, &it.AltitudeM, &it.DepthM, &it.HorizontalLengthM, &it.GeologyID,
 		&it.Geology,
+		&it.Visibility.Place, &it.Visibility.Location, &it.Visibility.Content, &it.Visibility.Protected,
 	}
 }
 
@@ -351,6 +353,21 @@ func lockPlace(ctx context.Context, tx pgx.Tx, id int64) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+// SetVisibility changes how open a place is, and says who changed it (as any other change of the place).
+func (r *Repository) SetVisibility(ctx context.Context, id, userID int64, v Visibility) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE catalogue.places SET place_audience = $2, location_audience = $3, content_audience = $4,
+			protected = $5, updated_by = $6, updated_at = clock_timestamp()
+		WHERE id = $1`, id, v.Place, v.Location, v.Content, v.Protected, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ----- points -----

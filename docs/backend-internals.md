@@ -1493,6 +1493,41 @@ signed-in person can do is what it was.
   than the place (the coordinates first) are asked where the answer carries them, which is the next
   stage: the rules per place, in the data.
 
+### How open a place is
+
+Each place has a **visibility** (`places.Visibility`, migration `00082`): three levels, each for the
+club alone (`club`) or for anybody (`public`), and a lock.
+
+- `place`: the place itself, with its name, type, state, zone and measures. Where it is closed,
+  whoever may not see it **does not know it exists**: it is not in the lists, it is not counted, and
+  reading it is a 404.
+- `location`: the main coordinate, the other points and how to get there. `content`: the
+  description, the technical sheet and the files. Neither can be more open than the place.
+- `protected` locks the place: nothing of it may be public. Who wrote it and the activities that
+  went there are never public, whatever the levels say.
+- Everything is `club` until an admin or a board member opens it, with `PUT
+  /places/{id}/settings/visibility` (the three levels and the lock at once; `Service.SetVisibility`
+  validates what the database checks too, with an error of its own for each rule:
+  `invalid_place_visibility`, `visibility_too_open`, `place_protected`). The path is longer than
+  `/places/{id}/visibility` because that clashes with `/places/types/{id}` in the router. It is a
+  change like any other (`updated_by`, `updated_at`) and it is announced, saying only what changed.
+- `Visibility.Rules()` turns it into the rules of the `access` package, and everything that is left
+  out for a viewer is decided in `redact.go` from those rules and nowhere else: `ViewedBy` on
+  `ListItem`, `Place`, `SystemPlace` and `System` answers the data as the viewer may see it and
+  whether they may know it exists. What a viewer may not see is zeroed or emptied and named in
+  `Withheld` (the element of OpenStreetMap a place is goes with the coordinates, since it gives them
+  away). A system shows the cavities the viewer may see and none of the others, since it links caves;
+  its description and files need the content of every cavity; a system none of whose cavities they see
+  is not there, and one with no cavities is for the club alone.
+- The handlers apply it where a place or a system is read (`list`, `get`, `getSystem`), but the club
+  is the only viewer there, because every route is still behind `Protect` and the club's rules, so
+  nothing is left out for anybody today. Opening a route to people outside the club means giving it
+  `WithViewer`, rules per place instead of the club's, and (for the lists of systems, the files, the
+  points and the activities, which are not redacted yet) the same care. The coordinates of a viewer
+  who may not see them are left out and the zone of the place stays, which is what the club chose.
+  The tests cross every kind of viewer with each visibility and each part
+  (`visibility_test.go`).
+
 ### Partial edit
 
 `PUT /places/{id}` replaces every field, so a client that only knows some of them would clear the

@@ -8,6 +8,8 @@ package places
 import (
 	"errors"
 	"time"
+
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/access"
 )
 
 // Kind is the shape of a place, from its type: Cavidad is a cave and Cañón is a canyon, and every other
@@ -186,6 +188,12 @@ type ListItem struct {
 	// OsmChanged says that the OpenStreetMap element the place is has changed since it was linked or last
 	// looked at (Place.OsmChanges says what); absent when it has not, or the place is not one.
 	OsmChanged bool `json:"osm_changed,omitempty"`
+	// Visibility is how open the place is: who may see what of it.
+	Visibility Visibility `json:"visibility"`
+	// Withheld lists the parts of the place that the viewer may not see and that have been left out of
+	// what they are given (the values of a part that is withheld are empty or zero). It is always empty
+	// for the members of the club, who see everything.
+	Withheld []access.Part `json:"withheld,omitempty"`
 }
 
 // VisitedPlace is a place a person has been to, with how often.

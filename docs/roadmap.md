@@ -133,6 +133,23 @@ Against, and what does not go away:
   registered people is another. Everything that decides what is seen asks one function with that
   viewer.
 
+### Decided for the first stage
+
+The club has settled these for the work that comes first (the rest, below, is still to settle):
+
+- **The levels of a place** are three, each `club` or `public`: *the place* (that it exists, with its
+  name, type, state, zone and measures), *the location* (the coordinate, the other points and how to
+  get there) and *the content* (the description, the technical sheet and the files). Where the place
+  is closed it does not exist for whoever may not see it: no data, no count, a 404. Who wrote it and
+  the activities are never public.
+- **Without access to the coordinates** a viewer sees the zone of the place and no marker.
+- Only **admin and board** change the visibility, never the author alone, and each change is
+  announced. A level is never more open than the place. A system shows the cavities that are seen
+  and its description and files follow the most closed of them. Every place starts closed and the
+  only values for now are `club` and `public`.
+- A place can be **protected** (bats, archaeology, private land): a lock under which nothing may be
+  public.
+
 ### Decisions to settle
 
 **1. What each part of a place is.** Before a mechanism, a classification. A starting point to be
@@ -346,10 +363,14 @@ Each step can be deployed alone and none makes anything public before the last o
    `Authenticator.WithViewer`, and a gate on every route of the places that asks the rules
    (`ClubOnly()` for now, so nothing changed for anybody). *Left*: the rules per place, in the data
    (step 4), the parts asked where the answer carries them, and the opaque subject.
-4. **Visibility in the data**: the audience in `places` (and in the files and points that can
-   differ), a migration that puts everything at the club's group, the choice in the forms of the
-   place (admin and board only), a notice for each change, and the redaction applied to the list,
-   the page, the map, the activities and the copies for working off line.
+4. **Visibility in the data**: the audiences in `places` (three levels and a lock), a migration that
+   puts everything at the club, the choice in the place's page (admin and board only), a notice for
+   each change, and the redaction of what a viewer may not see. *Done*: migration `00082`, `PUT
+   /places/{id}/settings/visibility`, the dialog "Visibilidad", the notice, and the redaction
+   (`ViewedBy` on places, the listing and systems, applied where they are read, with tests that
+   cross every viewer with every visibility). *Left* (they are the next step's, since only the club
+   can reach the routes today): redacting the lists of systems, the files, the points and the
+   activities, the map and the copies for working off line, as each route is opened.
 5. **The public read API and pages**: the separate group of routes, the redacted projection (no
    logins, no activities, coordinates as decided), server-rendered pages with their URLs, sitemap,
    caches, rate limits, credits for maps and for OpenStreetMap. Tried in testing with the real data

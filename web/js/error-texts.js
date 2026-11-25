@@ -145,6 +145,11 @@ const texts = {
   too_many_places: 'Una actividad no puede ir a tantos lugares.',
   place_has_activities:
     'Este lugar tiene actividades y no se puede borrar: se conserva lo que se ha hecho en él.',
+  invalid_place_visibility:
+    'La visibilidad no es válida: cada nivel es «solo el club» o «público».',
+  visibility_too_open:
+    'La localización y el contenido no pueden estar más abiertos que el lugar: quien no puede ver el lugar no sabe que existe.',
+  place_protected: 'Un lugar protegido no puede tener nada público.',
   invalid_radius: 'El radio de búsqueda no es válido: de 1 a 2000 metros.',
   place_not_linked: 'Este lugar no está vinculado con ningún elemento de OpenStreetMap.',
   unknown_osm_element: 'Ese elemento de OpenStreetMap no está en la copia del club.',

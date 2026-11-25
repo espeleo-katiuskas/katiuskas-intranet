@@ -504,8 +504,15 @@ Then:
   a form attaches a new one;
 - who added the place and who changed it last.
 
-Any member has "Editar lugar" and "Añadir punto"; admin and board also "Borrar lugar"
-(`data-roles`).
+Any member has "Editar lugar" and "Añadir punto"; admin and board also "Visibilidad" and "Borrar
+lugar" (`data-roles`). Every place says how open it is in a row "Visibilidad" ("Solo para el club"
+until somebody opens it, as the API's `visibility` says). "Visibilidad" opens a dialog
+(`place-visibility.js`) with the three levels (the place, the location, the content), each "Solo el
+club" or "Público", and the lock "Lugar protegido", and sends them together with
+`PUT /places/{id}/settings/visibility`. The form never sends what the server would refuse: the
+location and the content are closed and disabled while the place is, and a protected place closes
+and disables everything. Nothing is public yet, and the dialog says so; it is not offered with no
+connection.
 
 ### The dialogs of a place and of a point
 

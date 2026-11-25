@@ -21,6 +21,7 @@ import { copyFromOsm, openOsmLinkDialog, osmChangesHtml, osmDataHtml } from './o
 import { describeFields } from './place-body.js';
 import { openPlaceDialog, openPointDialog } from './place-dialog.js';
 import { openQuickEdit } from './place-quick-edit.js';
+import { openVisibilityDialog, visibilityText } from './place-visibility.js';
 import { openTextEdit } from './place-text-edit.js';
 import { bindPendingList } from './pending-list.js';
 import { overlayPlace, pendingEntries } from './pending-overlay.js';
@@ -280,6 +281,7 @@ function render() {
       coordinatesHtml(place.lat, place.lon, { guide: { name: place.name, placeId: place.id } }),
     ],
     ['Altitud', place.altitude_m != null ? `${place.altitude_m} m sobre el nivel del mar` : null],
+    ['Visibilidad', place.visibility ? escapeHtml(visibilityText(place.visibility)) : null],
     ['Geología', place.geology ? escapeHtml(place.geology) : null],
     ['Profundidad', place.depth_m != null ? `${place.depth_m} m` : null],
     [
@@ -646,6 +648,11 @@ bindFiles({
 });
 
 // Only admin and board have the button (data-roles removes it for the rest).
+document.getElementById('edit-visibility')?.addEventListener('click', () => {
+  openVisibilityDialog({ place, onSaved: load });
+});
+
+// Only admin and board have the button (data-roles removes it for the rest).
 document.getElementById('delete-place')?.addEventListener('click', async () => {
   if (!confirm(`¿Borrar «${place.name}», con sus puntos y sus ficheros?`)) return;
   try {
@@ -659,5 +666,6 @@ document.getElementById('delete-place')?.addEventListener('click', async () => {
 if (isOffline()) {
   // What needs the connection is not offered.
   document.getElementById('delete-place')?.setAttribute('hidden', '');
+  document.getElementById('edit-visibility')?.setAttribute('hidden', '');
 }
 await Promise.all([load(), renderPending()]);

@@ -80,6 +80,7 @@ export function overlayList(list, entries, catalogues) {
           depth_m: b.depth_m ?? undefined,
           horizontal_length_m: b.horizontal_length_m ?? undefined,
           activity_count: 0,
+          visibility: { place: 'club', location: 'club', content: 'club', protected: false },
         },
         catalogues,
       ),

@@ -2658,6 +2658,33 @@ paths:
         "403": { description: "Requires admin or board." }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /places/{id}/settings/visibility:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Say how open a place is
+      description: >
+        Admin or board. Replaces the three levels and the lock at once: all four fields are required.
+        Each level is `club` (the members of the club alone) or `public`. A place is `club` at every level
+        until somebody opens it. The location and the content cannot be more open than the place, and a
+        protected place cannot have anything public. It is a change of the place like any other (it says
+        who and when, and it is announced). The path is not /places/{id}/visibility because that would
+        clash with the reference data under /places/types.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PlaceVisibility" }
+      responses:
+        "200":
+          description: The place
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Place" }
+        "400": { description: "invalid_id, invalid_body, invalid_place_visibility (neither club nor public), visibility_too_open (location or content more open than the place) or place_protected (something public on a protected place)." }
+        "403": { description: "forbidden — neither admin nor board." }
+        "404": { description: "not_found." }
   /places/{id}/links/osm:
     parameters:
       - { name: id, in: path, required: true, schema: { type: integer } }
@@ -7146,6 +7173,27 @@ components:
         geology_id: { type: integer }
         geology: { type: string, description: "The name of the geology of a cave." }
         osm_changed: { type: boolean, description: "True if the OpenStreetMap element the place is has changed since it was linked or last reviewed (Place.osm_changes says what). Left out otherwise." }
+        visibility: { $ref: "#/components/schemas/PlaceVisibility" }
+        withheld:
+          type: array
+          description: >
+            The parts of the place that the viewer may not see and that were left out (zero or empty).
+            Always left out for the members of the club, who are the only people who reach these routes
+            for now.
+          items: { type: string, enum: [place, measures, coordinates, points, access, sheet, files, authors, activities] }
+
+    PlaceVisibility:
+      type: object
+      required: [place, location, content, protected]
+      description: >
+        How open a place is, in three levels. Where `place` is closed whoever may not see it does not know
+        it exists (it is not in the lists and is a 404). Who wrote it and the activities that went there are
+        never public.
+      properties:
+        place: { type: string, enum: [club, public], description: "The place itself: that it exists, with its name, type, state, zone and measures." }
+        location: { type: string, enum: [club, public], description: "The main coordinate, the other points and how to get there. Not more open than `place`." }
+        content: { type: string, enum: [club, public], description: "The description, the technical sheet and the files. Not more open than `place`." }
+        protected: { type: boolean, description: "Locks the place closed (bats, archaeology, private land…): nothing of a protected place may be public." }
 
     Place:
       description: A place with everything about it.

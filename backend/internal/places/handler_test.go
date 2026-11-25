@@ -1017,6 +1017,12 @@ func TestPlacesVisitedByAPerson(t *testing.T) {
 	activity(future.ID, true, "start_date = current_date + 10, end_date = current_date + 11")
 	activity(others.ID, false, "")
 
+	// The dates above are the database's (current_date), which is not the date of the machine running the
+	// test between midnight there and midnight in UTC: the end of the latest visit is asked of the database too.
+	var latestEnd string
+	if err := e.tx.QueryRow(ctx, `SELECT to_char(current_date - 2, 'YYYY-MM-DD')`).Scan(&latestEnd); err != nil {
+		t.Fatal(err)
+	}
 	path := "/api/v1/users/" + e.member.user.Login + "/places"
 	got := decode[[]places.VisitedPlace](t, e.json("GET", path, e.board.token, nil))
 	if len(got) != 2 {
@@ -1026,7 +1032,7 @@ func TestPlacesVisitedByAPerson(t *testing.T) {
 		t.Errorf("the latest first, with how many times: %+v", got)
 	}
 	if got[0].TypeName != "Cueva" || got[0].Where != "Valdemanco, Madrid, España" ||
-		got[0].LastVisit.Format("2006-01-02") != time.Now().AddDate(0, 0, -2).Format("2006-01-02") {
+		got[0].LastVisit.Format("2006-01-02") != latestEnd {
 		t.Errorf("what it is, where and when the last one ended: %+v", got[0])
 	}
 	// Somebody who has been nowhere gets an empty list, and a login that is nobody's is a 404.

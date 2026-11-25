@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
@@ -34,7 +36,14 @@ func (h *Handler) getSystem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err, "could not read the system")
 		return
 	}
-	httpapi.WriteJSON(w, http.StatusOK, s)
+	// The cavities the viewer may see, each as they may see it; a system none of whose cavities they see
+	// is not there for them.
+	seen, ok := s.ViewedBy(auth.ViewerFromContext(r.Context()), time.Now())
+	if !ok {
+		writeError(w, ErrSystemNotFound, "could not read the system")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, seen)
 }
 
 func (h *Handler) createSystem(w http.ResponseWriter, r *http.Request) {

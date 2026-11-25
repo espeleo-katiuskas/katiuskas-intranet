@@ -215,6 +215,18 @@ func (s *Service) UpdatePlace(ctx context.Context, id, userID int64, in Input) (
 	return s.namePlace(ctx, p, err)
 }
 
+// SetVisibility changes how open a place is. Who may is for the handler to say (admin and board).
+func (s *Service) SetVisibility(ctx context.Context, id, userID int64, v Visibility) (Place, error) {
+	if err := v.Validate(); err != nil {
+		return Place{}, err
+	}
+	if err := s.repo.SetVisibility(ctx, id, userID, v); err != nil {
+		return Place{}, err
+	}
+	p, err := s.repo.GetPlace(ctx, id)
+	return s.namePlace(ctx, p, err)
+}
+
 // patchAttempts is how many times a partial edit starts again when somebody saves the place between
 // its read and its write.
 const patchAttempts = 3

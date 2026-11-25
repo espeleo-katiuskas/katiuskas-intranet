@@ -1251,6 +1251,10 @@ Rules outside the database: one that has places is not deleted (409 `geology_in_
 | `created_at` | timestamptz | no | now() |
 | `updated_by` | bigint | no |  |
 | `updated_at` | timestamptz | no | now() |
+| `place_audience` | text | no | 'club' |
+| `location_audience` | text | no | 'club' |
+| `content_audience` | text | no | 'club' |
+| `protected` | boolean | no | false |
 
 Notes on the columns:
 
@@ -1278,6 +1282,14 @@ Notes on the columns:
   `00070_place_osm_seen.sql`, which gave the places already linked the element as it was then).
 - `updated_by`, `updated_at`: The last change of the place or of any of its points; the same as the
   creation until there is one. They are set by the Go service.
+- `place_audience`, `location_audience`, `content_audience`: Who may see each of the three levels,
+  the club's members alone (`club`) or anybody (`public`): the place itself (that it exists, with
+  its name, type, state, zone and measures), where it is (the main coordinate, the other points and
+  how to get there) and what is said and shown of it (the description, the technical sheet and the
+  files). Everything is `club` until an admin or a board member opens it (migration `00082`); who
+  wrote it and the activities that went there are never public (`places.Visibility`).
+- `protected`: Locks the place closed (bats, archaeology, private land): nothing of it may be
+  public.
 
 Constraints:
 
@@ -1296,6 +1308,10 @@ Constraints:
 - `state_for_types_with_state`: `has_state` is true exactly when there is a state
 - `subtype_for_caves`: `kind = 'cave'` exactly when there is a subtype
 - `system_only_for_caves`: `kind = 'cave'` or there is no system
+- `places_audiences_known`: the three audiences are `club` or `public`
+- `places_location_not_more_open_than_place` and `places_content_not_more_open_than_place`: a level
+  is `club` unless the place is `public`
+- `places_protected_is_closed`: a protected place has the three at `club`
 - `alt_names_not_too_many`: at most 50 names (Go allows 20)
 - `lat` between -90 and 90, `lon` between -180 and 180, `altitude_m` between -500 and 9000
 - `depth_m` and `horizontal_length_m` not negative
@@ -2200,3 +2216,5 @@ at the end; that database has to be recreated when a new migration appears.
 - `00081_catalogue_schema.sql`: creates the schema `catalogue` and moves into it the ten tables of
   the catalogue of places, with their indexes, constraints and sequences. The role that migrates
   has to be able to create schemas in the database, as its owner can
+- `00082_place_visibility.sql`: `places.place_audience`, `location_audience`, `content_audience` and
+  `protected`, with the checks that go with them; every place starts `club` everywhere

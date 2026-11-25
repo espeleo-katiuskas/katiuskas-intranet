@@ -876,6 +876,17 @@ known, in metres above sea level.
   unless an activity went to it.
   - returns: 204
   - errors: 400 `invalid_id`; 404 `not_found`
+- **PUT** `/places/{id}/settings/visibility` — *Admin or board*. Says how open the place is: the
+  three levels and the lock, all at once (the path is not `/places/{id}/visibility`, which would
+  clash with `/places/types/{id}` in the router). A place is `club` at every level until somebody
+  opens it. It is a change of the place like any other (`updated_by`, `updated_at`) and it is
+  announced.
+  - body: `place*`, `location*`, `content*` (each `club` or `public`) and `protected*` (a boolean):
+    see `PlaceVisibility`
+  - returns: 200 `Place`
+  - errors: 400 `invalid_id`, `invalid_body`, `invalid_place_visibility` (a level that is neither),
+    `visibility_too_open` (the location or the content more open than the place),
+    `place_protected` (something public on a protected place); 403 `forbidden`; 404 `not_found`
 - **PUT** `/places/{id}/links/osm` — *Any baseline role*. Says which element of the OpenStreetMap
   mirror the place is, instead of the one it was, if any: nothing else of the place changes (but
   `updated_by` and `updated_at`). The element stops being a candidate on the map. (The path is not
@@ -2164,6 +2175,26 @@ are given by a search and by `GET /areas/{id}`, not by the list of the zones bel
 | `geology` | text |
 | `activity_count` | integer, in how many activities that are not cancelled the place is one of the places they go to |
 | `osm_changed` | true if the OpenStreetMap element the place is has changed since it was linked or last reviewed; left out otherwise |
+| `visibility` | `PlaceVisibility` |
+| `withheld` | `[text]`, the parts that were left out for this viewer; left out when none (always, for now) |
+
+### `PlaceVisibility`
+
+How open a place is, in three levels, each `club` (the members of the club alone) or `public`:
+
+| Field | Type |
+|---|---|
+| `place` | `club`/`public`: the place itself, with its name, type, state, zone and measures |
+| `location` | `club`/`public`: the main coordinate, the other points and how to get there |
+| `content` | `club`/`public`: the description, the technical sheet and the files |
+| `protected` | boolean: locks the place closed, nothing of it may be public |
+
+Where `place` is closed, whoever may not see it does not know it exists: it is not in the lists and
+reading it is a 404. `location` and `content` cannot be more open than `place`; a protected place has
+all three at `club`. Who wrote it and the activities that went there are never public. Only the
+members of the club reach the routes today, so for them `withheld` is never there and the three
+levels only say what an opening would show; the parts are `place`, `measures`, `coordinates`,
+`points`, `access`, `sheet`, `files`, `authors` and `activities`.
 
 ### `Place`
 
