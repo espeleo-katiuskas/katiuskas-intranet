@@ -18,15 +18,10 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/places"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 type fakeNotifier struct {
@@ -69,7 +64,7 @@ var cavidadID, cuevaID int64
 var valdemanco int64
 
 type person struct {
-	user  testutil.TestUser
+	user  testutil.Person
 	token string
 }
 
@@ -80,12 +75,12 @@ type env struct {
 	notifier *fakeNotifier
 	resolver testutil.FakeResolver
 	storage  *places.Storage
-	users    *users.Service
 	service  *places.Service
 	// authenticator is the one of the mux, for a second mux built with other rules.
 	authenticator *auth.Authenticator
-	// activities is the real activities service, which a catalogue built by hand needs (SetActivities).
-	activities *activities.Service
+	// activities answers what the catalogue asks of the activities (how many went to a place, and whether any
+	// did): the catalogue knows nothing of them, so the tests say it.
+	activities *fakeActivities
 	// who: two plain members, board and an admin.
 	member, other, board, admin person
 	// the ids of the seeded types (a via ferrata has a state, a hut has none), of the subtypes cueva and
@@ -98,10 +93,6 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	tx := testutil.NewTx(t)
-	rolesService := roles.NewService(roles.NewRepository(tx))
-	membershipsService := memberships.NewService(memberships.NewRepository(tx))
-	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
-	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 	notifier := &fakeNotifier{}
 	mux := http.NewServeMux()
@@ -110,11 +101,10 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	placesService := places.NewService(places.NewRepository(tx), storage, accounts.NewService(accounts.NewRepository(tx)))
-	// The real activities, which the catalogue asks how many went to each place.
-	activitiesService := activities.NewService(activities.NewRepository(tx), licensesService, rolesService, placesService)
-	placesService.SetActivities(activitiesService)
-	places.NewHandler(placesService, authenticator, usersService, notifier).RegisterRoutes(mux)
-	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage, users: usersService, activities: activitiesService, service: placesService, authenticator: authenticator}
+	fake := newFakeActivities()
+	placesService.SetActivities(fake)
+	places.NewHandler(placesService, authenticator, notifier).RegisterRoutes(mux)
+	e := &env{t: t, tx: tx, mux: mux, notifier: notifier, resolver: resolver, storage: storage, activities: fake, service: placesService, authenticator: authenticator}
 	e.member = e.person("member")
 	e.other = e.person("member")
 	e.board = e.person("board")
@@ -151,7 +141,7 @@ func newEnv(t *testing.T) *env {
 }
 
 func (e *env) person(roles ...string) person {
-	u := testutil.InsertMember(e.t, e.tx)
+	u := testutil.NewPerson(e.t)
 	return person{user: u, token: testutil.TokenFor(e.resolver, u.ID, roles...)}
 }
 
@@ -558,15 +548,6 @@ func TestTypes(t *testing.T) {
 	errorCode(t, e.json("DELETE", fmt.Sprintf("/api/v1/places/types/%d", unused.ID), e.admin.token, nil), 404, "not_found")
 }
 
-// A person who created places cannot be deleted without more: the places keep who made them.
-func TestAPersonWithPlacesCannotBeDeletedBlindly(t *testing.T) {
-	e := newEnv(t)
-	e.newPlace(e.cavidad, "Rastro", nil)
-	if err := users.NewRepository(e.tx).Delete(context.Background(), e.member.user.ID); err == nil {
-		t.Error("expected a person with a place not to be deleted without more")
-	}
-}
-
 // Where a place is: the most specific zone, which says its country, province… as the zones it is in; the
 // listing and the place give them, and an edit may move it. The text of where it is has no autonomous
 // community when there is a province (in Spain the province says it already), the ids and the path do.
@@ -938,31 +919,41 @@ func TestFiles(t *testing.T) {
 	}
 }
 
-// The listing and the place say in how many activities the place is one of the places they go to, not
-// counting the cancelled ones.
+// fakeActivities is what the activities say to the catalogue: in how many activities each place is, and
+// whether any went there. The catalogue only passes it on; counting them is the activities' own business
+// (and is tested there).
+type fakeActivities struct {
+	counts map[int64]int
+	used   map[int64]bool
+}
+
+func newFakeActivities() *fakeActivities {
+	return &fakeActivities{counts: map[int64]int{}, used: map[int64]bool{}}
+}
+
+func (f *fakeActivities) ActivityCounts(_ context.Context, ids []int64) (map[int64]int, error) {
+	out := map[int64]int{}
+	for _, id := range ids {
+		if n := f.counts[id]; n > 0 {
+			out[id] = n
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeActivities) HasActivities(_ context.Context, id int64) (bool, error) {
+	return f.used[id], nil
+}
+
+// The listing, the place and the cavities of a system say in how many activities the place is one of the
+// places they go to, as the activities say it.
 func TestActivityCountOfAPlace(t *testing.T) {
 	e := newEnv(t)
 	busy := e.newPlace(e.cavidad, "Cueva visitada", nil)
 	e.notifier.wait(t)
 	quiet := e.newPlace(e.cavidad, "Cueva tranquila", nil)
 	e.notifier.wait(t)
-	for i := 0; i < 2; i++ {
-		activity := testutil.InsertActivity(t, e.tx)
-		if _, err := e.tx.Exec(context.Background(), `INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, activity, busy.ID); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// A cancelled activity that goes there does not count.
-	cancelled := testutil.InsertActivity(t, e.tx)
-	for _, sql := range []string{
-		`INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`,
-		`UPDATE activities SET cancelled = true WHERE id = $1`,
-	} {
-		args := []any{cancelled, busy.ID}[:strings.Count(sql, "$")]
-		if _, err := e.tx.Exec(context.Background(), sql, args...); err != nil {
-			t.Fatal(err)
-		}
-	}
+	e.activities.counts[busy.ID] = 2
 	counts := map[int64]int{}
 	for _, item := range decode[[]places.ListItem](t, e.json("GET", "/api/v1/places", e.member.token, nil)) {
 		counts[item.ID] = item.ActivityCount
@@ -975,95 +966,19 @@ func TestActivityCountOfAPlace(t *testing.T) {
 	}
 }
 
-// The places a person has been to: those of the activities they organized or took part in that have started
-// and are not cancelled, with how many went and when the last one ended, the latest first.
-func TestPlacesVisitedByAPerson(t *testing.T) {
-	e := newEnv(t)
-	ctx := context.Background()
-	visited := e.newPlace(e.cavidad, "Sima visitada", nil)
-	e.notifier.wait(t)
-	twice := e.newPlace(e.cavidad, "Cueva visitada dos veces", nil)
-	e.notifier.wait(t)
-	cancelled := e.newPlace(e.cavidad, "Cueva de la cancelada", nil)
-	e.notifier.wait(t)
-	future := e.newPlace(e.cavidad, "Cueva futura", nil)
-	e.notifier.wait(t)
-	others := e.newPlace(e.cavidad, "Cueva de otros", nil)
-	e.notifier.wait(t)
-	exec := func(sql string, args ...any) {
-		t.Helper()
-		if _, err := e.tx.Exec(ctx, sql, args...); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// An activity going to a place; with the member as a participant (or not) and in the state wanted.
-	activity := func(place int64, member bool, update string) int64 {
-		t.Helper()
-		id := testutil.InsertActivity(t, e.tx)
-		exec(`INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, id, place)
-		if member {
-			exec(`INSERT INTO activity_participants (activity_id, user_id, added_by) VALUES ($1, $2, $2)`, id, e.member.user.ID)
-		}
-		if update != "" {
-			exec(`UPDATE activities SET `+update+` WHERE id = $1`, id)
-		}
-		return id
-	}
-	activity(visited.ID, true, "start_date = current_date - 30, end_date = current_date - 29")
-	activity(twice.ID, true, "start_date = current_date - 10, end_date = current_date - 9")
-	// An activity that the member organized (not as a participant) counts too, and the latest end date is kept.
-	led := activity(twice.ID, false, "start_date = current_date - 3, end_date = current_date - 2")
-	exec(`UPDATE activities SET leader_id = $2 WHERE id = $1`, led, e.member.user.ID)
-	activity(cancelled.ID, true, "cancelled = true")
-	activity(future.ID, true, "start_date = current_date + 10, end_date = current_date + 11")
-	activity(others.ID, false, "")
-
-	// The dates above are the database's (current_date), which is not the date of the machine running the
-	// test between midnight there and midnight in UTC: the end of the latest visit is asked of the database too.
-	var latestEnd string
-	if err := e.tx.QueryRow(ctx, `SELECT to_char(current_date - 2, 'YYYY-MM-DD')`).Scan(&latestEnd); err != nil {
-		t.Fatal(err)
-	}
-	path := "/api/v1/users/" + e.member.user.Login + "/places"
-	got := decode[[]places.VisitedPlace](t, e.json("GET", path, e.board.token, nil))
-	if len(got) != 2 {
-		t.Fatalf("only the two places that the member went to, not the cancelled, the future or another's: %+v", got)
-	}
-	if got[0].ID != twice.ID || got[0].Visits != 2 || got[1].ID != visited.ID || got[1].Visits != 1 {
-		t.Errorf("the latest first, with how many times: %+v", got)
-	}
-	if got[0].TypeName != "Cueva" || got[0].Where != "Valdemanco, Madrid, España" ||
-		got[0].LastVisit.Format("2006-01-02") != latestEnd {
-		t.Errorf("what it is, where and when the last one ended: %+v", got[0])
-	}
-	// Somebody who has been nowhere gets an empty list, and a login that is nobody's is a 404.
-	empty := decode[[]places.VisitedPlace](t, e.json("GET", "/api/v1/users/"+e.board.user.Login+"/places", e.member.token, nil))
-	if len(empty) != 0 {
-		t.Errorf("no places: %+v", empty)
-	}
-	errorCode(t, e.json("GET", "/api/v1/users/nadie.de.aqui/places", e.member.token, nil), 404, "not_found")
-	if rec := e.json("GET", path, "", nil); rec.Code != http.StatusUnauthorized {
-		t.Errorf("a session is needed, got %d", rec.Code)
-	}
-}
-
-// A place that activities went to is not deleted: their history stays.
+// A place that activities went to is not deleted: their history stays. Whether any did is for the
+// activities to say.
 func TestPlaceWithActivitiesIsNotDeleted(t *testing.T) {
 	e := newEnv(t)
 	p := e.newPlace(e.cavidad, "Cueva con historia", nil)
 	e.notifier.wait(t)
-	activity := testutil.InsertActivity(t, e.tx)
-	if _, err := e.tx.Exec(context.Background(), `INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, activity, p.ID); err != nil {
-		t.Fatal(err)
-	}
+	e.activities.used[p.ID] = true
 	errorCode(t, e.json("DELETE", placePath(p, ""), e.admin.token, nil), 409, "place_has_activities")
 	if rec := e.json("GET", placePath(p, ""), e.member.token, nil); rec.Code != http.StatusOK {
 		t.Errorf("the place must still be there, got %d", rec.Code)
 	}
-	// Once the activity no longer goes there, it can be.
-	if _, err := e.tx.Exec(context.Background(), `DELETE FROM activity_places WHERE activity_id = $1`, activity); err != nil {
-		t.Fatal(err)
-	}
+	// Once no activity goes there, it can be.
+	e.activities.used[p.ID] = false
 	status(t, e.json("DELETE", placePath(p, ""), e.admin.token, nil), http.StatusNoContent)
 }
 

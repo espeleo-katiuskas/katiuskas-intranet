@@ -15,7 +15,6 @@ import (
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/auth"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/placelinks"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/places"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/publicplaces"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
@@ -28,9 +27,6 @@ func (noActivities) ActivityCounts(context.Context, []int64) (map[int64]int, err
 	return map[int64]int{}, nil
 }
 func (noActivities) HasActivities(context.Context, int64) (bool, error) { return false, nil }
-func (noActivities) VisitsOf(context.Context, int64, string) ([]placelinks.PlaceVisit, error) {
-	return nil, nil
-}
 
 type env struct {
 	t       *testing.T
@@ -54,7 +50,7 @@ func newEnv(t *testing.T) *env {
 	service := places.NewService(places.NewRepository(tx), storage, accounts.NewService(accounts.NewRepository(tx)))
 	service.SetActivities(noActivities{})
 	resolver := testutil.FakeResolver{}
-	user := testutil.InsertMember(t, tx)
+	user := testutil.NewPerson(t)
 	e := &env{t: t, tx: tx, service: service, by: testutil.CatalogueAccount(t, tx, user), resolve: resolver}
 	e.member = testutil.TokenFor(resolver, user.ID, "member")
 	one := func(sql string) int64 {

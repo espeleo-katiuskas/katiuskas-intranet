@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/placelinks"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 )
 
@@ -681,7 +680,7 @@ func (r *Repository) PlaceHasActivities(ctx context.Context, placeID int64) (boo
 
 // PlaceVisitsOf is the places that the activities a person organized or took part in went to, among
 // those that started on or before `today` ("2026-11-18") and were not cancelled, with how often.
-func (r *Repository) PlaceVisitsOf(ctx context.Context, userID int64, today string) ([]placelinks.PlaceVisit, error) {
+func (r *Repository) PlaceVisitsOf(ctx context.Context, userID int64, today string) ([]PlaceVisit, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT ap.place_id, count(DISTINCT a.id), max(a.end_date)
 		FROM activities a
@@ -693,9 +692,9 @@ func (r *Repository) PlaceVisitsOf(ctx context.Context, userID int64, today stri
 		return nil, err
 	}
 	defer rows.Close()
-	list := []placelinks.PlaceVisit{}
+	list := []PlaceVisit{}
 	for rows.Next() {
-		var v placelinks.PlaceVisit
+		var v PlaceVisit
 		if err := rows.Scan(&v.PlaceID, &v.Visits, &v.LastVisit); err != nil {
 			return nil, err
 		}

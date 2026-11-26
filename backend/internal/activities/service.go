@@ -3,9 +3,12 @@ package activities
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/clubtime"
 )
 
 // ErrNotMember means one of the people to sign up is not a member (a socio) now: anybody who is
@@ -110,6 +113,47 @@ func (s *Service) SetPlaces(ctx context.Context, activityID int64, placeIDs []in
 		return nil, nil, err
 	}
 	return before, after, nil
+}
+
+// VisitedBy is the places a person has been to, the most recently visited first: those of the activities they
+// organized or took part in that have started (today, in the club's time zone, counts) and were not cancelled,
+// each with how many such activities went there and when the last one ended. The catalogue says what each
+// place is called, what it is and where.
+func (s *Service) VisitedBy(ctx context.Context, userID int64) ([]VisitedPlace, error) {
+	visits, err := s.repo.PlaceVisitsOf(ctx, userID, clubtime.Today())
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, len(visits))
+	for i, v := range visits {
+		ids[i] = v.PlaceID
+	}
+	refs, err := s.places.PlaceRefs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]PlaceRef, len(refs))
+	for _, ref := range refs {
+		byID[ref.ID] = ref
+	}
+	list := make([]VisitedPlace, 0, len(visits))
+	for _, v := range visits {
+		ref, ok := byID[v.PlaceID]
+		if !ok {
+			continue
+		}
+		list = append(list, VisitedPlace{ID: ref.ID, TypeName: ref.TypeName, Name: ref.Name, Where: ref.Where, Visits: v.Visits, LastVisit: v.LastVisit})
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		if !list[i].LastVisit.Equal(list[j].LastVisit) {
+			return list[i].LastVisit.After(list[j].LastVisit)
+		}
+		if a, b := strings.ToLower(list[i].Name), strings.ToLower(list[j].Name); a != b {
+			return a < b
+		}
+		return list[i].ID < list[j].ID
+	})
+	return list, nil
 }
 
 // ListByPlace are the activities that went to a place, the latest first; a place that is not there is

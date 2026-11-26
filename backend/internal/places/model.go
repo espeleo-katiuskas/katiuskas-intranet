@@ -196,19 +196,6 @@ type ListItem struct {
 	Withheld []access.Part `json:"withheld,omitempty"`
 }
 
-// VisitedPlace is a place a person has been to, with how often.
-type VisitedPlace struct {
-	ID int64 `json:"id"`
-	// TypeName is what it is: the subtype of a cavity ("Sima"), else its type.
-	TypeName string `json:"type_name"`
-	Name     string `json:"name"`
-	Where    string `json:"where"`
-	// Visits is in how many activities, started and not cancelled, the person took part and that went to the
-	// place, and LastVisit the end date of the latest of them.
-	Visits    int       `json:"visits"`
-	LastVisit time.Time `json:"last_visit"`
-}
-
 // AreaRef is a zone of the path of a place.
 type AreaRef struct {
 	ID   int64  `json:"id"`

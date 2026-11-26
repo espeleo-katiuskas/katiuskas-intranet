@@ -135,7 +135,7 @@ func TestPlacePointsAtElement(t *testing.T) {
 	if _, err := repo.Apply(ctx, "spain", []osmmirror.Element{cave(1, "A")}); err != nil {
 		t.Fatal(err)
 	}
-	user := testutil.InsertMember(t, tx)
+	user := testutil.NewPerson(t)
 	var typeID int64
 	if err := tx.QueryRow(ctx, `SELECT id FROM catalogue.place_types WHERE name = 'Cavidad'`).Scan(&typeID); err != nil {
 		t.Fatal(err)

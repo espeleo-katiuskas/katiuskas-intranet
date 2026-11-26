@@ -1481,8 +1481,8 @@ account (a foreign key), and they show its name.
   its id); the route that adds a zone does the same. `Service.Of(issuer, subject)` finds one without
   making it.
 - To let other clients in, register their issuer; nothing else of the catalogue knows about the
-  intranet. What is still the intranet's side of the routes is the login that names who acts in a
-  notice and the one that a route names (`UserLookup`, in the handler).
+  intranet. A notice names who acts by the name of the viewer (`Viewer.Name`, for the club their
+  login): the handlers of the places and of the zones look nobody up.
 
 ### The viewer and the rules
 
@@ -1843,18 +1843,19 @@ diffs `Where`.
 
 ### Places visited
 
-`GET /users/{login}/places` (`Handler.visitedBy`, `Service.VisitedBy`) gives the places of the
-activities that a person organized or took part in (`activities.leader_id` or
+`GET /users/{login}/places` (`activities.Handler.visitedBy`, `activities.Service.VisitedBy`) gives
+the places of the activities that a person organized or took part in (`activities.leader_id` or
 `activity_participants`, the same as `GET /users/{login}/activities`) that are not cancelled and
-have started (`start_date` on or before today in the club's time zone, `clubtime.Today`). The
-activities answer which places and how often (`ActivityLookup.VisitsOf`); the catalogue gives each
-its name and the text of where it is (`Repository.VisitedPlacesByIDs`, which reuses `listFrom`) and
-sorts them: the most recently visited first, then by name. Each comes with how many such activities
-went there and the latest end date. `activity_count` in the listing of places, in a place and in the
-cavities of a system comes from `ActivityLookup.ActivityCounts` the same way.
+have started (`start_date` on or before today in the club's time zone, `clubtime.Today`). It is the
+activities' route, not the catalogue's: they know which places and how often, and ask the catalogue
+for the name, what it is and where it is (`PlaceLookup.PlaceRefs`, whose `PlaceRef` has the text of
+where, built with `listFrom`), and sort them: the most recently visited first, then by name. Each
+comes with how many such activities went there and the latest end date. `activity_count` in the
+listing of places, in a place and in the cavities of a system comes from
+`ActivityLookup.ActivityCounts` (the catalogue asks, the activities answer).
 
-The login is resolved with the handler's `UserLookup.UserIDForLogin`. It is open to any baseline
-role, as the history of activities is.
+The login is resolved with the activities' own `UserLookup.UserIDForLogin`. It is open to any
+baseline role, as the history of activities is.
 
 ### The listing
 

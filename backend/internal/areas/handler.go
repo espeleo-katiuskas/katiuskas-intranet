@@ -12,21 +12,14 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
 )
 
-// UserLookup translates a person's numeric id into their login, for the notices. The zones do not read
-// the table of users: who added a zone is an account of the catalogue (internal/accounts).
-type UserLookup interface {
-	LoginForUserID(ctx context.Context, id int64) (string, error)
-}
-
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
-	users         UserLookup
 	notifier      httpapi.MutationNotifier
 }
 
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier}
+func NewHandler(service *Service, authenticator *auth.Authenticator, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, notifier: notifier}
 }
 
 // RegisterRoutes: everybody who can sign in reads the zones and adds one below another; adding a
@@ -43,13 +36,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/areas/{id}/merge", a.Protect(h.merge, "admin"))
 }
 
+// actorLogin is how a notice names who acts: the name the issuer gave of the person (for the club, their
+// login). The catalogue does not look people up.
 func (h *Handler) actorLogin(ctx context.Context) string {
-	current, _ := auth.UserFromContext(ctx)
-	login, err := h.users.LoginForUserID(ctx, current.ID)
-	if err != nil {
-		return fmt.Sprintf("user#%d", current.ID)
+	if name := auth.ViewerFromContext(ctx).Name; name != "" {
+		return name
 	}
-	return login
+	return "alguien"
 }
 
 func writeError(w http.ResponseWriter, err error, fallback string) {

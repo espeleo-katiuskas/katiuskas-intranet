@@ -78,16 +78,54 @@ the catalogue's API, the assertion and the forwarding.
 
 ## Order of work
 
-1. **In this repository, without changing what members see**: draw the line so that nothing of the
-   catalogue depends on the intranet, test it, and write the contract down. The catalogue stops
-   asking for the intranet's people, the places a person has been to move to the activities, and a
-   test fails if a package of the catalogue imports one of the intranet's (or the other way round,
-   apart from the few points of the contract).
+1. **In this repository, without changing what members see** (done): draw the line so that nothing
+   of the catalogue depends on the intranet, test it, and write the contract down. - The handlers of
+   the places and of the zones no longer look people up: a notice names who acts by the name of the
+   viewer. - The places a person has been to (`GET /users/{login}/places`) are the activities' route
+   now, which ask the catalogue for the names (`PlaceRef` has the text of where). - The tests of the
+   catalogue need none of the intranet's tables or services: they use `testutil.NewPerson` (a
+   subject and a name, no row anywhere), a fake of what the activities tell the catalogue, and the
+   public routes and pages as anybody sees them. - The line is a test (`internal/boundary`),
+   described below.
 2. **The new repository**: the packages above, a baseline migration, the verification of assertions,
    the references, the site; tried next to the intranet with a copy of the real data.
 3. **The cutover, once**: the edition of places is frozen for a short time, the data and the files
    are copied, the intranet starts forwarding, and the schema `catalogue` is dropped from its
    database. There are never two sources of truth.
+
+## The line, in a test
+
+`internal/boundary` reads the imports of every package and of its tests, and fails for what crosses
+the line:
+
+- A package of the catalogue (`access`, `accounts`, `areas`, `osmmirror`, `places`, `publicplaces`,
+  `publicsite`) may import only the others, the contract (`placelinks`) and the small infrastructure
+  that is copied into the new repository (`auth`, `httpapi`, `platform/*`). Never `users`, `roles`,
+  `memberships`, `licenses`, `activities` or anything else of the intranet.
+- Its tests may use only a few things of `testutil` (`NewTx`, `NewTestAuthenticator`,
+  `FakeResolver`, `TokenFor`, `NewPerson`, `Person`, `CatalogueAccount`): the rest makes rows of the
+  intranet's tables.
+- What is not the catalogue may import it only at the points of the contract: the composition root
+  (`cmd/api`), the OpenStreetMap load (`cmd/osmsync`), `auth` and `users` (the viewer and the
+  issuer, both of `access`), `activities` (`placelinks`) and the fixtures of `testutil`. The tests
+  of the activities and of `cmd/api` may also use the real catalogue.
+
+When the catalogue really needs something new from the intranet, the answer is to put it in the
+contract, not to widen the lists of the test.
+
+## What is still across the line, on purpose
+
+These are what the contract replaces when the catalogue leaves; until then they are interfaces with
+primitive types, injected by `cmd/api`:
+
+- `places.ActivityLookup` (`ActivityCounts`, `HasActivities`) and `activities.PlaceLookup`
+  (`PlaceRefs`), with the types of `placelinks`. In the new repository the catalogue does not know
+  the activities: the counts become the intranet's, and `HasActivities` the register of references.
+- `users.AuthorGuard`, which refuses to delete a person who made something in the catalogue.
+- `auth.ViewerOf`, which turns a session of the intranet into the viewer that the catalogue
+  understands: in the new repository it is the verification of a signed assertion.
+- The foreign key from `activity_places` to `places`, and from `activity_resources` to
+  `activity_places`.
 
 ## Still open
 

@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,7 +12,12 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/activities"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/places"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 // insertPlace puts a cave in the catalogue straight in the database (the places have their own tests).
@@ -191,5 +197,168 @@ func TestHandlerPlaceOfTheMemoriaStaysOnTheActivity(t *testing.T) {
 	}
 	if got := decodeJSON[[]activities.PlaceRef](t, doRequest(mux, http.MethodGet, path, token, nil).Body.Bytes()); len(got) != 1 || got[0].ID != boca {
 		t.Errorf("a refused change must leave the places as they were, got %+v", got)
+	}
+}
+
+// The places a person has been to: those of the activities they organized or took part in that have started
+// and are not cancelled, with how many went and when the last one ended, the latest first. The catalogue says
+// what each is called and where it is.
+func TestHandlerPlacesVisitedByAPerson(t *testing.T) {
+	mux, authn, tx := newTestServerWithTx(t)
+	ctx := context.Background()
+	member := testutil.InsertMember(t, tx)
+	nobody := testutil.InsertMember(t, tx)
+	memberToken := tokenFor(t, authn, member.ID, "member")
+	by := testutil.CatalogueAccount(t, tx, member)
+	visited := insertPlace(t, tx, by, "Sima visitada")
+	twice := insertPlace(t, tx, by, "Cueva visitada dos veces")
+	cancelled := insertPlace(t, tx, by, "Cueva de la cancelada")
+	future := insertPlace(t, tx, by, "Cueva futura")
+	others := insertPlace(t, tx, by, "Cueva de otros")
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := tx.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An activity going to a place; with the member as a participant (or not) and in the state wanted.
+	activity := func(place int64, participant bool, update string) int64 {
+		t.Helper()
+		id := testutil.InsertActivity(t, tx)
+		exec(`INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, id, place)
+		if participant {
+			exec(`INSERT INTO activity_participants (activity_id, user_id, added_by) VALUES ($1, $2, $2)`, id, member.ID)
+		}
+		if update != "" {
+			exec(`UPDATE activities SET `+update+` WHERE id = $1`, id)
+		}
+		return id
+	}
+	activity(visited, true, "start_date = current_date - 30, end_date = current_date - 29")
+	activity(twice, true, "start_date = current_date - 10, end_date = current_date - 9")
+	// An activity that the member organized (not as a participant) counts too, and the latest end date is kept.
+	led := activity(twice, false, "start_date = current_date - 3, end_date = current_date - 2")
+	exec(`UPDATE activities SET leader_id = $2 WHERE id = $1`, led, member.ID)
+	activity(cancelled, true, "cancelled = true")
+	activity(future, true, "start_date = current_date + 10, end_date = current_date + 11")
+	activity(others, false, "")
+
+	// The dates above are the database's (current_date), which is not the date of the machine running the test
+	// between midnight there and midnight in UTC: the end of the latest visit is asked of the database too.
+	var latestEnd string
+	if err := tx.QueryRow(ctx, `SELECT to_char(current_date - 2, 'YYYY-MM-DD')`).Scan(&latestEnd); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/users/" + member.Login + "/places"
+	rec := doRequest(mux, http.MethodGet, path, memberToken, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d: %s", rec.Code, rec.Body.String())
+	}
+	got := decodeJSON[[]activities.VisitedPlace](t, rec.Body.Bytes())
+	if len(got) != 2 {
+		t.Fatalf("only the two places that the member went to, not the cancelled, the future or another's: %+v", got)
+	}
+	if got[0].ID != twice || got[0].Visits != 2 || got[1].ID != visited || got[1].Visits != 1 {
+		t.Errorf("the latest first, with how many times: %+v", got)
+	}
+	if got[0].Name != "Cueva visitada dos veces" || got[0].TypeName != "Cueva" || got[0].Where != "España" ||
+		got[0].LastVisit.Format("2006-01-02") != latestEnd {
+		t.Errorf("what it is called, what it is, where and when the last one ended: %+v", got[0])
+	}
+	// Somebody who has been nowhere gets an empty list, and a login that is nobody's is a 404.
+	empty := decodeJSON[[]activities.VisitedPlace](t, doRequest(mux, http.MethodGet, "/api/v1/users/"+nobody.Login+"/places", memberToken, nil).Body.Bytes())
+	if len(empty) != 0 {
+		t.Errorf("no places: %+v", empty)
+	}
+	if rec := doRequest(mux, http.MethodGet, "/api/v1/users/nadie.de.aqui/places", memberToken, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("a login that is nobody's: %d, want 404", rec.Code)
+	}
+	if rec := doRequest(mux, http.MethodGet, path, "", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a session is needed, got %d", rec.Code)
+	}
+}
+
+// bothServices are the real activities and the real catalogue of places, each wired to the other as the
+// server wires them.
+func bothServices(t *testing.T, tx pgx.Tx) (*activities.Service, *places.Service) {
+	t.Helper()
+	rolesService := roles.NewService(roles.NewRepository(tx))
+	membershipsService := memberships.NewService(memberships.NewRepository(tx))
+	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
+	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
+	catalogue := newPlaces(t, tx, usersService)
+	service := activities.NewService(activities.NewRepository(tx), licensesService, rolesService, catalogue)
+	catalogue.SetActivities(service)
+	return service, catalogue
+}
+
+// What the activities tell the catalogue: in how many activities that are not cancelled each place is one of
+// the places they go to (a place with none is not in the answer), and whether any activity at all, cancelled
+// or not, goes or went there.
+func TestActivitiesCountTheirPlaces(t *testing.T) {
+	tx := testutil.NewTx(t)
+	ctx := context.Background()
+	service, _ := bothServices(t, tx)
+	by := testutil.CatalogueAccount(t, tx, testutil.InsertMember(t, tx))
+	busy := insertPlace(t, tx, by, "Cueva visitada")
+	quiet := insertPlace(t, tx, by, "Cueva tranquila")
+	onlyCancelled := insertPlace(t, tx, by, "Cueva de la cancelada")
+	link := func(place int64, cancelled bool) {
+		t.Helper()
+		id := testutil.InsertActivity(t, tx)
+		if _, err := tx.Exec(ctx, `INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, id, place); err != nil {
+			t.Fatal(err)
+		}
+		if cancelled {
+			if _, err := tx.Exec(ctx, `UPDATE activities SET cancelled = true WHERE id = $1`, id); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	link(busy, false)
+	link(busy, false)
+	link(busy, true) // a cancelled activity does not count
+	link(onlyCancelled, true)
+
+	counts, err := service.ActivityCounts(ctx, []int64{busy, quiet, onlyCancelled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts[busy] != 2 || len(counts) != 1 {
+		t.Errorf("two activities for the first and none counted for the others: %v", counts)
+	}
+	if empty, err := service.ActivityCounts(ctx, nil); err != nil || len(empty) != 0 {
+		t.Errorf("no places, no counts: %v %v", empty, err)
+	}
+	for place, want := range map[int64]bool{busy: true, onlyCancelled: true, quiet: false} {
+		if got, err := service.HasActivities(ctx, place); err != nil || got != want {
+			t.Errorf("HasActivities(%d) = %v %v, want %v", place, got, err, want)
+		}
+	}
+}
+
+// The two wired together, as the server does: the places say how many activities went to each, and a place
+// that activities went to is not deleted (their history stays), until none goes there.
+func TestAPlaceThatActivitiesWentToIsNotDeleted(t *testing.T) {
+	tx := testutil.NewTx(t)
+	ctx := context.Background()
+	service, catalogue := bothServices(t, tx)
+	by := testutil.CatalogueAccount(t, tx, testutil.InsertMember(t, tx))
+	place := insertPlace(t, tx, by, "Cueva con historia")
+	activity := testutil.InsertActivity(t, tx)
+	if _, err := tx.Exec(ctx, `INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)`, activity, place); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := catalogue.GetPlace(ctx, place); err != nil || got.ActivityCount != 1 {
+		t.Errorf("the catalogue says how many activities went there: %+v %v", got.ActivityCount, err)
+	}
+	if err := catalogue.DeletePlace(ctx, place); !errors.Is(err, places.ErrHasActivities) {
+		t.Errorf("a place with activities: %v, want ErrHasActivities", err)
+	}
+	if err := service.Delete(ctx, activity); err != nil {
+		t.Fatalf("delete the activity: %v", err)
+	}
+	if err := catalogue.DeletePlace(ctx, place); err != nil {
+		t.Errorf("once no activity goes there it can be deleted: %v", err)
 	}
 }

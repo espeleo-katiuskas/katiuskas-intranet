@@ -30,8 +30,3 @@ func (s *Service) ActivityCounts(ctx context.Context, placeIDs []int64) (map[int
 func (s *Service) HasActivities(ctx context.Context, placeID int64) (bool, error) {
 	return s.repo.PlaceHasActivities(ctx, placeID)
 }
-
-// VisitsOf is the places a person has been to (see Repository.PlaceVisitsOf), in no order.
-func (s *Service) VisitsOf(ctx context.Context, userID int64, today string) ([]placelinks.PlaceVisit, error) {
-	return s.repo.PlaceVisitsOf(ctx, userID, today)
-}

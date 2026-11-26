@@ -83,35 +83,11 @@ func (it *ListItem) scanTargets() []any {
 	}
 }
 
-// VisitedPlacesByIDs is the places with those ids as the page of the places visited shows them, in no
-// order (the Service orders them by the visits).
-func (r *Repository) VisitedPlacesByIDs(ctx context.Context, ids []int64) ([]VisitedPlace, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, COALESCE(st.name, t.name), p.name, COALESCE(w.where_text, '')`+listFrom+`
-		WHERE p.id = ANY($1)`, ids)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	list := []VisitedPlace{}
-	for rows.Next() {
-		var v VisitedPlace
-		if err := rows.Scan(&v.ID, &v.TypeName, &v.Name, &v.Where); err != nil {
-			return nil, err
-		}
-		list = append(list, v)
-	}
-	return list, rows.Err()
-}
-
 // PlaceRefs is the places with those ids, by name, each with what it is (the subtype of a cavity,
 // else its type); an id that is no place is left out.
 func (r *Repository) PlaceRefs(ctx context.Context, ids []int64) ([]placelinks.PlaceRef, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT p.id, p.name, COALESCE(s.name, t.name)
-		FROM catalogue.places p
-		JOIN catalogue.place_types t ON t.id = p.type_id
-		LEFT JOIN catalogue.place_subtypes s ON s.id = p.subtype_id
+		SELECT p.id, p.name, COALESCE(st.name, t.name), COALESCE(w.where_text, '')`+listFrom+`
 		WHERE p.id = ANY($1)
 		ORDER BY p.name, p.id`, ids)
 	if err != nil {
@@ -121,7 +97,7 @@ func (r *Repository) PlaceRefs(ctx context.Context, ids []int64) ([]placelinks.P
 	list := []placelinks.PlaceRef{}
 	for rows.Next() {
 		var p placelinks.PlaceRef
-		if err := rows.Scan(&p.ID, &p.Name, &p.TypeName); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.TypeName, &p.Where); err != nil {
 			return nil, err
 		}
 		list = append(list, p)

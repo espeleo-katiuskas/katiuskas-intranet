@@ -7364,10 +7364,12 @@ components:
 
     ActivityPlace:
       type: object
+      description: A place an activity goes to. The activities keep only its id; the catalogue says the rest.
       properties:
         id: { type: integer }
         name: { type: string }
         type_name: { type: string }
+        where: { type: string, description: "The zone and the ones it is in, from the most specific to the country." }
 
     SystemInput:
       type: object

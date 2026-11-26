@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -56,15 +57,46 @@ func identityOf(id int64) (subject, login string) {
 	return fmt.Sprintf("00000000-0000-0000-0000-%012d", id), fmt.Sprintf("test-user-%d", id)
 }
 
+// Identified is somebody who has a subject and a name: a TestUser, or a Person.
+type Identified interface {
+	Identity() (subject, login string)
+}
+
+// Person is somebody who acts on what is not the intranet, as the catalogue sees them: a subject and a name,
+// with no row in any table. The tests of the catalogue use it, so that they need nothing of the intranet's
+// people: TokenFor(resolver, person.ID, roles...) makes a session for them.
+type Person struct {
+	ID      int64
+	Subject string
+	Login   string
+}
+
+// Identity says who they are, for the catalogue.
+func (p Person) Identity() (subject, login string) { return p.Subject, p.Login }
+
+var personCounter atomic.Int64
+
+// NewPerson is a person nobody has heard of. Its ID is made up (negative, so that it can never be that of a
+// row of the intranet's), and only TokenFor reads it.
+func NewPerson(t *testing.T) Person {
+	t.Helper()
+	n := personCounter.Add(1)
+	id := -n
+	p := Person{ID: id, Subject: fmt.Sprintf("00000000-0000-4000-8000-%012d", n), Login: fmt.Sprintf("test-person-%d", n)}
+	people.Store(id, personIdentity{subject: p.Subject, login: p.Login})
+	return p
+}
+
 // CatalogueAccount is the account of the catalogue of places of a person, made if they have none: what the
 // catalogue keeps of who made something, for a test that puts rows in the catalogue by hand.
-func CatalogueAccount(t *testing.T, tx pgx.Tx, user TestUser) int64 {
+func CatalogueAccount(t *testing.T, tx pgx.Tx, who Identified) int64 {
 	t.Helper()
+	subject, login := who.Identity()
 	account, err := accounts.NewService(accounts.NewRepository(tx)).Ensure(context.Background(), access.Viewer{
-		Issuer: access.IntranetIssuer, Subject: user.Subject, Name: user.Login,
+		Issuer: access.IntranetIssuer, Subject: subject, Name: login,
 	})
 	if err != nil {
-		t.Fatalf("the catalogue account of %s: %v", user.Login, err)
+		t.Fatalf("the catalogue account of %s: %v", login, err)
 	}
 	return account.ID
 }

@@ -84,6 +84,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /api/v1/activities/{id}/participants/{login}", h.authenticator.Protect(h.leave))
 
 	mux.Handle("GET /api/v1/users/{login}/activities", h.authenticator.Protect(h.listByUser))
+	mux.Handle("GET /api/v1/users/{login}/places", h.authenticator.Protect(h.visitedBy))
 
 	mux.Handle("GET /api/v1/holidays", h.authenticator.Protect(h.listHolidays))
 	mux.Handle("POST /api/v1/holidays", h.authenticator.Protect(h.createHoliday, "admin", "board"))
@@ -455,6 +456,22 @@ func (h *Handler) listByUser(w http.ResponseWriter, r *http.Request) {
 	list, err := h.service.ListByUser(r.Context(), userID)
 	if err != nil {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list activities")
+		return
+	}
+	httpapi.WriteJSON(w, http.StatusOK, list)
+}
+
+// visitedBy gives the places a person has been to: those of the activities they organized or took part in
+// that have started and are not cancelled. Open to any signed-in baseline user, like listByUser: it is the
+// same information, seen from the places.
+func (h *Handler) visitedBy(w http.ResponseWriter, r *http.Request) {
+	userID, ok := h.resolveUserLogin(w, r)
+	if !ok {
+		return
+	}
+	list, err := h.service.VisitedBy(r.Context(), userID)
+	if err != nil {
+		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list the places visited")
 		return
 	}
 	httpapi.WriteJSON(w, http.StatusOK, list)

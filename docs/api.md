@@ -2288,6 +2288,9 @@ is one).
 | `id` | number |
 | `name` | text |
 | `type_name` | text |
+| `where` | text: the zone and the ones it is in, from the most specific to the country |
+
+The activities keep only the id of each place; the catalogue says the rest.
 
 ### `SystemListItem`
 

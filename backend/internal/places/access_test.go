@@ -15,7 +15,7 @@ import (
 // servedWith is a second router over the same catalogue whose handler asks other rules.
 func (e *env) servedWith(rules access.Rules) *http.ServeMux {
 	mux := http.NewServeMux()
-	places.NewHandler(e.service, e.authenticator, e.users, e.notifier).WithRules(rules).RegisterRoutes(mux)
+	places.NewHandler(e.service, e.authenticator, e.notifier).WithRules(rules).RegisterRoutes(mux)
 	return mux
 }
 
@@ -36,7 +36,6 @@ var gatedRoutes = []struct{ method, path string }{
 	{"GET", "/api/v1/places/types"},
 	{"GET", "/api/v1/places/987654/files"},
 	{"GET", "/api/v1/systems"},
-	{"GET", "/api/v1/users/someone/places"},
 	{"POST", "/api/v1/places"},
 	{"PUT", "/api/v1/places/987654"},
 	{"PATCH", "/api/v1/places/987654"},

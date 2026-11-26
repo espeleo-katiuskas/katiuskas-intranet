@@ -19,23 +19,13 @@ import (
 type Handler struct {
 	service       *Service
 	authenticator *auth.Authenticator
-	users         UserLookup
 	notifier      httpapi.MutationNotifier
 	// rules say who may see and change what; every place is for the club alone until somebody opens it.
 	rules access.Rules
 }
 
-// UserLookup is what the handler needs of the people of the club: it is the intranet's side of the places.
-// The API names a person by login, so a route that names one (the places somebody visited) turns the
-// login into an id, and a notice names who acts by their login. The catalogue itself never reads people:
-// who did something is an account of its own (internal/accounts).
-type UserLookup interface {
-	LoginForUserID(ctx context.Context, id int64) (string, error)
-	UserIDForLogin(ctx context.Context, login string) (int64, error)
-}
-
-func NewHandler(service *Service, authenticator *auth.Authenticator, users UserLookup, notifier httpapi.MutationNotifier) *Handler {
-	return &Handler{service: service, authenticator: authenticator, users: users, notifier: notifier, rules: access.ClubOnly()}
+func NewHandler(service *Service, authenticator *auth.Authenticator, notifier httpapi.MutationNotifier) *Handler {
+	return &Handler{service: service, authenticator: authenticator, notifier: notifier, rules: access.ClubOnly()}
 }
 
 // WithRules changes the rules the handler asks (the club alone by default).
@@ -97,7 +87,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /api/v1/places/subtypes/{id}", a.Protect(h.gate("DELETE", h.deleteSubtype), "admin"))
 
 	mux.Handle("GET /api/v1/places", a.Protect(h.gate("GET", h.list)))
-	mux.Handle("GET /api/v1/users/{login}/places", a.Protect(h.gate("GET", h.visitedBy)))
 	mux.Handle("POST /api/v1/places", a.Protect(h.gate("POST", h.create)))
 	mux.Handle("GET /api/v1/places/{id}", a.Protect(h.gate("GET", h.get)))
 	mux.Handle("PUT /api/v1/places/{id}", a.Protect(h.gate("PUT", h.update)))
@@ -129,13 +118,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("DELETE /api/v1/systems/{id}/files/{fileId}", a.Protect(h.gate("DELETE", h.deleteFile(systemOwner))))
 }
 
+// actorLogin is how a notice names who acts: the name the issuer gave of the person (for the club, their
+// login). The catalogue does not look people up.
 func (h *Handler) actorLogin(ctx context.Context) string {
-	current, _ := auth.UserFromContext(ctx)
-	login, err := h.users.LoginForUserID(ctx, current.ID)
-	if err != nil {
-		return fmt.Sprintf("user#%d", current.ID)
+	if name := auth.ViewerFromContext(ctx).Name; name != "" {
+		return name
 	}
-	return login
+	return "alguien"
 }
 
 type accountContextKey struct{}
@@ -221,22 +210,6 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 		return 0, false
 	}
 	return id, true
-}
-
-// visitedBy gives the places a person has been to: those of the activities they took part in that have
-// started and are not cancelled.
-func (h *Handler) visitedBy(w http.ResponseWriter, r *http.Request) {
-	userID, err := h.users.UserIDForLogin(r.Context(), r.PathValue("login"))
-	if err != nil {
-		httpapi.WriteError(w, http.StatusNotFound, "not_found", "user not found")
-		return
-	}
-	list, err := h.service.VisitedBy(r.Context(), userID)
-	if err != nil {
-		writeError(w, err, "could not list the places visited")
-		return
-	}
-	httpapi.WriteJSON(w, http.StatusOK, list)
 }
 
 // ----- types -----

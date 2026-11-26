@@ -18,11 +18,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/accounts"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/areas"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/httpapi"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/licenses"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/memberships"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/testutil"
-	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/users"
 )
 
 type fakeNotifier struct {
@@ -57,7 +53,7 @@ func (f *fakeNotifier) wait(t *testing.T) string {
 }
 
 type person struct {
-	user  testutil.TestUser
+	user  testutil.Person
 	token string
 }
 
@@ -104,18 +100,14 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	tx := testutil.NewTx(t)
-	rolesService := roles.NewService(roles.NewRepository(tx))
-	membershipsService := memberships.NewService(memberships.NewRepository(tx))
-	licensesService := licenses.NewService(licenses.NewRepository(tx), membershipsService)
-	usersService := users.NewService(users.NewRepository(tx), rolesService, membershipsService, licensesService)
 	authenticator, resolver := testutil.NewTestAuthenticator()
 	notifier := &fakeNotifier{}
 	mux := http.NewServeMux()
 	boundaries := &fakeBoundaries{}
 	geocoder := &fakeGeocoder{}
-	areas.NewHandler(areas.NewService(areas.NewRepository(tx), accounts.NewService(accounts.NewRepository(tx))).WithBoundaries(boundaries).WithGeocoder(geocoder), authenticator, usersService, notifier).RegisterRoutes(mux)
+	areas.NewHandler(areas.NewService(areas.NewRepository(tx), accounts.NewService(accounts.NewRepository(tx))).WithBoundaries(boundaries).WithGeocoder(geocoder), authenticator, notifier).RegisterRoutes(mux)
 	bare := http.NewServeMux()
-	areas.NewHandler(areas.NewService(areas.NewRepository(tx), accounts.NewService(accounts.NewRepository(tx))), authenticator, usersService, notifier).RegisterRoutes(bare)
+	areas.NewHandler(areas.NewService(areas.NewRepository(tx), accounts.NewService(accounts.NewRepository(tx))), authenticator, notifier).RegisterRoutes(bare)
 	e := &env{t: t, tx: tx, mux: mux, bare: bare, notifier: notifier, resolver: resolver, boundaries: boundaries, geocoder: geocoder}
 	e.member = e.person("member")
 	e.board = e.person("board")
@@ -136,7 +128,7 @@ func newEnv(t *testing.T) *env {
 }
 
 func (e *env) person(roles ...string) person {
-	u := testutil.InsertMember(e.t, e.tx)
+	u := testutil.NewPerson(e.t)
 	return person{user: u, token: testutil.TokenFor(e.resolver, u.ID, roles...)}
 }
 

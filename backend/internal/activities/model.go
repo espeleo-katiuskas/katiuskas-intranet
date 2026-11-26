@@ -74,6 +74,28 @@ type Activity struct {
 // The activities keep only the ids of the places; the catalogue names them (PlaceLookup).
 type PlaceRef = placelinks.PlaceRef
 
+// PlaceVisit is how often a person went to a place: in how many activities, started and not cancelled, they
+// organized or took part in that went there, and the end date of the latest of them.
+type PlaceVisit struct {
+	PlaceID   int64
+	Visits    int
+	LastVisit time.Time
+}
+
+// VisitedPlace is a place a person has been to, with how often (GET /users/{login}/places): what the
+// catalogue says of the place (its name, what it is and where) and how many times they went.
+type VisitedPlace struct {
+	ID int64 `json:"id"`
+	// TypeName is what it is: the subtype of a cavity ("Sima"), else its type.
+	TypeName string `json:"type_name"`
+	Name     string `json:"name"`
+	Where    string `json:"where"`
+	// Visits is in how many activities, started and not cancelled, the person took part and that went to the
+	// place, and LastVisit the end date of the latest of them.
+	Visits    int       `json:"visits"`
+	LastVisit time.Time `json:"last_visit"`
+}
+
 // MaxPlaces is the most places an activity can be linked to: far more than any outing, only to keep a
 // mistake from linking hundreds.
 const MaxPlaces = 30

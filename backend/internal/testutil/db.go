@@ -279,6 +279,10 @@ type TestUser struct {
 	Subject string
 }
 
+// Identity is who the test user is for whatever is not the intranet (the catalogue): the opaque subject and
+// the name the intranet gives them.
+func (u TestUser) Identity() (subject, login string) { return u.Subject, u.Login }
+
 // people remembers the subject and the login of each person a test inserted, by id, so that TokenFor
 // (which only knows an id) can make a session that is the same person for the catalogue.
 var people sync.Map

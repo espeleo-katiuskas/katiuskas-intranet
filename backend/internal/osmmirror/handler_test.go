@@ -25,8 +25,7 @@ func serve(t *testing.T) (get func(path, token string) *httptest.ResponseRecorde
 	authenticator, resolver := testutil.NewTestAuthenticator()
 	mux := http.NewServeMux()
 	osmmirror.NewHandler(osmmirror.NewService(repo), authenticator).RegisterRoutes(mux)
-	user := testutil.InsertMember(t, tx)
-	token = testutil.TokenFor(resolver, user.ID, "member")
+	token = testutil.TokenFor(resolver, testutil.NewPerson(t).ID, "member")
 	get = func(path, tok string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("GET", path, nil)
 		if tok != "" {
