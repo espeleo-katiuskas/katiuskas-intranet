@@ -87,8 +87,22 @@ the catalogue's API, the assertion and the forwarding.
    subject and a name, no row anywhere), a fake of what the activities tell the catalogue, and the
    public routes and pages as anybody sees them. - The line is a test (`internal/boundary`),
    described below.
-2. **The new repository**: the packages above, a baseline migration, the verification of assertions,
-   the references, the site; tried next to the intranet with a copy of the real data.
+2. **The new repository** (started; it lives in `cuevasysimas`, beside this one): the packages
+   above, a baseline migration, the verification of assertions, the references and the site, with
+   their own tests, CI, Dockerfile, docs and systemd units. What it has:
+   - the catalogue (`places`, `areas`, `osmmirror`, `access`, `accounts`), the public routes and the
+     public site, copied as they are, and `cmd/osmsync`;
+   - `internal/assertion`: assertions signed with Ed25519 and checked with the key of each issuer
+     (`catalogue.issuers.public_key`), and `cmd/issuer` to make keys and register a client;
+   - the references (`PUT/DELETE /places/{id}/references/{key}`) that replace `HasActivities`, and
+     `GET /places/refs` that replaces `PlaceLookup`; `activity_count` is no longer the catalogue's;
+   - its own `auth`, `httpapi`, `config`, `testutil` and server (`cmd/cuevasysimas`), and the
+     baseline migration (`00001`, the sum of 00061 to 00083 here) and `00002`.
+
+   What is still to do before the cutover: the intranet side (signing the assertions, forwarding the
+   members' requests, asking for names and making references, `activity_count`, the refusal to
+   delete a person who made something), trying both together with a copy of the real data, and the
+   points that the new repository's `docs/roadmap.md` lists.
 3. **The cutover, once**: the edition of places is frozen for a short time, the data and the files
    are copied, the intranet starts forwarding, and the schema `catalogue` is dropped from its
    database. There are never two sources of truth.
