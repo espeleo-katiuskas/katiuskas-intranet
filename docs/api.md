@@ -19,6 +19,7 @@ Contents:
 - [Material](#material)
 - [Library](#library)
 - [Places](#places)
+- [Public places](#public-places)
 - [Zones](#zones)
 - [Distributions](#distributions)
 - [Document archive and per-person files](#document-archive-and-per-person-files)
@@ -938,6 +939,58 @@ known, in metres above sea level.
 - **DELETE** `/places/{id}/files/{fileId}` — *Whoever attached it, admin or board*.
   - returns: 204
   - errors: 400 `invalid_id`; 403 `place_file_not_yours`; 404 `not_found`
+
+## Public places
+
+The read-only face of the catalogue, for people who are not signed in (the site «Cuevas y simas»,
+at its own domain, is made of it). It is a group of routes and a package of its own
+(`internal/publicplaces`), so what it says is only what is written here. No token is anonymous; a
+valid bearer token is the person, who sees what their visibility allows (a member of the club sees
+more); an invalid one is 401, never the public answer.
+
+- **GET** `/public/places` — *Anybody*. The places that the viewer may know exist, by name. A place
+  whose level `place` is closed to them is not in it (see `PlaceVisibility`).
+  - returns: 200 `[PublicPlaceListItem]`
+  - errors: 401 `unauthorized`; 429 `rate_limited`
+- **GET** `/public/places/{id}` — *Anybody*. One place as the viewer may see it. One that is closed
+  to them and one that does not exist give the same 404.
+  - returns: 200 `PublicPlace`
+  - errors: 400 `invalid_id`; 401 `unauthorized`; 404 `not_found`; 429 `rate_limited`
+
+Each address may ask 120 times a minute (`PublicRateLimit` and `PublicRateWindow`, in the
+configuration). Without a token the answer carries `Cache-Control: public, max-age=60,
+stale-while-revalidate=300`, so that a cache in front may keep it; with one, `private, no-store`;
+and it always has `Vary: Authorization`.
+
+### `PublicPlaceListItem`
+
+| Field | Type |
+|---|---|
+| `id` | integer |
+| `name` | text |
+| `alt_names` | `[text]` |
+| `type` | text: what it is (Cavidad, Cañón…) |
+| `subtype` | text: what a cavity is (cueva, sima…); left out for the rest |
+| `state` | `open`, `permit_required`, `tourist` or `closed`; left out if its type has none |
+| `where` | text: the zone and the ones it is in, from the most specific to the country |
+| `zone_ids` | `[integer]`: those zones, the country first |
+| `measures` | `{depth_m, horizontal_length_m, geology}`; left out if it has none |
+| `coordinates` | `{lat, lon, altitude_m}`; **left out** if the viewer may not see the location |
+
+### `PublicPlace`
+
+Everything of a `PublicPlaceListItem`, and:
+
+| Field | Type |
+|---|---|
+| `zones` | `[{id, kind, name}]`: the zone and the ones it is in, the country first |
+| `location` | `{points: [{kind, name, lat, lon, altitude_m, note}], access}`; left out if the viewer may not see the location |
+| `content` | `{description, technical_sheet}`; left out if the viewer may not see the content |
+
+A part that depends on the visibility is **absent**, never empty or zero, when the viewer may not see
+it. Never in these answers, whatever the place has: who wrote it and when, the activities that went
+there, the OpenStreetMap element, the visibility itself, the files, the system it is in and anything
+of the club's own identifiers.
 
 ## Systems
 

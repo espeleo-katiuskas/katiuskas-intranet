@@ -153,6 +153,16 @@ func TestCatalogueIsWiredToTheUsers(t *testing.T) {
 	if rec := call(http.MethodGet, fmt.Sprintf("/api/v1/places/%d/activities", place.ID), ""); rec.Code != http.StatusOK {
 		t.Errorf("GET the activities of a place: expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
+	// The public routes are wired too: anybody may ask, and the place that was just made (closed, as every
+	// one starts) is not there for them, while the member sees it.
+	anonymous := httptest.NewRecorder()
+	router.ServeHTTP(anonymous, httptest.NewRequest(http.MethodGet, "/api/v1/public/places", nil))
+	if anonymous.Code != http.StatusOK || strings.Contains(anonymous.Body.String(), "Cueva del cableado") {
+		t.Errorf("GET the public places with no token: %d %s", anonymous.Code, anonymous.Body.String())
+	}
+	if rec := call(http.MethodGet, "/api/v1/public/places", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Cueva del cableado") {
+		t.Errorf("a member sees the closed place in the public list: %d %s", rec.Code, rec.Body.String())
+	}
 	if err := usersService.Delete(ctx, member.ID); !errors.Is(err, users.ErrHasReferences) {
 		t.Errorf("deleting the author of a place: expected ErrHasReferences, got %v", err)
 	}

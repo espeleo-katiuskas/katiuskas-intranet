@@ -1552,6 +1552,34 @@ club alone (`club`) or for anybody (`public`), and a lock.
   The tests cross every kind of viewer with each visibility and each part
   (`visibility_test.go`).
 
+### The public routes
+
+`internal/publicplaces` is the read-only face of the catalogue for people who are not signed in:
+`GET /public/places` and `GET /public/places/{id}` (`docs/api.md`, "Public places"). The site
+«Cuevas y simas», at its own domain `cuevasysimas.es`, is made of it; for now the same process
+answers any domain, so the routes exist on the intranet's host too and give the same.
+
+- **A package of its own, on purpose.** Every field of an answer is copied by name from a place that
+  has already been through the redaction of the places (`places.Place.ViewedBy`, `ListItem.ViewedBy`).
+  Who wrote it, the activities, the OpenStreetMap element, the visibility itself, the files and the
+  system are never copied, so a route wired here by mistake could not say more. A test goes through
+  the whole list of keys of an answer and fails for one that is not in it.
+- **The viewer** is whoever has a bearer token (`Authenticator.WithViewer`) or nobody; a token that
+  does not hold is 401, never the public answer. A member of the club reads the same routes and sees
+  what the club sees (a closed place too), still without what is never public. A place that is
+  closed to the viewer and one that does not exist give the same 404, and the list does not have it.
+- **The parts** follow the visibility: no `coordinates` unless the viewer may see the location, no
+  `location` (the other points and how to get there) either, no `content` (the description and the
+  technical sheet) unless they may see the content. A part that is withheld is absent, not empty or
+  zero, since a zero is a place on the map.
+- **Cost and abuse.** An address may ask `PublicRateLimit` times in `PublicRateWindow` (120 a
+  minute, `httpapi.IPRateLimiter`, checked before anything is read). Without a token the answer may
+  be kept by a cache for a minute (`Cache-Control: public, max-age=60, stale-while-revalidate=300`);
+  with one it is `private, no-store`; it always varies on `Authorization`.
+- **Not here yet**: the systems, the files and the points apart from the place, which need their own
+  redaction before they can be opened, and the pages that a search engine can read (server-rendered,
+  with a sitemap and addresses with the name in them).
+
 ### Partial edit
 
 `PUT /places/{id}` replaces every field, so a client that only knows some of them would clear the

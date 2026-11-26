@@ -3130,6 +3130,51 @@ paths:
         "400": { description: "invalid_coordinates — missing, not numbers, or out of range." }
         "502": { description: "locate_unavailable — the Nominatim instance did not answer." }
 
+  /public/places:
+    get:
+      summary: The places that the viewer may know exist
+      description: >
+        The read-only face of the catalogue for people who are not signed in. No token is anonymous, a good
+        bearer token is the person (a member of the club sees more) and a bad one is 401, never the public
+        answer. A place whose level `place` is closed to the viewer is not in the list. Of the rest, the
+        coordinates are there only if the viewer may see the location. Who wrote a place, the activities
+        that went there, the OpenStreetMap element, the visibility and the files are never in it. Each
+        address may ask only so often (429 `rate_limited`). Without a token the answer may be cached for a
+        minute by anybody (`Cache-Control: public, max-age=60`); with one it is `private, no-store`, and it
+        always varies on `Authorization`.
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: The places, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublicPlaceListItem" }
+        "401": { description: "unauthorized — a token that is not valid." }
+        "429": { description: "rate_limited." }
+
+  /public/places/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    get:
+      summary: One place as the viewer may see it
+      description: >
+        As the list. A place that is closed to the viewer and one that does not exist give the same answer.
+        `location` is there only if the viewer may see where the place is (the other points, how to get
+        there), and `content` only if they may see what is said of it.
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: The place
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicPlace" }
+        "400": { description: "invalid_id." }
+        "401": { description: "unauthorized — a token that is not valid." }
+        "404": { description: "not_found — it does not exist, or the viewer may not know it does." }
+        "429": { description: "rate_limited." }
+
   /osm/elements:
     get:
       summary: Elements of the OpenStreetMap mirror inside a box
@@ -7181,6 +7226,76 @@ components:
             Always left out for the members of the club, who are the only people who reach these routes
             for now.
           items: { type: string, enum: [place, measures, coordinates, points, access, sheet, files, authors, activities] }
+
+    PublicPlaceListItem:
+      type: object
+      description: A place as the public list gives it. `coordinates` is left out (not null) when the viewer may not see the location.
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        alt_names: { type: array, items: { type: string } }
+        type: { type: string, description: "What it is: Cavidad, Cañón…" }
+        subtype: { type: string, description: "What a cavity is: cueva, sima… Left out for the rest." }
+        state: { type: string, enum: [open, permit_required, tourist, closed], description: "Left out for a place whose type has none." }
+        where: { type: string, description: "The zone and the ones it is in, from the most specific to the country." }
+        zone_ids: { type: array, items: { type: integer }, description: "Those zones, the country first." }
+        measures: { $ref: "#/components/schemas/PublicMeasures" }
+        coordinates: { $ref: "#/components/schemas/PublicCoordinates" }
+
+    PublicPlace:
+      description: A place as its public page gives it.
+      allOf:
+        - { $ref: "#/components/schemas/PublicPlaceListItem" }
+        - type: object
+          properties:
+            zones:
+              type: array
+              description: The zone of the place and the ones it is in, the country first.
+              items:
+                type: object
+                properties:
+                  id: { type: integer }
+                  kind: { type: string }
+                  name: { type: string }
+            location:
+              type: object
+              description: Left out if the viewer may not see where the place is.
+              properties:
+                points:
+                  type: array
+                  items: { $ref: "#/components/schemas/PublicPoint" }
+                access: { type: string, description: "How to get there." }
+            content:
+              type: object
+              description: Left out if the viewer may not see what is said of the place.
+              properties:
+                description: { type: string }
+                technical_sheet: { type: string }
+
+    PublicCoordinates:
+      type: object
+      properties:
+        lat: { type: number }
+        lon: { type: number }
+        altitude_m: { type: integer }
+
+    PublicMeasures:
+      type: object
+      description: Left out if the place has none.
+      properties:
+        depth_m: { type: integer }
+        horizontal_length_m: { type: integer }
+        geology: { type: string }
+
+    PublicPoint:
+      type: object
+      properties:
+        kind: { type: string, enum: [parking, approach, waypoint, access, other] }
+        name: { type: string }
+        lat: { type: number }
+        lon: { type: number }
+        altitude_m: { type: integer }
+        note: { type: string }
 
     PlaceVisibility:
       type: object

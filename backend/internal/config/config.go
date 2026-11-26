@@ -26,6 +26,11 @@ type Config struct {
 	// is a different "person" as far as the cooldown is concerned.
 	MagicLinkIPRateLimit  int
 	MagicLinkIPRateWindow time.Duration
+	// PublicRateLimit/PublicRateWindow throttle the public routes of the catalogue (/api/v1/public), which
+	// answer people who are not signed in, per calling address: how many requests in how long. Not
+	// positive: no limit.
+	PublicRateLimit  int
+	PublicRateWindow time.Duration
 	// TelegramBotDMLinkTTL is the validity authapi.Handler.notifyMagicLinkViaTelegram
 	// states in, and the delay before it deletes, a magic-link DM sent in
 	// direct reply to someone typing their email into the bot's own
@@ -145,6 +150,8 @@ func Load() (Config, error) {
 		MagicLinkCooldown:     60 * time.Second,
 		MagicLinkIPRateLimit:  20,
 		MagicLinkIPRateWindow: 15 * time.Minute,
+		PublicRateLimit:       120,
+		PublicRateWindow:      time.Minute,
 		TelegramBotDMLinkTTL:  5 * time.Minute,
 		ImpersonationTokenTTL: time.Hour,
 		PublicBaseURL:         getEnv("PUBLIC_BASE_URL", "http://localhost:64710"),
