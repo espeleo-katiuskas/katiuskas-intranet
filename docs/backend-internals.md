@@ -1580,6 +1580,43 @@ answers any domain, so the routes exist on the intranet's host too and give the 
   redaction before they can be opened, and the pages that a search engine can read (server-rendered,
   with a sitemap and addresses with the name in them).
 
+### The public site
+
+`internal/publicsite` is the site «Cuevas y simas» (`PUBLIC_SITE_URL`, `https://cuevasysimas.es`), which
+is going to leave with the rest of the catalogue to a repository of its own (`catalogue-extraction.md`;
+until then it is served by this process, which is not for production): pages
+that a search engine can read, rendered on the server with `html/template` (embedded: `templates/` and
+`static/site.css`) from the same projection as the public routes (`publicplaces.ViewList` and
+`ViewPlace`, for the anonymous viewer), so that they say what those say and nothing more. There is no
+session here: a member of the club sees what anybody sees. Deployment is in `deployment.md`.
+
+- **Pages**: `/` (the list, with a search by name, type and zone that ignores accents and case),
+  `/lugares/{name}-{id}` (a place), `/aviso-legal`, `/privacidad`, `/sitemap.xml`, `/robots.txt` and
+  `/static/site.css`. Only the places that anybody may know exist are in the list, the sitemap and
+  the pages. A place that is closed and one that is not there are **the same 404 page**, which does
+  not repeat the address asked for.
+- **One address per place**: the name and, at the end, the number (`sima-de-la-pena-12`). The number is
+  what finds the place; the name may change, and another spelling of it, or the number alone, goes
+  with a 301 to the current one. Each page says its canonical address.
+- **The host**: the routes are registered for the host of `PUBLIC_SITE_URL` (the router ignores the
+  port when it matches a host), so on any other host they do not exist; no address, no site; an
+  address that is not like `https://cuevasysimas.es` stops the start. A route that is not a page of
+  the site, on its host, is the router's plain 404.
+- **No script, no cookie, no tiles**: every response has a content security policy that allows no script
+  and nothing from elsewhere (`default-src 'none'`), and a place whose coordinates may be shown links to
+  OpenStreetMap instead of embedding a map, which keeps the terms of the map providers out of the
+  question for now. The footer credits OpenStreetMap, as the board decided.
+- **Free texts** (the description and the technical sheet, when the content is public) are written
+  with the intranet's little formatting and shown with the same rules (`richtext.go`, a port of
+  `web/js/rich-text.js`): every span of text is escaped before a tag is written around it, the only
+  tags are a fixed set, and a link needs an `http`, `https` or `mailto` address; the links say
+  `nofollow ugc`. A test takes away every tag the formatter makes and fails if a `<` is left.
+- **Legal data** (`PUBLIC_SITE_LEGAL_NAME`, `_ADDRESS`, `_EMAIL`): until the three are given the
+  legal pages say they are pending, every page has `noindex` and `robots.txt` disallows everything.
+  A search (`?q=`) is never indexed.
+- **Cost**: the same limit of requests per address as the public routes, and `Cache-Control: public,
+  max-age=60, stale-while-revalidate=300` on a page (`no-store` on a 404).
+
 ### Partial edit
 
 `PUT /places/{id}` replaces every field, so a client that only knows some of them would clear the

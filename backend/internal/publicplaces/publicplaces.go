@@ -75,16 +75,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not list the places")
 		return
 	}
-	viewer := auth.ViewerFromContext(r.Context())
-	now := h.now()
-	list := make([]ListItem, 0, len(items))
-	for _, it := range items {
-		if seen, ok := it.ViewedBy(viewer, now); ok {
-			list = append(list, listItemOf(seen))
-		}
-	}
 	cacheHeaders(w, r)
-	httpapi.WriteJSON(w, http.StatusOK, list)
+	httpapi.WriteJSON(w, http.StatusOK, ViewList(items, auth.ViewerFromContext(r.Context()), h.now()))
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -106,13 +98,34 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteError(w, http.StatusInternalServerError, "internal_error", "could not read the place")
 		return
 	}
-	seen, ok := p.ViewedBy(auth.ViewerFromContext(r.Context()), h.now())
+	seen, ok := ViewPlace(p, auth.ViewerFromContext(r.Context()), h.now())
 	if !ok {
 		notFound()
 		return
 	}
 	cacheHeaders(w, r)
-	httpapi.WriteJSON(w, http.StatusOK, placeOf(seen))
+	httpapi.WriteJSON(w, http.StatusOK, seen)
+}
+
+// ViewList is the places of a list that the viewer may know exist, each as the public may see it. The
+// pages of the public site use it too, so that they and the routes say the same.
+func ViewList(items []places.ListItem, viewer access.Viewer, now time.Time) []ListItem {
+	list := make([]ListItem, 0, len(items))
+	for _, it := range items {
+		if seen, ok := it.ViewedBy(viewer, now); ok {
+			list = append(list, listItemOf(seen))
+		}
+	}
+	return list
+}
+
+// ViewPlace is a place as the public may see it, and whether the viewer may know it exists.
+func ViewPlace(p places.Place, viewer access.Viewer, now time.Time) (Place, bool) {
+	seen, ok := p.ViewedBy(viewer, now)
+	if !ok {
+		return Place{}, false
+	}
+	return placeOf(seen), true
 }
 
 // withheld says whether the viewer may not see a part of the place.

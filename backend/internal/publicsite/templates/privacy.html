@@ -1,0 +1,29 @@
+{{define "content"}}
+<h1>Política de privacidad</h1>
+{{if not .LegalComplete}}<p class="pending">Los datos del responsable del sitio están pendientes de completar.</p>{{end}}
+
+<h2>Responsable</h2>
+{{if .LegalComplete}}
+<p>{{.Legal.Name}}, con domicilio en {{.Legal.Address}}. Contacto: {{.Legal.Email}}.</p>
+{{else}}
+<p>Pendiente de completar.</p>
+{{end}}
+
+<h2>Qué datos se tratan</h2>
+<p>
+  Para leer este sitio no hace falta registrarse y no se piden datos personales. Como todo servidor web,
+  se registran de forma temporal la dirección IP y los datos técnicos de cada petición, para que el
+  servicio funcione y para proteger su seguridad.
+</p>
+
+<h2>Cookies</h2>
+<p>Este sitio no usa cookies.</p>
+
+<h2>Sus derechos</h2>
+<p>
+  Puede ejercer los derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad
+  escribiendo a{{if .LegalComplete}} {{.Legal.Email}}{{else}} la dirección de contacto del sitio{{end}}.
+  Si cree que sus datos no se tratan como deben, puede reclamar ante la Agencia Española de Protección
+  de Datos (<a href="https://www.aepd.es" rel="noopener noreferrer">www.aepd.es</a>).
+</p>
+{{end}}

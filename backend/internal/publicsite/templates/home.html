@@ -1,0 +1,34 @@
+{{define "content"}}
+<h1>{{.SiteName}}</h1>
+<p class="lead">Catálogo abierto de cuevas, simas y otros lugares subterráneos: dónde están, qué son y en qué estado.</p>
+
+<form class="search" method="get" action="/" role="search">
+  <label for="q">Buscar por nombre, tipo o zona</label>
+  <div class="search-row">
+    <input id="q" name="q" type="search" value="{{.Query}}" autocomplete="off">
+    <button type="submit">Buscar</button>
+  </div>
+</form>
+
+{{if .Places}}
+<p class="count">{{if .Query}}{{len .Places}} de {{.Total}} lugares{{else}}{{.Total}} lugares{{end}}</p>
+<table class="places">
+  <caption class="visually-hidden">Lugares del catálogo</caption>
+  <thead><tr><th scope="col">Nombre</th><th scope="col">Tipo</th><th scope="col">Zona</th><th scope="col">Estado</th></tr></thead>
+  <tbody>
+  {{range .Places}}
+    <tr>
+      <th scope="row"><a href="{{.URL}}">{{.Name}}</a></th>
+      <td>{{.Type}}</td>
+      <td>{{.Where}}</td>
+      <td>{{if .State}}<span class="badge badge-{{.State}}">{{stateLabel .State}}</span>{{end}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else if .Query}}
+<p>No hay ningún lugar que coincida con «{{.Query}}». <a href="/">Ver todos</a>.</p>
+{{else}}
+<p>Todavía no hay lugares publicados.</p>
+{{end}}
+{{end}}

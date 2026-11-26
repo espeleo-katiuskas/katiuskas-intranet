@@ -270,3 +270,47 @@ func TestServeReportsAServerThatFails(t *testing.T) {
 		t.Error("expected an error for an address already in use")
 	}
 }
+
+// The public site is wired for its own host and nothing else: with an address set, the routes of the site
+// and the rest of the API live together (their patterns would clash and stop the process at start if they
+// did not), the site answers on its host, and the same path on any other host is not found.
+func TestPublicSiteIsWiredForItsOwnHost(t *testing.T) {
+	tx := testutil.NewTx(t)
+	cfg := testConfig(t)
+	cfg.PublicSiteURL = "https://cuevasysimas.es"
+	cfg.PublicSiteLegalName, cfg.PublicSiteLegalAddress, cfg.PublicSiteLegalEmail = "Proyecto", "Calle Falsa 1", "hola@cuevasysimas.es"
+	router, _, _, _, err := buildRouter(cfg, tx, alwaysHealthyPinger{}, telegram.NewSenderFromConfig("", ""), nil)
+	if err != nil {
+		t.Fatalf("buildRouter: %v", err)
+	}
+	get := func(host, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "http://"+host+path, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := get("cuevasysimas.es", "/"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Cuevas y simas") {
+		t.Errorf("the home page of the site: %d", rec.Code)
+	}
+	if rec := get("cuevasysimas.es", "/robots.txt"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Sitemap: https://cuevasysimas.es/sitemap.xml") {
+		t.Errorf("robots.txt: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := get("cuevasysimas.es", "/api/v1/public/places"); rec.Code != http.StatusOK {
+		t.Errorf("the public routes on the site's host: %d", rec.Code)
+	}
+	if rec := get("cuevasysimas.es", "/api/v1/health"); rec.Code != http.StatusOK {
+		t.Errorf("the rest of the API is still there: %d", rec.Code)
+	}
+	if rec := get("intranet.katiuskas.es", "/"); rec.Code != http.StatusNotFound {
+		t.Errorf("the same page on another host: %d, want 404", rec.Code)
+	}
+	if rec := get("intranet.katiuskas.es", "/lugares/algo-1"); rec.Code != http.StatusNotFound {
+		t.Errorf("a place of the site on another host: %d, want 404", rec.Code)
+	}
+
+	bad := testConfig(t)
+	bad.PublicSiteURL = "cuevasysimas.es"
+	if _, _, _, _, err := buildRouter(bad, tx, alwaysHealthyPinger{}, telegram.NewSenderFromConfig("", ""), nil); err == nil {
+		t.Error("an address that is not like https://cuevasysimas.es must stop the start")
+	}
+}

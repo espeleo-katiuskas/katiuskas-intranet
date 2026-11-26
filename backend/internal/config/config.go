@@ -31,6 +31,15 @@ type Config struct {
 	// positive: no limit.
 	PublicRateLimit  int
 	PublicRateWindow time.Duration
+	// PublicSiteURL is the address of the public site of the catalogue (https://cuevasysimas.es): the host
+	// it answers to, and the base of the addresses in its pages and its sitemap. Empty: the site is off.
+	// PublicSiteLegal* are who answers for it (name, address and email), which its legal notice and its
+	// privacy policy say; until all three are given the pages say it is pending and ask search engines to
+	// stay out.
+	PublicSiteURL          string
+	PublicSiteLegalName    string
+	PublicSiteLegalAddress string
+	PublicSiteLegalEmail   string
 	// TelegramBotDMLinkTTL is the validity authapi.Handler.notifyMagicLinkViaTelegram
 	// states in, and the delay before it deletes, a magic-link DM sent in
 	// direct reply to someone typing their email into the bot's own
@@ -142,34 +151,38 @@ func archiveRoot() string {
 
 func Load() (Config, error) {
 	cfg := Config{
-		HTTPAddr:              getEnv("HTTP_ADDR", ":64711"),
-		DatabaseURL:           os.Getenv("DATABASE_URL"),
-		TokenTTL:              30 * 24 * time.Hour,
-		LocalTokenTTL:         3 * time.Hour,
-		MagicLinkTTL:          15 * time.Minute,
-		MagicLinkCooldown:     60 * time.Second,
-		MagicLinkIPRateLimit:  20,
-		MagicLinkIPRateWindow: 15 * time.Minute,
-		PublicRateLimit:       120,
-		PublicRateWindow:      time.Minute,
-		TelegramBotDMLinkTTL:  5 * time.Minute,
-		ImpersonationTokenTTL: time.Hour,
-		PublicBaseURL:         getEnv("PUBLIC_BASE_URL", "http://localhost:64710"),
-		SMTPHost:              os.Getenv("SMTP_HOST"),
-		SMTPPort:              getEnv("SMTP_PORT", "587"),
-		SMTPUsername:          os.Getenv("SMTP_USERNAME"),
-		SMTPPassword:          os.Getenv("SMTP_PASSWORD"),
-		SMTPFrom:              os.Getenv("SMTP_FROM"),
-		TelegramBotToken:      os.Getenv("TELEGRAM_BOT_TOKEN"),
-		TelegramLogChatID:     os.Getenv("TELEGRAM_LOG_CHAT_ID"),
-		TelegramBotUsername:   os.Getenv("TELEGRAM_BOT_USERNAME"),
-		ArchiveRoot:           archiveRoot(),
-		UserFilesRoot:         getEnv("USER_FILES_ROOT", "/data/user-files"),
-		ActivityResourcesRoot: getEnv("ACTIVITY_RESOURCES_ROOT", "/data/activity-resources"),
-		TransactionFilesRoot:  getEnv("TRANSACTION_FILES_ROOT", "/data/transaction-files"),
-		LibraryFilesRoot:      os.Getenv("LIBRARY_FILES_ROOT"),
-		PlaceFilesRoot:        os.Getenv("PLACE_FILES_ROOT"),
-		NominatimURL:          getEnv("NOMINATIM_URL", "https://nominatim.openstreetmap.org/reverse"),
+		HTTPAddr:               getEnv("HTTP_ADDR", ":64711"),
+		DatabaseURL:            os.Getenv("DATABASE_URL"),
+		TokenTTL:               30 * 24 * time.Hour,
+		LocalTokenTTL:          3 * time.Hour,
+		MagicLinkTTL:           15 * time.Minute,
+		MagicLinkCooldown:      60 * time.Second,
+		MagicLinkIPRateLimit:   20,
+		MagicLinkIPRateWindow:  15 * time.Minute,
+		PublicSiteURL:          os.Getenv("PUBLIC_SITE_URL"),
+		PublicSiteLegalName:    os.Getenv("PUBLIC_SITE_LEGAL_NAME"),
+		PublicSiteLegalAddress: os.Getenv("PUBLIC_SITE_LEGAL_ADDRESS"),
+		PublicSiteLegalEmail:   os.Getenv("PUBLIC_SITE_LEGAL_EMAIL"),
+		PublicRateLimit:        120,
+		PublicRateWindow:       time.Minute,
+		TelegramBotDMLinkTTL:   5 * time.Minute,
+		ImpersonationTokenTTL:  time.Hour,
+		PublicBaseURL:          getEnv("PUBLIC_BASE_URL", "http://localhost:64710"),
+		SMTPHost:               os.Getenv("SMTP_HOST"),
+		SMTPPort:               getEnv("SMTP_PORT", "587"),
+		SMTPUsername:           os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:           os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:               os.Getenv("SMTP_FROM"),
+		TelegramBotToken:       os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramLogChatID:      os.Getenv("TELEGRAM_LOG_CHAT_ID"),
+		TelegramBotUsername:    os.Getenv("TELEGRAM_BOT_USERNAME"),
+		ArchiveRoot:            archiveRoot(),
+		UserFilesRoot:          getEnv("USER_FILES_ROOT", "/data/user-files"),
+		ActivityResourcesRoot:  getEnv("ACTIVITY_RESOURCES_ROOT", "/data/activity-resources"),
+		TransactionFilesRoot:   getEnv("TRANSACTION_FILES_ROOT", "/data/transaction-files"),
+		LibraryFilesRoot:       os.Getenv("LIBRARY_FILES_ROOT"),
+		PlaceFilesRoot:         os.Getenv("PLACE_FILES_ROOT"),
+		NominatimURL:           getEnv("NOMINATIM_URL", "https://nominatim.openstreetmap.org/reverse"),
 	}
 	if cfg.PlaceFilesRoot == "" {
 		cfg.PlaceFilesRoot = filepath.Join(filepath.Dir(cfg.ActivityResourcesRoot), "place-files")

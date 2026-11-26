@@ -1,0 +1,56 @@
+{{define "content"}}
+{{with .Place}}
+<nav class="crumbs" aria-label="Migas"><a href="/">Todos los lugares</a></nav>
+<h1>{{.Name}}</h1>
+<p class="lead">{{.Type}}{{with .Subtype}} · {{.}}{{end}}{{with .Where}} · {{.}}{{end}}</p>
+{{if .State}}<p><span class="badge badge-{{.State}}">{{stateLabel .State}}</span> <span class="muted">{{stateHelp .State}}</span></p>{{end}}
+
+<dl class="details">
+  {{if .AltNames}}<div><dt>Otros nombres</dt><dd>{{range $i, $n := .AltNames}}{{if $i}} · {{end}}{{$n}}{{end}}</dd></div>{{end}}
+  {{if .Zones}}<div><dt>Zona</dt><dd>{{range $i, $z := .Zones}}{{if $i}} › {{end}}{{$z.Name}}{{end}}</dd></div>{{end}}
+  {{with .Measures}}
+    {{with .Geology}}<div><dt>Geología</dt><dd>{{.}}</dd></div>{{end}}
+    {{with .DepthM}}<div><dt>Profundidad</dt><dd>{{.}} m</dd></div>{{end}}
+    {{with .HorizontalLengthM}}<div><dt>Desarrollo horizontal</dt><dd>{{.}} m</dd></div>{{end}}
+  {{end}}
+  {{with .Coordinates}}
+    <div><dt>Coordenadas</dt><dd>{{coordinates .Lat .Lon}} · <a href="{{osmLink .Lat .Lon}}" target="_blank" rel="noopener noreferrer nofollow">ver en OpenStreetMap</a></dd></div>
+    {{with .AltitudeM}}<div><dt>Altitud</dt><dd>{{.}} m sobre el nivel del mar</dd></div>{{end}}
+  {{end}}
+</dl>
+
+{{with .Location}}
+  {{if .Access}}
+    <section><h2>Cómo llegar</h2><div class="rich-text">{{rich .Access}}</div></section>
+  {{end}}
+  {{if .Points}}
+    <section>
+      <h2>Otros puntos</h2>
+      <table class="points">
+        <thead><tr><th scope="col">Tipo</th><th scope="col">Nombre</th><th scope="col">Coordenadas</th></tr></thead>
+        <tbody>
+        {{range .Points}}
+          <tr>
+            <td>{{.Kind}}</td>
+            <td>{{with .Name}}{{.}}{{end}}</td>
+            <td>{{coordinates .Lat .Lon}} · <a href="{{osmLink .Lat .Lon}}" target="_blank" rel="noopener noreferrer nofollow">ver</a></td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </section>
+  {{end}}
+{{end}}
+
+{{with .Content}}
+  {{if .Description}}<section><h2>Descripción</h2><div class="rich-text">{{rich .Description}}</div></section>{{end}}
+  {{if .TechnicalSheet}}<section><h2>Ficha técnica</h2><div class="rich-text">{{rich .TechnicalSheet}}</div></section>{{end}}
+{{end}}
+
+<p class="muted warning">
+  La información es orientativa y puede haber cambiado. Visitar cuevas, simas y cañones tiene riesgos:
+  hágalo con la preparación y el material adecuados, y respete los permisos de acceso y la
+  conservación del lugar.
+</p>
+{{end}}
+{{end}}

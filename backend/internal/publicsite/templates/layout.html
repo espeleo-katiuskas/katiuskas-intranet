@@ -1,0 +1,38 @@
+{{define "layout"}}<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+{{if .Description}}<meta name="description" content="{{.Description}}">{{end}}
+{{if .NoIndex}}<meta name="robots" content="noindex">{{end}}
+{{if .Canonical}}<link rel="canonical" href="{{.Canonical}}">{{end}}
+<meta property="og:site_name" content="{{.SiteName}}">
+<meta property="og:title" content="{{.Title}}">
+{{if .Description}}<meta property="og:description" content="{{.Description}}">{{end}}
+{{if .Canonical}}<meta property="og:url" content="{{.Canonical}}">{{end}}
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="/static/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Saltar al contenido</a>
+<header class="site-header">
+  <div class="wrap"><a class="brand" href="/">{{.SiteName}}</a></div>
+</header>
+<main id="main" class="wrap">
+{{template "content" .}}
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <p>
+      Algunos datos proceden de OpenStreetMap, © colaboradores de OpenStreetMap, con licencia ODbL
+      (<a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer">más información</a>).
+    </p>
+    <p>
+      <a href="/aviso-legal">Aviso legal</a> ·
+      <a href="/privacidad">Política de privacidad</a>
+    </p>
+  </div>
+</footer>
+</body>
+</html>{{end}}

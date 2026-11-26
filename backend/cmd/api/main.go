@@ -38,6 +38,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/db"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/platform/logging"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/publicplaces"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/publicsite"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/requestcount"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/roles"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/telegram"
@@ -366,6 +367,13 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		OSMMaxAge:             time.Duration(cfg.OSMMirrorMaxAgeDays) * 24 * time.Hour,
 	})
 
+	publicSite, err := publicsite.NewHandler(placesService, cfg.PublicSiteURL, publicsite.Legal{
+		Name: cfg.PublicSiteLegalName, Address: cfg.PublicSiteLegalAddress, Email: cfg.PublicSiteLegalEmail,
+	}, cfg.PublicRateLimit, cfg.PublicRateWindow)
+	if err != nil {
+		slog.Error("set up the public site", "error", err, "url", cfg.PublicSiteURL)
+		return nil, nil, nil, nil, err
+	}
 	router = httpapi.NewRouter(httpapi.Routes{
 		Health:            httpapi.NewHealthHandler(health),
 		Auth:              authHandler,
@@ -391,6 +399,7 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Areas:             areas.NewHandler(areasService, authenticator, usersService, telegramSender),
 		OSM:               osmmirror.NewHandler(osmmirror.NewService(osmmirror.NewRepository(repoPool)), authenticator),
 		PublicPlaces:      publicplaces.NewHandler(placesService, authenticator, cfg.PublicRateLimit, cfg.PublicRateWindow),
+		PublicSite:        publicSite,
 	})
 
 	return router, authHandler, usersService, adminStatus, nil

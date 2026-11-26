@@ -419,12 +419,15 @@ Each step can be deployed alone and none makes anything public before the last o
    logins, no activities, coordinates as decided), server-rendered pages with their URLs, sitemap,
    caches, rate limits, credits for maps and for OpenStreetMap. Tried in testing with the real data
    copy and a checklist of what an anonymous reader can and cannot get, including the sources other
-   than the page (the API, the sitemap, the tiles, the notices, the files by id). *Done*: the
-   routes (`internal/publicplaces`: `GET /public/places` and `/public/places/{id}`), the projection,
-   the rate limit and the cache headers, with tests that cross every visibility with who asks.
-   *Left*: the systems, the files and the points apart from the place, the pages with their
-   addresses and sitemap, the domain `cuevasysimas.es` answered by this process, the credits for the
-   maps and the checklist in testing.
+   than the page (the API, the sitemap, the tiles, the notices, the files by id). *Done*: the routes
+   (`internal/publicplaces`: `GET /public/places` and `/public/places/{id}`), the projection, the
+   rate limit and the cache headers, with tests that cross every visibility with who asks. The pages
+   are made too (`internal/publicsite`: the list with a search, a page for each place at
+   `/lugares/{name}-{id}`, the legal notice and the privacy policy from a standard template, the
+   sitemap and `robots.txt`, with no script, no cookie and no map of tiles), answering the host of
+   `PUBLIC_SITE_URL`. *Left*: the systems, the files and the points apart from the place, the
+   credits and the terms of the map providers if a map is ever embedded, the legal data (who answers
+   for the site), the domain pointing at the host, and the checklist in testing.
 6. **Registered users and opening**: the table of accounts, the sign-up with a verified email, the
    optional phone, the sign-in that does not tell who exists, the account page (data, deletion,
    export), the limits against abuse; then the domain, the links from `www.katiuskas.es`,

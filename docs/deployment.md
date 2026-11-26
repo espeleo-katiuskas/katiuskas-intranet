@@ -326,6 +326,48 @@ If that Caddy runs as a user that cannot read `/opt/katiuskas-intranet/web` (own
 give it read access, for example by adding that user to the `intranet` group, or with `o+rX`
 permissions on `/opt/katiuskas-intranet/web`.
 
+### The public site of the catalogue («Cuevas y simas»)
+
+**This arrangement is transitional and is not for production.** The catalogue is going to be an
+independent project, in its own repository (`cuevasysimas`), with its own domain, API, server and
+database (`catalogue-extraction.md`); the code of the site moves there as it is. Until then, the same
+API process serves the public site of the catalogue of places, at its own domain
+(`https://cuevasysimas.es`), once `PUBLIC_SITE_URL` is set in `api.env`. With it unset the site is
+off and nothing of it exists. The site answers only the host of that address (the router ignores the
+port), so the intranet's domain does not give its pages even though both reach the same process.
+
+```sh
+# The address of the public site, and who answers for it: its legal notice and its privacy policy say
+# them. Until the three PUBLIC_SITE_LEGAL_* are given the pages say it is pending, and robots.txt and
+# a meta tag ask the search engines to stay out: the site cannot be indexed by mistake.
+PUBLIC_SITE_URL=https://cuevasysimas.es
+PUBLIC_SITE_LEGAL_NAME=
+PUBLIC_SITE_LEGAL_ADDRESS=
+PUBLIC_SITE_LEGAL_EMAIL=
+```
+
+The domain's Caddy block sends the site's paths to the API, and **only those**: the rest of the API
+(`/api/v1/users`…) is protected by sign-in, but it has no reason to be reachable from there. Caddy
+looks after the HTTPS and may keep what the API marks as public (`Cache-Control: public`), and it
+must send the address of the visitor as `X-Forwarded-For`, which is what the limit of requests per
+address reads (`reverse_proxy` does it):
+
+```caddyfile
+cuevasysimas.es {
+	encode zstd gzip
+	@site path / /lugares/* /sitemap.xml /robots.txt /aviso-legal /privacidad /static/* /api/v1/public/*
+	handle @site {
+		reverse_proxy 127.0.0.1:64711
+	}
+	respond 404
+}
+```
+
+There are no scripts, no cookies and no maps of anybody's tiles on its pages, so no consent notice is
+needed; that has to be said again if one of them is added. The legal notice and the privacy policy are
+a standard template (decision of the board) that assumes exactly that, and have to be revised by whoever
+answers for the site, and again when registration opens.
+
 ### If the existing reverse proxy is not Caddy (nginx, Traefik...)
 
 If your reverse proxy does not serve static files and forward `/api/*` as easily, install a local

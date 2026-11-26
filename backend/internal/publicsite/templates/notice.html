@@ -1,0 +1,38 @@
+{{define "content"}}
+<h1>Aviso legal</h1>
+{{if not .LegalComplete}}<p class="pending">Los datos del responsable del sitio están pendientes de completar.</p>{{end}}
+
+<h2>Titular del sitio</h2>
+{{if .LegalComplete}}
+<p>El titular de este sitio es {{.Legal.Name}}, con domicilio en {{.Legal.Address}}. Puede escribirse a {{.Legal.Email}}.</p>
+{{else}}
+<p>Pendiente de completar.</p>
+{{end}}
+
+<h2>Objeto</h2>
+<p>{{.SiteName}} es un catálogo de cuevas, simas y otros lugares de interés espeleológico: dónde están, qué son y en qué estado se encuentran.</p>
+
+<h2>Uso de la información y responsabilidad</h2>
+<p>
+  La información del catálogo es orientativa, la aportan personas y puede contener errores o haber
+  cambiado. Visitar cuevas, simas y cañones tiene riesgos. Quien lo haga lo hace bajo su responsabilidad,
+  con la preparación y el material adecuados, y respetando las normas, los permisos de acceso y la
+  conservación del lugar (murciélagos, yacimientos, propiedad privada).
+</p>
+
+<h2>Propiedad intelectual</h2>
+<p>
+  Los textos y los datos del catálogo son del proyecto y de quienes los han aportado. Algunos datos
+  proceden de OpenStreetMap, © colaboradores de OpenStreetMap, con licencia ODbL
+  (<a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer">más información</a>).
+</p>
+
+<h2>Retirada de contenido</h2>
+<p>
+  Si cree que algo no debe estar publicado, escriba a{{if .LegalComplete}} {{.Legal.Email}}{{else}} la dirección de contacto del sitio{{end}}
+  y se revisará y, si procede, se retirará.
+</p>
+
+<h2>Legislación aplicable</h2>
+<p>Este sitio se rige por la legislación española.</p>
+{{end}}

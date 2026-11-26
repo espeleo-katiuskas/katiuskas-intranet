@@ -33,6 +33,7 @@ type Routes struct {
 	Areas             ResourceHandler
 	OSM               ResourceHandler
 	PublicPlaces      ResourceHandler
+	PublicSite        ResourceHandler
 }
 
 func NewRouter(routes Routes) http.Handler {
@@ -62,6 +63,7 @@ func NewRouter(routes Routes) http.Handler {
 	routes.Areas.RegisterRoutes(mux)
 	routes.OSM.RegisterRoutes(mux)
 	routes.PublicPlaces.RegisterRoutes(mux)
+	routes.PublicSite.RegisterRoutes(mux)
 
 	// Recoverer has to be the *inner* layer, closer to mux, not the
 	// outer one: RequestLogger's own next.ServeHTTP call has no
