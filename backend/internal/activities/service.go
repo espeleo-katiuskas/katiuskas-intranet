@@ -26,6 +26,7 @@ type Service struct {
 	licenses *licenses.Service
 	roles    RoleLookup
 	places   PlaceLookup
+	refs     PlaceReferences
 }
 
 func NewService(repo *Repository, licensesService *licenses.Service, roles RoleLookup, places PlaceLookup) *Service {
@@ -64,8 +65,16 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Activity, error) 
 	if err != nil {
 		return Activity{}, err
 	}
+	if err := s.checkPlacesExist(ctx, placeIDs); err != nil {
+		return Activity{}, err
+	}
 	in.PlaceIDs = placeIDs
-	return s.repo.Create(ctx, in)
+	a, err := s.repo.Create(ctx, in)
+	if err != nil {
+		return Activity{}, err
+	}
+	s.refer(ctx, a.ID, placeIDs)
+	return a, nil
 }
 
 // cleanPlaceIDs drops repeated ids and refuses too many.
@@ -102,10 +111,22 @@ func (s *Service) SetPlaces(ctx context.Context, activityID int64, placeIDs []in
 	if placeIDs, err = cleanPlaceIDs(placeIDs); err != nil {
 		return nil, nil, err
 	}
+	// Only the places that are new have to exist: one that is already there stays even if the catalogue
+	// has since closed it to the person who edits.
+	current, err := s.repo.ListPlaceIDs(ctx, activityID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.checkPlacesExist(ctx, without(placeIDs, current)); err != nil {
+		return nil, nil, err
+	}
+	// The catalogue is told first of what is added, so that a place cannot be deleted between the two.
+	s.refer(ctx, activityID, without(placeIDs, current))
 	beforeIDs, afterIDs, err := s.repo.SetPlaces(ctx, activityID, placeIDs)
 	if err != nil {
 		return nil, nil, err
 	}
+	s.unrefer(ctx, activityID, without(beforeIDs, afterIDs))
 	if before, err = s.places.PlaceRefs(ctx, beforeIDs); err != nil {
 		return nil, nil, err
 	}
@@ -211,7 +232,15 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Activit
 
 // Delete removes an activity with nothing attached (see Repository.Delete).
 func (s *Service) Delete(ctx context.Context, id int64) error {
-	return s.repo.Delete(ctx, id)
+	placeIDs, err := s.repo.ListPlaceIDs(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	s.unrefer(ctx, id, placeIDs)
+	return nil
 }
 
 // Join signs userID up to the activity; addedBy is who is doing it (userID themselves, or somebody else).

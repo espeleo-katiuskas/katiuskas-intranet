@@ -34,36 +34,48 @@ type Routes struct {
 	OSM               ResourceHandler
 	PublicPlaces      ResourceHandler
 	PublicSite        ResourceHandler
+	// Catalogue answers the routes of the catalogue (places, systems, zones and the mirror of OpenStreetMap)
+	// by forwarding them to the catalogue when it is a project of its own: then Places, Areas, OSM,
+	// PublicPlaces and PublicSite are left nil.
+	Catalogue ResourceHandler
 }
 
 func NewRouter(routes Routes) http.Handler {
 	mux := http.NewServeMux()
 
-	routes.Health.RegisterRoutes(mux)
-	routes.Auth.RegisterRoutes(mux)
-	routes.Users.RegisterRoutes(mux)
-	routes.Roles.RegisterRoutes(mux)
-	routes.Tokens.RegisterRoutes(mux)
-	routes.Memberships.RegisterRoutes(mux)
-	routes.Licenses.RegisterRoutes(mux)
-	routes.Activities.RegisterRoutes(mux)
-	routes.Material.RegisterRoutes(mux)
-	routes.Distributions.RegisterRoutes(mux)
-	routes.Board.RegisterRoutes(mux)
-	routes.Archive.RegisterRoutes(mux)
-	routes.UserFiles.RegisterRoutes(mux)
-	routes.ActivityResources.RegisterRoutes(mux)
-	routes.Accounting.RegisterRoutes(mux)
-	routes.AdminStatus.RegisterRoutes(mux)
-	routes.ClubInfo.RegisterRoutes(mux)
-	routes.Budgets.RegisterRoutes(mux)
-	routes.TransactionFiles.RegisterRoutes(mux)
-	routes.Library.RegisterRoutes(mux)
-	routes.Places.RegisterRoutes(mux)
-	routes.Areas.RegisterRoutes(mux)
-	routes.OSM.RegisterRoutes(mux)
-	routes.PublicPlaces.RegisterRoutes(mux)
-	routes.PublicSite.RegisterRoutes(mux)
+	// A handler that is not there (the catalogue of places is somebody else's) is skipped.
+	for _, h := range []ResourceHandler{
+		routes.Health,
+		routes.Auth,
+		routes.Users,
+		routes.Roles,
+		routes.Tokens,
+		routes.Memberships,
+		routes.Licenses,
+		routes.Activities,
+		routes.Material,
+		routes.Distributions,
+		routes.Board,
+		routes.Archive,
+		routes.UserFiles,
+		routes.ActivityResources,
+		routes.Accounting,
+		routes.AdminStatus,
+		routes.ClubInfo,
+		routes.Budgets,
+		routes.TransactionFiles,
+		routes.Library,
+		routes.Places,
+		routes.Areas,
+		routes.OSM,
+		routes.PublicPlaces,
+		routes.PublicSite,
+		routes.Catalogue,
+	} {
+		if h != nil {
+			h.RegisterRoutes(mux)
+		}
+	}
 
 	// Recoverer has to be the *inner* layer, closer to mux, not the
 	// outer one: RequestLogger's own next.ServeHTTP call has no

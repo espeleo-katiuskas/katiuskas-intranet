@@ -99,10 +99,16 @@ the catalogue's API, the assertion and the forwarding.
    - its own `auth`, `httpapi`, `config`, `testutil` and server (`cmd/cuevasysimas`), and the
      baseline migration (`00001`, the sum of 00061 to 00083 here) and `00002`.
 
-   What is still to do before the cutover: the intranet side (signing the assertions, forwarding the
-   members' requests, asking for names and making references, `activity_count`, the refusal to
-   delete a person who made something), trying both together with a copy of the real data, and the
-   points that the new repository's `docs/roadmap.md` lists.
+   The intranet side is written (`internal/catalogueclient`, on when `CATALOGUE_URL` is set; how it
+   works is in `backend-internals.md`, "The catalogue as a separate project"): the assertions, the
+   forwarding of the members' requests with `activity_count` added, the names of places asked over
+   HTTP, the references the activities make (and `cmd/syncrefs`, which sends them all), and
+   migration `00084`, which drops the last foreign key into the catalogue. Without `CATALOGUE_URL`
+   nothing changes. The refusal to delete a person who made something in the catalogue does not
+   exist in that mode: the catalogue's accounts outlive the people.
+
+   What is still to do before the cutover: trying both together with a copy of the real data, and
+   the points that the new repository's `docs/roadmap.md` lists.
 3. **The cutover, once**: the edition of places is frozen for a short time, the data and the files
    are copied, the intranet starts forwarding, and the schema `catalogue` is dropped from its
    database. There are never two sources of truth.
@@ -121,8 +127,9 @@ the line:
   intranet's tables.
 - What is not the catalogue may import it only at the points of the contract: the composition root
   (`cmd/api`), the OpenStreetMap load (`cmd/osmsync`), `auth` and `users` (the viewer and the
-  issuer, both of `access`), `activities` (`placelinks`) and the fixtures of `testutil`. The tests
-  of the activities and of `cmd/api` may also use the real catalogue.
+  issuer, both of `access`), `activities` and `catalogueclient` (`placelinks`), `cmd/syncrefs` (the
+  club's group) and the fixtures of `testutil`. The tests of the activities and of `cmd/api` may
+  also use the real catalogue.
 
 When the catalogue really needs something new from the intranet, the answer is to put it in the
 contract, not to widen the lists of the test.
@@ -138,8 +145,8 @@ primitive types, injected by `cmd/api`:
 - `users.AuthorGuard`, which refuses to delete a person who made something in the catalogue.
 - `auth.ViewerOf`, which turns a session of the intranet into the viewer that the catalogue
   understands: in the new repository it is the verification of a signed assertion.
-- The foreign key from `activity_places` to `places`, and from `activity_resources` to
-  `activity_places`.
+- The foreign key from `activity_resources` to `activity_places` (both the activities'). The one
+  from `activity_places` to `places` is gone (migration `00084`).
 
 ## Still open
 

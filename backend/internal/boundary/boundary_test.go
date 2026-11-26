@@ -45,7 +45,11 @@ var reachIn = map[string]map[string]bool{
 	"auth":        set("access"), // the viewer is an assertion about a person
 	"users":       set("access"), // the issuer of the intranet
 	"activities":  set("placelinks"),
-	"testutil":    set("access", "accounts"), // fixtures
+	// The client of the catalogue when it is a project of its own: it speaks the contract (names of places)
+	// over HTTP and shares no code with the catalogue.
+	"catalogueclient": set("placelinks"),
+	"cmd/syncrefs":    set("access"),             // the group of the club, for the assertion of the system
+	"testutil":        set("access", "accounts"), // fixtures
 }
 
 var reachInTests = map[string]map[string]bool{

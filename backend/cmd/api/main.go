@@ -24,6 +24,7 @@ import (
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/authapi"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/board"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/budgets"
+	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/catalogueclient"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/clubinfo"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/config"
 	"github.com/espeleo-katiuskas/katiuskas-intranet/backend/internal/distributions"
@@ -271,17 +272,36 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	usersService = users.NewService(usersRepo, rolesService, membershipsService, licensesService)
 	membershipsService.SetNumberAssigner(usersService)
 
-	// The catalogue (places and zones) has accounts of its own for whoever acts on it, and it tells the
-	// users whether a person has authored anything, which keeps them from being deleted.
-	accountsService := accounts.NewService(accounts.NewRepository(repoPool))
-	placesService := places.NewService(places.NewRepository(repoPool), placeFilesStorage, accountsService)
-	areasService := areas.NewService(areas.NewRepository(repoPool), accountsService)
-	// No address, or "off", turns the lookup of the zone of a point off (the tests, an offline host).
-	if cfg.NominatimURL != "" && cfg.NominatimURL != "off" {
-		nominatim := areas.NewNominatim(cfg.NominatimURL) // One client, so its requests are spaced together.
-		areasService.WithBoundaries(nominatim).WithGeocoder(nominatim)
+	// The catalogue of places is either part of this program (it has accounts of its own for whoever acts on
+	// it, and tells the users whether a person has authored anything, which keeps them from being
+	// deleted) or a project of its own that this program is a client of (CATALOGUE_URL): then the members'
+	// requests are forwarded to it, and nothing of the catalogue is served from here.
+	var (
+		catalogueClient *catalogueclient.Client
+		placesService   *places.Service
+		areasService    *areas.Service
+		accountsService *accounts.Service
+		placeLookup     activities.PlaceLookup
+	)
+	if cfg.CatalogueURL != "" {
+		catalogueClient, err = catalogueclient.New(cfg.CatalogueURL, cfg.CatalogueIssuer, cfg.CataloguePrivateKey)
+		if err != nil {
+			slog.Error("set up the client of the catalogue", "error", err)
+			return nil, nil, nil, nil, err
+		}
+		placeLookup = catalogueClient
+	} else {
+		accountsService = accounts.NewService(accounts.NewRepository(repoPool))
+		placesService = places.NewService(places.NewRepository(repoPool), placeFilesStorage, accountsService)
+		areasService = areas.NewService(areas.NewRepository(repoPool), accountsService)
+		// No address, or "off", turns the lookup of the zone of a point off (the tests, an offline host).
+		if cfg.NominatimURL != "" && cfg.NominatimURL != "off" {
+			nominatim := areas.NewNominatim(cfg.NominatimURL) // One client, so its requests are spaced together.
+			areasService.WithBoundaries(nominatim).WithGeocoder(nominatim)
+		}
+		usersService.WithAuthorGuards(placesService, areasService)
+		placeLookup = placesService
 	}
-	usersService.WithAuthorGuards(placesService, areasService)
 
 	tokensRepo := tokens.NewRepository(repoPool)
 	tokensService := tokens.NewService(tokensRepo, rolesService)
@@ -289,8 +309,12 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 	authenticator := auth.NewAuthenticator(tokensService)
 
 	activitiesRepo := activities.NewRepository(repoPool)
-	activitiesService := activities.NewService(activitiesRepo, licensesService, rolesService, placesService)
-	placesService.SetActivities(activitiesService)
+	activitiesService := activities.NewService(activitiesRepo, licensesService, rolesService, placeLookup)
+	if catalogueClient != nil {
+		activitiesService.WithPlaceReferences(catalogueClient)
+	} else {
+		placesService.SetActivities(activitiesService)
+	}
 
 	distributionsService := distributions.NewService(distributions.NewRepository(repoPool))
 
@@ -364,17 +388,10 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		LibraryFilesRoot:      cfg.LibraryFilesRoot,
 		PlaceFilesRoot:        cfg.PlaceFilesRoot,
 		DiskAlertPercent:      cfg.DiskAlertPercent,
-		OSMMaxAge:             time.Duration(cfg.OSMMirrorMaxAgeDays) * 24 * time.Hour,
+		OSMMaxAge:             osmMaxAge(cfg),
 	})
 
-	publicSite, err := publicsite.NewHandler(placesService, cfg.PublicSiteURL, publicsite.Legal{
-		Name: cfg.PublicSiteLegalName, Address: cfg.PublicSiteLegalAddress, Email: cfg.PublicSiteLegalEmail,
-	}, cfg.PublicRateLimit, cfg.PublicRateWindow)
-	if err != nil {
-		slog.Error("set up the public site", "error", err, "url", cfg.PublicSiteURL)
-		return nil, nil, nil, nil, err
-	}
-	router = httpapi.NewRouter(httpapi.Routes{
+	routes := httpapi.Routes{
 		Health:            httpapi.NewHealthHandler(health),
 		Auth:              authHandler,
 		Users:             users.NewHandler(usersService, authenticator, telegramSender),
@@ -395,12 +412,34 @@ func buildRouter(cfg config.Config, repoPool db.PGX, health pinger, telegramSend
 		Budgets:           budgets.NewHandler(budgetsService, authenticator, usersService, telegramSender),
 		TransactionFiles:  transactionfiles.NewHandler(transactionFilesService, authenticator, usersService, telegramSender),
 		Library:           library.NewHandler(libraryService, authenticator, usersService, telegramSender),
-		Places:            places.NewHandler(placesService, authenticator, telegramSender),
-		Areas:             areas.NewHandler(areasService, authenticator, telegramSender),
-		OSM:               osmmirror.NewHandler(osmmirror.NewService(osmmirror.NewRepository(repoPool)), authenticator),
-		PublicPlaces:      publicplaces.NewHandler(placesService, authenticator, cfg.PublicRateLimit, cfg.PublicRateWindow),
-		PublicSite:        publicSite,
-	})
+	}
+	if catalogueClient != nil {
+		routes.Catalogue = catalogueclient.NewProxy(catalogueClient, authenticator, activitiesService)
+	} else {
+		publicSite, err := publicsite.NewHandler(placesService, cfg.PublicSiteURL, publicsite.Legal{
+			Name: cfg.PublicSiteLegalName, Address: cfg.PublicSiteLegalAddress, Email: cfg.PublicSiteLegalEmail,
+		}, cfg.PublicRateLimit, cfg.PublicRateWindow)
+		if err != nil {
+			slog.Error("set up the public site", "error", err, "url", cfg.PublicSiteURL)
+			return nil, nil, nil, nil, err
+		}
+		routes.Places = places.NewHandler(placesService, authenticator, telegramSender)
+		routes.Areas = areas.NewHandler(areasService, authenticator, telegramSender)
+		routes.OSM = osmmirror.NewHandler(osmmirror.NewService(osmmirror.NewRepository(repoPool)), authenticator)
+		routes.PublicPlaces = publicplaces.NewHandler(placesService, authenticator, cfg.PublicRateLimit, cfg.PublicRateWindow)
+		routes.PublicSite = publicSite
+	}
+	router = httpapi.NewRouter(routes)
 
 	return router, authHandler, usersService, adminStatus, nil
+}
+
+// osmMaxAge is how old the local mirror of OpenStreetMap may get before the status page calls it a problem.
+// With the catalogue elsewhere the mirror is its, not this program's: nothing here loads it and so nothing
+// here may complain about it.
+func osmMaxAge(cfg config.Config) time.Duration {
+	if cfg.CatalogueURL != "" {
+		return 0
+	}
+	return time.Duration(cfg.OSMMirrorMaxAgeDays) * 24 * time.Hour
 }

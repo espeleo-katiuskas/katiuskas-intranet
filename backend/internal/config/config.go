@@ -40,6 +40,14 @@ type Config struct {
 	PublicSiteLegalName    string
 	PublicSiteLegalAddress string
 	PublicSiteLegalEmail   string
+	// CatalogueURL is the address of the catalogue of places when it is a project of its own (Cuevas y simas,
+	// https://cuevasysimas.es: its API, not its site): the intranet then forwards what the members ask of
+	// places, systems and zones to it, vouching for them with an assertion signed with CataloguePrivateKey
+	// (base64 of an Ed25519 key) as CatalogueIssuer, the name the catalogue knows the intranet by. Empty:
+	// the catalogue is part of this program, as it has been. See docs/catalogue-extraction.md.
+	CatalogueURL        string
+	CatalogueIssuer     string
+	CataloguePrivateKey string
 	// TelegramBotDMLinkTTL is the validity authapi.Handler.notifyMagicLinkViaTelegram
 	// states in, and the delay before it deletes, a magic-link DM sent in
 	// direct reply to someone typing their email into the bot's own
@@ -163,6 +171,9 @@ func Load() (Config, error) {
 		PublicSiteLegalName:    os.Getenv("PUBLIC_SITE_LEGAL_NAME"),
 		PublicSiteLegalAddress: os.Getenv("PUBLIC_SITE_LEGAL_ADDRESS"),
 		PublicSiteLegalEmail:   os.Getenv("PUBLIC_SITE_LEGAL_EMAIL"),
+		CatalogueURL:           os.Getenv("CATALOGUE_URL"),
+		CatalogueIssuer:        getEnv("CATALOGUE_ISSUER", "katiuskas-intranet"),
+		CataloguePrivateKey:    os.Getenv("CATALOGUE_PRIVATE_KEY"),
 		PublicRateLimit:        120,
 		PublicRateWindow:       time.Minute,
 		TelegramBotDMLinkTTL:   5 * time.Minute,
@@ -195,6 +206,9 @@ func Load() (Config, error) {
 	}
 	if cfg.DatabaseURL == "" {
 		return cfg, fmt.Errorf("DATABASE_URL is required")
+	}
+	if cfg.CatalogueURL != "" && cfg.CataloguePrivateKey == "" {
+		return cfg, fmt.Errorf("CATALOGUE_PRIVATE_KEY is required when CATALOGUE_URL is set")
 	}
 	percent, err := strconv.Atoi(getEnv("DISK_ALERT_PERCENT", "90"))
 	if err != nil || percent < 0 || percent > 100 {

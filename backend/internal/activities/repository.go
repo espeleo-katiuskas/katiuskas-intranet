@@ -27,7 +27,7 @@ var (
 	// doesn't exist. Create rejects the whole activity rather than
 	// creating it with a partial participant list.
 	ErrParticipantNotFound = errors.New("one of the given participants does not exist")
-	// ErrUnknownPlace means one of the given place ids is not a place of the catalogue.
+	// ErrUnknownPlace means one of the given place ids is not a place of the catalogue (as far as the person who asks may know).
 	ErrUnknownPlace = errors.New("one of the given places does not exist")
 	// ErrPlaceInMemoria means a place cannot be taken off an activity while an entry of its memoria is
 	// about it.
@@ -554,18 +554,14 @@ func (r *Repository) DeleteHoliday(ctx context.Context, id int64) (Holiday, erro
 
 // ----- places -----
 
-// linkPlaces inserts the links of an activity to places, each once; a place that is not there is
-// ErrUnknownPlace.
+// linkPlaces inserts the links of an activity to places, each once. That the places exist is for the
+// service to have asked (Service.checkPlacesExist): no key says it.
 func linkPlaces(ctx context.Context, tx pgx.Tx, activityID int64, placeIDs []int64) error {
 	for _, placeID := range placeIDs {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO activity_places (activity_id, place_id) VALUES ($1, $2)
 			ON CONFLICT (activity_id, place_id) DO NOTHING
 		`, activityID, placeID); err != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolationCode {
-				return ErrUnknownPlace
-			}
 			return err
 		}
 	}
@@ -701,4 +697,22 @@ func (r *Repository) PlaceVisitsOf(ctx context.Context, userID int64, today stri
 		list = append(list, v)
 	}
 	return list, rows.Err()
+}
+
+// ListAllPlaceLinks are all the links of activities to places.
+func (r *Repository) ListAllPlaceLinks(ctx context.Context) ([]PlaceLink, error) {
+	rows, err := r.pool.Query(ctx, `SELECT activity_id, place_id FROM activity_places ORDER BY activity_id, place_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var links []PlaceLink
+	for rows.Next() {
+		var l PlaceLink
+		if err := rows.Scan(&l.ActivityID, &l.PlaceID); err != nil {
+			return nil, err
+		}
+		links = append(links, l)
+	}
+	return links, rows.Err()
 }

@@ -27,7 +27,7 @@
 # last deployed, and returns right away if there is nothing new. Otherwise it
 # fetches and updates, one after the other, the environments that need it,
 # testing first. For each: check the commit out of the local clone; build the API
-# (seed-admin and osmsync too) with Go; apply the migrations with goose; swap in the binaries,
+# (seed-admin, osmsync and syncrefs too) with Go; apply the migrations with goose; swap in the binaries,
 # `web/` and the migrations; restart the service and wait for its health check. If
 # the service does not come back, the previous binary is put back (migrations are
 # forward-only and stay applied). A failure in one environment does not stop the
@@ -216,12 +216,13 @@ deploy_env() {
   # ---- build
   rm -rf "$build"
   mkdir -p "$build"
-  log "building the API, seed-admin and osmsync"
+  log "building the API, seed-admin, osmsync and syncrefs"
   (
     cd "$src/backend"
     "$GO" build -o "$build/katiuskas-api" ./cmd/api
     "$GO" build -o "$build/seed-admin" ./cmd/seed-admin
     "$GO" build -o "$build/osmsync" ./cmd/osmsync
+    "$GO" build -o "$build/syncrefs" ./cmd/syncrefs
   )
   if [[ ! -x $STATE_DIR/bin/goose ]]; then
     log "building goose $GOOSE_VERSION"
@@ -247,7 +248,7 @@ deploy_env() {
     cp -p "$install_dir/bin/katiuskas-api" "$install_dir/bin/katiuskas-api.prev"
   fi
   local bin dir
-  for bin in katiuskas-api seed-admin osmsync goose; do
+  for bin in katiuskas-api seed-admin osmsync syncrefs goose; do
     install -m 0755 "$build/$bin" "$install_dir/bin/.$bin.new"
     mv -f "$install_dir/bin/.$bin.new" "$install_dir/bin/$bin"
   done

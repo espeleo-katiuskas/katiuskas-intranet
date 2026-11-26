@@ -502,8 +502,10 @@ record stays.
 
 An activity goes to places of the catalogue (`activity_places`, migration `00064`).
 
-- Given at creation (`place_ids`, linked in the creation's transaction, so an unknown one refuses
-  the whole activity: 400 `unknown_place`).
+- Given at creation (`place_ids`, linked in the creation's transaction). Whether the places exist
+  is asked first (`Service.checkPlacesExist`, through `PlaceLookup.PlaceRefs`: no foreign key says
+  it since migration `00084`), so an unknown one, or one the person may not know, refuses the
+  whole activity: 400 `unknown_place`. On a change only the places that are new are checked.
 - Replaced afterwards by `PUT /activities/{id}/places`, whose body is the whole set
   (`Repository.SetPlaces` locks the activity, deletes the links and inserts the new ones, and
   answers with the places before and after, so that Telegram is only told when they differ).
@@ -515,6 +517,15 @@ An activity goes to places of the catalogue (`activity_places`, migration `00064
   `activities.Service`. The types they exchange are in `internal/placelinks`, so neither package
   imports the other. They are made one with the other in hand: `cmd/api` builds `places` first
   and then `activities`, and gives `places` its activities with `SetActivities`.
+- **When the catalogue is a project of its own** (`CATALOGUE_URL` set, "The catalogue as a separate
+  project" below) the activities say which places they use: `Service.WithPlaceReferences` gives
+  them the catalogue client, and each link is a reference with the key `activity:<id>`
+  (`ReferenceKey`). References are added before a change is stored (so a place cannot be deleted
+  in between) and removed after it; creating an activity adds them once it exists. A failure to
+  tell the catalogue is logged and does not fail the request (the change is made); `cmd/syncrefs`
+  (`Service.SyncReferences`) puts every link's reference back, which is also what to run the first
+  time. Without `CATALOGUE_URL` none of this happens and the catalogue asks the activities
+  (`ActivityLookup`) as before.
 - `GET /places/{id}/activities` is registered here too, as `/users/{login}/activities` is, and
   lists the activities of a place, the latest first, all of them (every activity is readable by
   anybody who signs in).
@@ -523,6 +534,40 @@ An activity goes to places of the catalogue (`activity_places`, migration `00064
   key is the backstop for one linked meanwhile): what was done there stays.
 - At most `MaxPlaces` (30) per activity, repeated ids counting once.
 - The `type_name` of a place there is its subtype when it has one ("Sima") and its type otherwise.
+
+### The catalogue as a separate project
+
+`internal/catalogueclient` is how this program uses the catalogue when it lives in its own
+project (`cuevasysimas`, with its API, server and database). It is on when `CATALOGUE_URL` is set
+(with `CATALOGUE_PRIVATE_KEY`, base64 of the Ed25519 private key or its seed, and
+`CATALOGUE_ISSUER`, `katiuskas-intranet` by default; the public key is registered in the catalogue
+with its `issuer` tool). `cmd/api` then does not build the places, the zones, the accounts or the
+public site, and leaves `Places`, `Areas`, `OSM`, `PublicPlaces` and `PublicSite` of the router
+empty; the catalogue's own public site and routes are served by the catalogue.
+
+- **The assertion** (`assertion.go`): `v1.<payload>.<signature>`, Ed25519, with `iss`, `sub` (the
+  person's `users.subject`), `name` (their login), `groups` (`katiuskas` for admin, board and
+  members), `roles` (only `admin` and `board`, which is all the catalogue asks for), `iat` and `exp`
+  (a minute). One is made per request. `TestAssertionMatchesTheCataloguesVector` holds a vector
+  that the catalogue's own test must make too: if either changes the format, one of them fails.
+  A session without a subject is nobody, and gets 401 from the catalogue.
+- **The proxy** (`Proxy`): the members' calls to `/api/v1/places`, `/systems`, `/areas` and `/osm`
+  keep their addresses, so the frontend, the service worker and the outbox do not change. It
+  applies the same checks as any route (`Protect`: admin, board or member; the cookie is taken
+  only for the bytes of a file), replaces the session by the assertion (the cookie never goes
+  on), and passes the answer through, errors included. When the catalogue does not answer it is
+  502 `catalogue_unavailable`. In the JSON of a GET it adds `activity_count` to every place (an
+  object with `id`, `type_id`, `kind` and `area_ids`: a listing, a place, the cavities of a
+  system) with one question to `activities.Service.ActivityCounts`; a place whose `withheld` has
+  `activities` keeps 0.
+- **Names**: `Client.PlaceRefs` asks `GET /places/refs` as the person of the context (in groups of
+  200), and satisfies `activities.PlaceLookup`; a place the person may not know is not in the
+  answer, so it counts as unknown.
+- **References**: `Client.Refer` and `Unrefer` (see "Places of an activity").
+- **Not there in this mode**: the guard that stops a person who made something in the catalogue
+  from being deleted (the catalogue keeps accounts that outlive the intranet's people), the
+  Telegram notices of changes to places (the catalogue has its own), and the OpenStreetMap
+  mirror's check on the status page.
 
 ## Activity resources (memoria)
 

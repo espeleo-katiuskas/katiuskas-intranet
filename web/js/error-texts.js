@@ -145,6 +145,10 @@ const texts = {
   too_many_places: 'Una actividad no puede ir a tantos lugares.',
   place_has_activities:
     'Este lugar tiene actividades y no se puede borrar: se conserva lo que se ha hecho en él.',
+  place_in_use:
+    'Este lugar se usa (por ejemplo, en actividades del club) y no se puede borrar: se conserva lo que se ha hecho en él.',
+  catalogue_unavailable:
+    'El catálogo de lugares no responde ahora mismo. Inténtalo de nuevo en unos minutos.',
   invalid_place_visibility:
     'La visibilidad no es válida: cada nivel es «solo el club» o «público».',
   visibility_too_open:

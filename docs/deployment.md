@@ -326,6 +326,27 @@ If that Caddy runs as a user that cannot read `/opt/katiuskas-intranet/web` (own
 give it read access, for example by adding that user to the `intranet` group, or with `o+rX`
 permissions on `/opt/katiuskas-intranet/web`.
 
+### Using the catalogue as a separate project
+
+When the catalogue of places runs as its own project (`cuevasysimas`, at its own address, with its
+own database) the intranet becomes its client. Add to `api.env`:
+
+```sh
+# The API of the catalogue (not its public site), and the key the intranet vouches for its people with.
+CATALOGUE_URL=https://api.cuevasysimas.es
+CATALOGUE_ISSUER=katiuskas-intranet
+CATALOGUE_PRIVATE_KEY=<base64 of the Ed25519 private key>
+```
+
+The key pair is made with the catalogue's `issuer keygen`; the private key stays here and the public
+one is registered there (`issuer register -issuer katiuskas-intranet -name … -public-key …`).
+With `CATALOGUE_URL` set the intranet no longer serves places, zones, the OpenStreetMap mirror or
+the public site (`PUBLIC_SITE_*` and `NOMINATIM_URL` are ignored here): it forwards the members'
+requests, and the catalogue serves everybody else. The first time, after the data has been copied,
+run `bin/syncrefs` (built and installed by the deployment, with the same environment as the API)
+so that the catalogue knows which places the club's activities use; it can be run again whenever
+the catalogue was unreachable while activities changed. Without `CATALOGUE_URL` nothing changes. See `catalogue-extraction.md`.
+
 ### The public site of the catalogue («Cuevas y simas»)
 
 **This arrangement is transitional and is not for production.** The catalogue is going to be an
